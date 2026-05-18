@@ -1,0 +1,18 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+}
+
+/* Smooth default feel without inventing a new design system */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
