@@ -15,8 +15,9 @@ export function Settings() {
             <span className="font-mono">VITE_API_URL</span> (default: http://127.0.0.1:8000; override via env or `.env.local`)
           </div>
           <div>
-            <span className="font-semibold text-neutral-900 dark:text-neutral-100">OpenAI:</span>{' '}
-            Set <span className="font-mono">OPENAI_API_KEY</span> for higher quality generation.
+            <span className="font-semibold text-neutral-900 dark:text-neutral-100">Groq:</span>{' '}
+            Set <span className="font-mono">GROQ_API_KEY</span> for AI generation (free at console.groq.com).
+            Optional: <span className="font-mono">GROQ_MODEL</span> (default: <span className="font-mono">llama-3.3-70b-versatile</span>).
           </div>
         </div>
       </GlassCard>

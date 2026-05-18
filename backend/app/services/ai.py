@@ -66,14 +66,14 @@ def generate_structured_document(
     Uses OpenAI if configured; falls back to deterministic generation otherwise.
     """
 
-    api_key = os.environ.get("OPENAI_API_KEY")
-    model = os.environ.get("OPENAI_MODEL", "gpt-4.1-mini")
+    api_key = os.environ.get("GROQ_API_KEY")
+    model = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
 
     if api_key:
         try:
-            from openai import OpenAI
+            from groq import Groq
 
-            client = OpenAI(api_key=api_key)
+            client = Groq(api_key=api_key)
             system = (
                 "You are Formatly, an expert document generation agent. "
                 "Produce professional documents with clear structure. "
@@ -92,14 +92,14 @@ def generate_structured_document(
                     "include_conclusion": True,
                 },
             }
-            resp = client.responses.create(
+            resp = client.chat.completions.create(
                 model=model,
-                input=[
+                messages=[
                     {"role": "system", "content": system},
                     {"role": "user", "content": "Generate the document JSON for: " + str(user_payload)},
                 ],
             )
-            text = resp.output_text
+            text = resp.choices[0].message.content or ""
             # Best-effort JSON extraction
             m = re.search(r"\{.*\}", text, flags=re.DOTALL)
             if m:
