@@ -5,6 +5,7 @@
 Thumbs.db
 Desktop.ini
 
+/.claude/
 .vscode/*
 !.vscode/extensions.json
 !.vscode/settings.json

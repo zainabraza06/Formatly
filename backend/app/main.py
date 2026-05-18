@@ -20,7 +20,7 @@ from app.services.doc_pipeline import create_document, list_recent_documents, lo
 from app.services.export_engine import export_docx, export_pdf
 from app.services.template_engine import analyze_template, save_template_upload
 
-app = FastAPI(title="DocPilot AI API", version="0.1.0")
+app = FastAPI(title="Formatly API", version="1.0.0")
 
 app.add_middleware(
     CORSMiddleware,

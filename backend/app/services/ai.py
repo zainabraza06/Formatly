@@ -75,7 +75,7 @@ def generate_structured_document(
 
             client = OpenAI(api_key=api_key)
             system = (
-                "You are DocPilot AI, an expert document generation agent. "
+                "You are Formatly, an expert document generation agent. "
                 "Produce professional documents with clear structure. "
                 "Return strict JSON with keys: title (string), outline (array of strings), sections (array of {heading, content})."
             )

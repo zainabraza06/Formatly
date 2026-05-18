@@ -4,12 +4,62 @@ import { motion } from 'framer-motion'
 import { ThemeToggle } from '../components/ThemeToggle'
 
 const NAV = [
-  { to: '/app', label: 'Home' },
-  { to: '/app/new', label: 'New Document' },
-  { to: '/app/templates', label: 'Templates' },
-  { to: '/app/files', label: 'Generated Files' },
-  { to: '/app/assistant', label: 'AI Assistant' },
-  { to: '/app/settings', label: 'Settings' },
+  {
+    to: '/app',
+    label: 'Home',
+    icon: (
+      <svg viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
+        <path fillRule="evenodd" d="M9.293 2.293a1 1 0 011.414 0l7 7A1 1 0 0117 11h-1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-3a1 1 0 00-1-1H9a1 1 0 00-1 1v3a1 1 0 01-1 1H5a1 1 0 01-1-1v-6H3a1 1 0 01-.707-1.707l7-7z" clipRule="evenodd" />
+      </svg>
+    ),
+  },
+  {
+    to: '/app/new',
+    label: 'New Document',
+    icon: (
+      <svg viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
+        <path d="M10.75 4.75a.75.75 0 00-1.5 0v4.5h-4.5a.75.75 0 000 1.5h4.5v4.5a.75.75 0 001.5 0v-4.5h4.5a.75.75 0 000-1.5h-4.5v-4.5z" />
+      </svg>
+    ),
+  },
+  {
+    to: '/app/templates',
+    label: 'Templates',
+    icon: (
+      <svg viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
+        <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clipRule="evenodd" />
+      </svg>
+    ),
+  },
+  {
+    to: '/app/files',
+    label: 'Generated Files',
+    icon: (
+      <svg viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
+        <path fillRule="evenodd" d="M2 6a2 2 0 012-2h4l2 2h4a2 2 0 012 2v1H8a3 3 0 00-3 3v1.5a1.5 1.5 0 01-3 0V6z" clipRule="evenodd" />
+        <path d="M6 12a2 2 0 012-2h8a2 2 0 012 2v2a2 2 0 01-2 2H2h2a2 2 0 002-2v-2z" />
+      </svg>
+    ),
+  },
+  {
+    to: '/app/assistant',
+    label: 'AI Assistant',
+    icon: (
+      <svg viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
+        <path d="M3.505 2.365A41.369 41.369 0 019 2c1.863 0 3.697.124 5.495.365 1.247.167 2.18 1.108 2.435 2.268a4.45 4.45 0 00-.577-.069 43.141 43.141 0 00-4.706 0C9.229 4.696 7.5 6.727 7.5 8.998v2.24c0 1.413.67 2.735 1.76 3.562l-2.98 2.98A.75.75 0 015 17.25v-3.443c-.501-.048-1-.106-1.495-.172C2.033 13.438 1 12.162 1 10.72V5.28c0-1.441 1.033-2.717 2.505-2.914z" />
+        <path d="M14 6c-.762 0-1.52.02-2.271.062C10.157 6.148 9 7.472 9 8.998v2.24c0 1.519 1.147 2.839 2.71 2.935.214.013.428.024.642.034.2.009.385.09.518.224l2.35 2.35a.75.75 0 001.28-.531v-2.07c1.453-.195 2.5-1.463 2.5-2.915V8.998c0-1.526-1.157-2.85-2.729-2.936A41.645 41.645 0 0014 6z" />
+      </svg>
+    ),
+  },
+  {
+    to: '/app/settings',
+    label: 'Settings',
+    icon: (
+      <svg viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
+        <path fillRule="evenodd" d="M7.84 1.804A1 1 0 018.82 1h2.36a1 1 0 01.98.804l.331 1.652a6.993 6.993 0 011.929 1.115l1.598-.54a1 1 0 011.186.447l1.18 2.044a1 1 0 01-.205 1.251l-1.267 1.113a7.047 7.047 0 010 2.228l1.267 1.113a1 1 0 01.206 1.25l-1.18 2.045a1 1 0 01-1.187.447l-1.598-.54a6.993 6.993 0 01-1.929 1.115l-.33 1.652a1 1 0 01-.98.804H8.82a1 1 0 01-.98-.804l-.331-1.652a6.993 6.993 0 01-1.929-1.115l-1.598.54a1 1 0 01-1.186-.447l-1.18-2.044a1 1 0 01.205-1.251l1.267-1.114a7.05 7.05 0 010-2.227L1.821 7.773a1 1 0 01-.206-1.25l1.18-2.045a1 1 0 011.187-.447l1.598.54A6.993 6.993 0 017.51 3.456l.33-1.652zM10 13a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd" />
+      </svg>
+    ),
+  },
 ]
 
 export function DashboardLayout({
@@ -20,19 +70,36 @@ export function DashboardLayout({
   onToggleTheme: () => void
 }) {
   return (
-    <div className="min-h-full bg-gradient-to-br from-neutral-50 to-neutral-200 dark:from-neutral-950 dark:to-neutral-900">
-      <div className="mx-auto flex min-h-screen max-w-7xl">
-        <aside className="hidden w-64 shrink-0 border-r border-white/10 p-4 sm:block">
-          <div className="rounded-2xl border border-white/10 bg-white/10 p-4 backdrop-blur-md dark:bg-white/5">
-            <div className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">
-              DocPilot AI
-            </div>
-            <div className="mt-1 text-xs text-neutral-700 dark:text-neutral-300">
-              Autonomous document production
+    <div className="min-h-full bg-gradient-to-br from-neutral-50 via-white to-neutral-100 dark:from-neutral-950 dark:via-neutral-900 dark:to-neutral-950">
+      {/* ambient glow */}
+      <div className="pointer-events-none fixed inset-0 overflow-hidden">
+        <div className="absolute -top-60 left-0 h-[500px] w-[500px] rounded-full bg-violet-500/6 blur-[100px]" />
+      </div>
+
+      <div className="relative mx-auto flex min-h-screen max-w-7xl">
+
+        {/* ── Sidebar ── */}
+        <aside className="hidden w-60 shrink-0 border-r border-neutral-200/60 p-4 sm:flex sm:flex-col dark:border-white/8">
+
+          {/* Brand */}
+          <div className="rounded-2xl border border-neutral-200/60 bg-white/60 p-4 shadow-sm backdrop-blur-sm dark:border-white/8 dark:bg-white/5">
+            <div className="flex items-center gap-2.5">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-violet-600 to-purple-600 shadow-md shadow-violet-500/30">
+                <span className="text-sm font-bold text-white">F</span>
+              </div>
+              <div>
+                <div className="text-sm font-bold tracking-tight text-neutral-900 dark:text-neutral-100">
+                  Formatly
+                </div>
+                <div className="text-[10px] text-neutral-500 dark:text-neutral-400">
+                  AI Document Platform
+                </div>
+              </div>
             </div>
           </div>
 
-          <nav className="mt-4 flex flex-col gap-2">
+          {/* Nav */}
+          <nav className="mt-4 flex flex-1 flex-col gap-1">
             {NAV.map((item) => (
               <NavLink
                 key={item.to}
@@ -40,32 +107,58 @@ export function DashboardLayout({
                 end={item.to === '/app'}
                 className={({ isActive }) =>
                   clsx(
-                    'rounded-xl px-3 py-2 text-sm transition',
-                    'border border-transparent',
+                    'flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm transition-all',
                     isActive
-                      ? 'bg-white/15 text-neutral-900 ring-1 ring-white/20 dark:text-neutral-100'
-                      : 'text-neutral-700 hover:bg-white/10 dark:text-neutral-300',
+                      ? 'bg-gradient-to-r from-violet-500/15 to-purple-500/10 font-semibold text-violet-700 ring-1 ring-violet-500/20 dark:text-violet-300'
+                      : 'text-neutral-600 hover:bg-neutral-100/80 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-white/8 dark:hover:text-neutral-200',
                   )
                 }
               >
-                {item.label}
+                {({ isActive }) => (
+                  <>
+                    <span className={clsx('shrink-0 transition-colors', isActive ? 'text-violet-600 dark:text-violet-400' : '')}>
+                      {item.icon}
+                    </span>
+                    {item.label}
+                  </>
+                )}
               </NavLink>
             ))}
           </nav>
+
+          {/* Bottom badge */}
+          <div className="mt-4 rounded-xl border border-violet-500/20 bg-violet-500/8 p-3 text-center">
+            <div className="text-[10px] font-semibold text-violet-600 dark:text-violet-400">✦ AI-Powered</div>
+            <div className="mt-0.5 text-[10px] text-neutral-500 dark:text-neutral-400">
+              Prompt → Plan → Format → Export
+            </div>
+          </div>
         </aside>
 
-        <main className="flex-1 p-4 sm:p-6">
-          <div className="mb-4 flex items-center justify-between gap-3">
-            <div className="text-sm text-neutral-700 dark:text-neutral-300">
-              Futuristic AI productivity tool
+        {/* ── Main ── */}
+        <main className="flex flex-1 flex-col p-4 sm:p-6">
+          <div className="mb-5 flex items-center justify-between gap-3">
+            {/* Mobile brand */}
+            <div className="flex items-center gap-2 sm:hidden">
+              <div className="flex h-7 w-7 items-center justify-center rounded-xl bg-gradient-to-br from-violet-600 to-purple-600">
+                <span className="text-xs font-bold text-white">F</span>
+              </div>
+              <span className="text-sm font-bold text-neutral-900 dark:text-neutral-100">Formatly</span>
             </div>
+
+            <div className="hidden text-xs text-neutral-500 dark:text-neutral-400 sm:block">
+              AI document production platform
+            </div>
+
             <ThemeToggle mode={theme} onToggle={onToggleTheme} />
           </div>
 
           <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
+            key="outlet"
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.25 }}
+            className="flex-1"
           >
             <Outlet />
           </motion.div>
