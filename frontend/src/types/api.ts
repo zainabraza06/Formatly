@@ -15,6 +15,9 @@ export type ChartSpec = {
   title?: string
   labels: string[]
   values: number[]
+  x_label?: string
+  y_label?: string
+  explanation?: string
 }
 
 export type PipelineStep = {
@@ -48,6 +51,7 @@ export type GenerateResponse = {
   sections: DocumentSection[]
   extracted_rules: Record<string, unknown>
   pipeline: PipelineStep[]
+  suggested_charts: ChartSpec[]
 }
 
 export type TemplateAnalyzeResponse = {
@@ -71,6 +75,8 @@ export type Draft = {
   include_title_page: boolean
   include_toc: boolean
   chart_pngs?: string[]
+  chart_specs?: ChartSpec[]
+  suggested_charts?: ChartSpec[]
 }
 
 export type RecentDocument = {
@@ -82,3 +88,7 @@ export type RecentDocument = {
 export type ChatMessage = { role: 'user' | 'assistant' | 'system'; content: string }
 export type ChatRequest = { document_id?: string | null; messages: ChatMessage[] }
 export type ChatResponse = { message: string }
+
+export type AnalyzeChartsResponse = {
+  suggested_charts: ChartSpec[]
+}

@@ -22,6 +22,9 @@ class ChartSpec(BaseModel):
     title: str = ""
     labels: list[str] = Field(default_factory=list)
     values: list[float] = Field(default_factory=list)
+    x_label: str = ""
+    y_label: str = ""
+    explanation: str = ""
 
 
 class GenerateRequest(BaseModel):
@@ -55,6 +58,7 @@ class GenerateResponse(BaseModel):
     sections: list[DocumentSection]
     extracted_rules: dict[str, Any]
     pipeline: list[PipelineStep]
+    suggested_charts: list[ChartSpec] = Field(default_factory=list)
 
 
 class ChatMessage(BaseModel):

@@ -3,8 +3,9 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Optional
 
-from app.schemas import DocumentSection, GenerateRequest
+from app.schemas import ChartSpec, DocumentSection, GenerateRequest
 from app.services import ai
+from app.services.chart_analyzer import analyze_charts
 from app.services.charts import render_chart_png
 from app.services.rules import extract_rules
 from app.services.storage import get_paths, new_id, read_json, write_json
@@ -16,6 +17,7 @@ PIPELINE = [
     "Intent Extraction",
     "Document Planning",
     "Content Generation",
+    "Chart Analysis",
     "Formatting Engine",
     "Export Engine",
 ]
@@ -26,15 +28,16 @@ def create_document(req: GenerateRequest) -> dict[str, Any]:
     document_id = new_id("doc")
 
     extracted_rules = extract_rules(req.formatting_instructions)
-    template_style = get_template_style(req.template_id) if req.template_id else None
+    template_style  = get_template_style(req.template_id) if req.template_id else None
 
     pipeline = [
-        {"name": PIPELINE[0], "status": "done", "detail": "Prompt received"},
-        {"name": PIPELINE[1], "status": "done", "detail": f"Extracted {len(extracted_rules)} formatting rules"},
-        {"name": PIPELINE[2], "status": "done", "detail": "Outline planned"},
-        {"name": PIPELINE[3], "status": "done", "detail": "Sections generated"},
-        {"name": PIPELINE[4], "status": "done", "detail": "Formatting prepared"},
-        {"name": PIPELINE[5], "status": "pending", "detail": "Ready for export"},
+        {"name": PIPELINE[0], "status": "done",    "detail": "Prompt received"},
+        {"name": PIPELINE[1], "status": "done",    "detail": f"Extracted {len(extracted_rules)} formatting rules"},
+        {"name": PIPELINE[2], "status": "done",    "detail": "Outline planned"},
+        {"name": PIPELINE[3], "status": "done",    "detail": "Sections generated"},
+        {"name": PIPELINE[4], "status": "pending", "detail": "Awaiting chart analysis"},
+        {"name": PIPELINE[5], "status": "done",    "detail": "Formatting prepared"},
+        {"name": PIPELINE[6], "status": "pending", "detail": "Ready for export"},
     ]
 
     doc_struct = ai.generate_structured_document(
@@ -45,46 +48,74 @@ def create_document(req: GenerateRequest) -> dict[str, Any]:
         template_style=template_style,
     )
 
-    title = doc_struct.get("title") or "Untitled Document"
+    title   = doc_struct.get("title") or "Untitled Document"
     outline = doc_struct.get("outline") or []
 
-    sections = []
+    sections: list[DocumentSection] = []
     for i, s in enumerate(doc_struct.get("sections") or []):
         sec_id = f"sec_{i+1}"
-        sections.append(DocumentSection(id=sec_id, heading=s.get("heading", "Section"), content=s.get("content", "")))
+        sections.append(DocumentSection(
+            id=sec_id,
+            heading=s.get("heading", "Section"),
+            content=s.get("content", ""),
+        ))
 
+    # ── Chart analysis: LLM reads sections and suggests charts ────────────────
+    suggested_charts: list[ChartSpec] = []
+    try:
+        suggested_charts = analyze_charts(sections)
+        pipeline[4]["status"] = "done"
+        pipeline[4]["detail"] = f"Found {len(suggested_charts)} chart suggestion(s)"
+    except Exception as exc:
+        pipeline[4]["status"] = "error"
+        pipeline[4]["detail"] = str(exc)[:80]
+
+    # ── Render chart PNGs (user-supplied charts or suggested) ─────────────────
     chart_pngs: list[str] = []
-    if req.include_charts or extracted_rules.get("include_charts"):
-        for i, spec in enumerate(req.charts or []):
-            png = paths.charts / f"{document_id}_{i+1}.png"
+    charts_to_render: list[ChartSpec] = []
+
+    if req.include_charts:
+        if req.charts:
+            charts_to_render = list(req.charts)
+        else:
+            charts_to_render = list(suggested_charts)
+
+    for i, spec in enumerate(charts_to_render):
+        png = paths.charts / f"{document_id}_{i+1}.png"
+        try:
             render_chart_png(spec, png)
             chart_pngs.append(str(png))
+        except Exception:
+            pass
 
     draft = {
-        "document_id": document_id,
-        "title": title,
-        "outline": outline,
-        "sections": [s.model_dump() for s in sections],
+        "document_id":     document_id,
+        "title":           title,
+        "outline":         outline,
+        "sections":        [s.model_dump() for s in sections],
         "extracted_rules": extracted_rules,
-        "style_preset": req.style_preset,
-        "tone": req.tone,
-        "template_id": req.template_id,
-        "template_style": template_style or {},
+        "style_preset":    req.style_preset,
+        "tone":            req.tone,
+        "template_id":     req.template_id,
+        "template_style":  template_style or {},
         "include_title_page": req.include_title_page,
-        "include_toc": req.include_toc,
-        "chart_pngs": chart_pngs,
-        "created_at": None,
+        "include_toc":        req.include_toc,
+        "chart_pngs":         chart_pngs,
+        "suggested_charts":   [c.model_dump() for c in suggested_charts],
+        "chart_specs":        [c.model_dump() for c in charts_to_render],
+        "created_at":         None,
     }
 
     write_json(paths.documents / f"{document_id}.draft.json", draft)
 
     return {
-        "document_id": document_id,
-        "title": title,
-        "outline": outline,
-        "sections": [s.model_dump() for s in sections],
+        "document_id":     document_id,
+        "title":           title,
+        "outline":         outline,
+        "sections":        [s.model_dump() for s in sections],
         "extracted_rules": extracted_rules,
-        "pipeline": pipeline,
+        "pipeline":        pipeline,
+        "suggested_charts": [c.model_dump() for c in suggested_charts],
     }
 
 
@@ -100,9 +131,17 @@ def save_draft(document_id: str, draft: dict[str, Any]) -> None:
 
 def list_recent_documents(limit: int = 10) -> list[dict[str, Any]]:
     paths = get_paths()
-    drafts = sorted(paths.documents.glob("*.draft.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+    drafts = sorted(
+        paths.documents.glob("*.draft.json"),
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )
     out = []
     for p in drafts[:limit]:
         d = read_json(p) or {}
-        out.append({"document_id": d.get("document_id"), "title": d.get("title"), "style_preset": d.get("style_preset")})
+        out.append({
+            "document_id":  d.get("document_id"),
+            "title":        d.get("title"),
+            "style_preset": d.get("style_preset"),
+        })
     return out

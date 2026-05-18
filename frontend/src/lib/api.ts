@@ -1,6 +1,8 @@
 import type {
+  AnalyzeChartsResponse,
   ChatRequest,
   ChatResponse,
+  ChartSpec,
   Draft,
   GenerateRequest,
   GenerateResponse,
@@ -14,9 +16,7 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000'
 async function http<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, {
     ...init,
-    headers: {
-      ...(init?.headers || {}),
-    },
+    headers: { ...(init?.headers || {}) },
   })
 
   if (!res.ok) {
@@ -62,6 +62,31 @@ export const api = {
       },
     ),
 
+  // ── Chart endpoints ──────────────────────────────────────────────────────
+  analyzeCharts: (documentId: string) =>
+    http<AnalyzeChartsResponse>(`/documents/${documentId}/analyze-charts`, {
+      method: 'POST',
+    }),
+
+  renderChart: (documentId: string, index: number, spec: ChartSpec) =>
+    http<{ png_path: string; index: string }>(
+      `/documents/${documentId}/charts/${index}/render`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(spec),
+      },
+    ),
+
+  chartImageUrl: (documentId: string, index: number) =>
+    `${API_URL}/documents/${documentId}/charts/${index}/image`,
+
+  // ── Export URLs ──────────────────────────────────────────────────────────
+  exportDocxUrl:  (documentId: string) => `${API_URL}/documents/${documentId}/export/docx`,
+  exportPdfUrl:   (documentId: string) => `${API_URL}/documents/${documentId}/export/pdf`,
+  exportExcelUrl: (documentId: string) => `${API_URL}/documents/${documentId}/export/excel`,
+
+  // ── Templates ────────────────────────────────────────────────────────────
   uploadTemplate: async (file: File) => {
     const form = new FormData()
     form.append('file', file)
@@ -82,9 +107,7 @@ export const api = {
   analyzeTemplate: (templateId: string) =>
     http<TemplateAnalyzeResponse>(`/templates/${templateId}/analyze`),
 
-  exportDocxUrl: (documentId: string) => `${API_URL}/documents/${documentId}/export/docx`,
-  exportPdfUrl: (documentId: string) => `${API_URL}/documents/${documentId}/export/pdf`,
-
+  // ── Chat ─────────────────────────────────────────────────────────────────
   chat: (payload: ChatRequest) =>
     http<ChatResponse>('/chat', {
       method: 'POST',
