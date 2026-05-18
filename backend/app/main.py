@@ -40,6 +40,12 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+@app.get("/providers/status")
+def providers_status() -> dict[str, Any]:
+    from app.services.router import get_router
+    return get_router().status()
+
+
 @app.post("/generate", response_model=GenerateResponse)
 def generate(req: GenerateRequest) -> Any:
     return create_document(req)

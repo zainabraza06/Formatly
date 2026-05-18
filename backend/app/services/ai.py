@@ -1,57 +1,65 @@
 from __future__ import annotations
 
-import os
+import json
 import re
 from typing import Any, Optional
 
 from app.schemas import Tone
 
+_SYSTEM_DOC = (
+    "You are Formatly, an expert document generation agent. "
+    "Produce professional documents with clear structure. "
+    "Return ONLY strict JSON with keys: "
+    "title (string), outline (array of strings), "
+    "sections (array of objects each with 'heading' and 'content' string fields). "
+    "No markdown fences, no extra keys, no commentary outside the JSON."
+)
+
+_SYSTEM_REWRITE = (
+    "You are a professional editor. Rewrite the supplied text in the requested tone. "
+    "Return only the rewritten text — no labels, no explanations."
+)
+
+
+# ── deterministic fallback helpers ───────────────────────────────────────────
 
 def _fallback_title(prompt: str) -> str:
     p = (prompt or "").strip()
     if not p:
         return "Untitled Document"
     line = re.split(r"\r\n|\n|\.|\?", p, maxsplit=1)[0].strip()
-    return (line[:80] + "…") if len(line) > 80 else line
+    return (line[:80] + "...") if len(line) > 80 else line
 
 
 def _fallback_outline(prompt: str, doc_type_hint: str | None = None) -> list[str]:
-    base = [
-        "Executive Summary",
-        "Introduction",
-        "Key Findings",
-        "Discussion",
-        "Recommendations",
-        "Conclusion",
-    ]
-    if doc_type_hint == "resume":
-        return [
-            "Profile",
-            "Experience",
-            "Education",
-            "Skills",
-            "Projects",
-            "Certifications",
-        ]
-    if "cv" in (prompt or "").lower() or "resume" in (prompt or "").lower():
-        return [
-            "Profile",
-            "Experience",
-            "Education",
-            "Skills",
-            "Projects",
-            "Certifications",
-        ]
-    return base
+    if doc_type_hint == "resume" or "cv" in (prompt or "").lower() or "resume" in (prompt or "").lower():
+        return ["Profile", "Experience", "Education", "Skills", "Projects", "Certifications"]
+    return ["Executive Summary", "Introduction", "Key Findings", "Discussion", "Recommendations", "Conclusion"]
 
 
 def _apply_tone(text: str, tone: Tone) -> str:
-    if tone == "technical":
-        return text
     if tone == "simple":
-        return re.sub(r"\b(utilize|facilitate|approximately)\b", lambda m: {"utilize": "use", "facilitate": "help", "approximately": "about"}[m.group(1)], text, flags=re.IGNORECASE)
+        return re.sub(
+            r"\b(utilize|facilitate|approximately)\b",
+            lambda m: {"utilize": "use", "facilitate": "help", "approximately": "about"}[m.group(1)],
+            text,
+            flags=re.IGNORECASE,
+        )
     return text
 
+
+def _extract_json(text: str) -> dict[str, Any] | None:
+    """Best-effort extraction of the first JSON object from model output."""
+    m = re.search(r"\{.*\}", text, flags=re.DOTALL)
+    if not m:
+        return None
+    try:
+        return json.loads(m.group(0))
+    except json.JSONDecodeError:
+        return None
+
+
+# ── public API ────────────────────────────────────────────────────────────────
 
 def generate_structured_document(
     *,
@@ -61,25 +69,16 @@ def generate_structured_document(
     tone: Tone,
     template_style: Optional[dict[str, Any]] = None,
 ) -> dict[str, Any]:
-    """Returns: {title, outline, sections:[{heading, content}]}.
-
-    Uses OpenAI if configured; falls back to deterministic generation otherwise.
     """
+    Returns {title, outline, sections:[{heading, content}]}.
 
-    api_key = os.environ.get("GROQ_API_KEY")
-    model = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
-
-    if api_key:
-        try:
-            from groq import Groq
-
-            client = Groq(api_key=api_key)
-            system = (
-                "You are Formatly, an expert document generation agent. "
-                "Produce professional documents with clear structure. "
-                "Return strict JSON with keys: title (string), outline (array of strings), sections (array of {heading, content})."
-            )
-            user_payload = {
+    Tries the multi-provider router (Groq -> Gemini -> OpenRouter -> HuggingFace).
+    Falls back to deterministic generation when all providers are unavailable.
+    """
+    user_content = (
+        "Generate the document JSON for the following request:\n"
+        + json.dumps(
+            {
                 "prompt": prompt,
                 "style_preset": style_preset,
                 "tone": tone,
@@ -91,36 +90,42 @@ def generate_structured_document(
                     "include_summary": True,
                     "include_conclusion": True,
                 },
-            }
-            resp = client.chat.completions.create(
-                model=model,
-                messages=[
-                    {"role": "system", "content": system},
-                    {"role": "user", "content": "Generate the document JSON for: " + str(user_payload)},
-                ],
-            )
-            text = resp.choices[0].message.content or ""
-            # Best-effort JSON extraction
-            m = re.search(r"\{.*\}", text, flags=re.DOTALL)
-            if m:
-                import json
-
-                return json.loads(m.group(0))
-        except Exception:
-            pass
-
-    title = _fallback_title(prompt)
-    outline = _fallback_outline(prompt, doc_type_hint=style_preset if style_preset in {"resume"} else None)
-
-    sections = []
-    for heading in outline:
-        body = (
-            f"{heading} for: {prompt.strip() or 'the requested topic'}. "
-            "This section is generated with professional structure and clear formatting. "
-            "Add specific details or data to refine accuracy."
+            },
+            indent=2,
         )
-        sections.append({"heading": heading, "content": _apply_tone(body, tone)})
+    )
 
+    try:
+        from app.services.router import get_router, AllProvidersFailed
+
+        text, _provider, _elapsed = get_router().chat(
+            [
+                {"role": "system", "content": _SYSTEM_DOC},
+                {"role": "user",   "content": user_content},
+            ],
+            max_tokens=1500,
+        )
+        result = _extract_json(text)
+        if result and result.get("sections"):
+            return result
+    except Exception:
+        pass
+
+    # ── deterministic fallback ────────────────────────────────────────────────
+    title   = _fallback_title(prompt)
+    outline = _fallback_outline(prompt, doc_type_hint=style_preset if style_preset == "resume" else None)
+    sections = [
+        {
+            "heading": h,
+            "content": _apply_tone(
+                f"{h} for: {prompt.strip() or 'the requested topic'}. "
+                "This section is generated with professional structure and clear formatting. "
+                "Add specific details or data to refine accuracy.",
+                tone,
+            ),
+        }
+        for h in outline
+    ]
     return {"title": title, "outline": outline, "sections": sections}
 
 
@@ -128,8 +133,22 @@ def rewrite_paragraph(*, text: str, tone: Tone) -> str:
     base = (text or "").strip()
     if not base:
         return ""
-    if tone == "formal":
-        return base
+
+    try:
+        from app.services.router import get_router, AllProvidersFailed
+
+        result, _provider, _elapsed = get_router().chat(
+            [
+                {"role": "system", "content": _SYSTEM_REWRITE},
+                {"role": "user",   "content": f"Tone: {tone}\n\nText:\n{base}"},
+            ],
+            max_tokens=600,
+        )
+        return result.strip() or base
+    except Exception:
+        pass
+
+    # ── deterministic fallback ────────────────────────────────────────────────
     if tone == "simple":
         return _apply_tone(base, tone)
     if tone == "technical":
