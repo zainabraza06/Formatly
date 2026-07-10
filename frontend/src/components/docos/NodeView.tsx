@@ -54,49 +54,52 @@ export function NodeView({ node, selected, active, removing }: Props) {
   )
 }
 
+// The page is always a white sheet (see GraphCanvas), so text colours are fixed
+// dark-on-white like Word — never inverted by the app's dark theme. Explicit
+// colours parsed from the DOCX still win via inline `css`.
 function renderBody(node: GraphNode, css: CSSProperties) {
   switch (node.type) {
     case 'heading':
-      return <div style={css} className="text-2xl font-semibold text-neutral-900 dark:text-neutral-50">{node.content || 'Heading'}</div>
+      return <h1 style={{ color: '#1a1a1a', ...css }} className="mb-1 mt-2 text-[20pt] font-semibold leading-snug">{node.content || 'Heading'}</h1>
     case 'subheading':
-      return <div style={css} className="text-lg font-semibold text-neutral-800 dark:text-neutral-100">{node.content || 'Subheading'}</div>
+      return <h2 style={{ color: '#2a2a2a', ...css }} className="mb-1 mt-1.5 text-[15pt] font-semibold leading-snug">{node.content || 'Subheading'}</h2>
     case 'caption':
-      return <div style={css} className="text-center text-xs italic text-neutral-600 dark:text-neutral-400">{node.content}</div>
+      return <div style={css} className="text-center text-[9pt] italic text-neutral-600">{node.content}</div>
     case 'reference':
-      return <div style={css} className="pl-6 -indent-6 text-sm text-neutral-700 dark:text-neutral-300">{node.content}</div>
+      return <div style={css} className="pl-6 -indent-6 text-[10pt] leading-relaxed text-neutral-800">{node.content}</div>
     case 'footnote':
-      return <div style={css} className="text-xs text-neutral-500 dark:text-neutral-400">{node.content}</div>
+      return <div style={css} className="text-[9pt] text-neutral-500">{node.content}</div>
     case 'header':
     case 'footer':
-      return <div style={css} className="text-xs uppercase tracking-wide text-neutral-400">{node.type}: {node.content}</div>
+      return <div style={css} className="text-[9pt] uppercase tracking-wide text-neutral-400">{node.type}: {node.content}</div>
     case 'horizontal_rule':
-      return <hr className="my-2 border-neutral-300 dark:border-neutral-700" />
+      return <hr className="my-2 border-neutral-400" />
     case 'page_break':
-      return <div className="my-3 border-t-2 border-dashed border-neutral-300 text-center text-[10px] uppercase tracking-widest text-neutral-400 dark:border-neutral-700">page break</div>
+      return <div className="my-3 border-t-2 border-dashed border-neutral-300 text-center text-[8pt] uppercase tracking-widest text-neutral-400">page break</div>
     case 'figure':
     case 'image':
       return (
-        <div className="flex items-center gap-3 rounded-lg border border-dashed border-neutral-300 bg-neutral-50 px-4 py-6 dark:border-neutral-700 dark:bg-neutral-900/40" style={{ backgroundColor: css.backgroundColor }}>
+        <div className="my-1 flex items-center gap-3 rounded border border-dashed border-neutral-300 bg-neutral-50 px-4 py-6" style={{ backgroundColor: css.backgroundColor }}>
           <span className="text-2xl">🖼️</span>
-          <span className="text-sm text-neutral-600 dark:text-neutral-300">{node.content || 'Figure'}</span>
+          <span className="text-[10pt] text-neutral-600">{node.content || 'Figure'}</span>
         </div>
       )
     case 'table':
       return <TableView node={node} />
     default:
-      return <p style={css} className="text-sm leading-relaxed text-neutral-800 dark:text-neutral-200">{node.content}</p>
+      return <p style={{ color: '#1a1a1a', ...css }} className="text-[11pt] leading-relaxed">{node.content}</p>
   }
 }
 
 function TableView({ node }: { node: GraphNode }) {
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full border-collapse text-sm">
+    <div className="my-1 overflow-x-auto">
+      <table className="w-full border-collapse text-[10pt]">
         <tbody>
           {node.children.map((row) => (
             <tr key={row.id}>
               {row.children.map((cell) => (
-                <td key={cell.id} className="border border-neutral-300 px-3 py-1.5 text-neutral-800 dark:border-neutral-700 dark:text-neutral-200">
+                <td key={cell.id} className="border border-neutral-400 px-3 py-1.5 align-top text-neutral-900">
                   {cell.content}
                 </td>
               ))}

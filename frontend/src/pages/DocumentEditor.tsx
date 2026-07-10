@@ -74,7 +74,8 @@ export function DocumentEditor() {
             void handleFile(e.dataTransfer.files?.[0])
           }}
           className={clsx(
-            'overflow-auto rounded-2xl border border-white/10 bg-neutral-100/40 p-4 dark:bg-neutral-900/40',
+            // Word-like gray canvas around the page — kept light in both themes
+            'overflow-auto rounded-2xl border border-black/10 bg-neutral-200/70 p-6 dark:bg-neutral-800/60',
             dragOver && 'ring-2 ring-sky-400',
           )}
         >

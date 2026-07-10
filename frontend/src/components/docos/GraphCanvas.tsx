@@ -78,10 +78,21 @@ export function GraphCanvas({ graph, selectedIds, activeId, removingIds }: Props
   const currentPage = pages[Math.min(page, total - 1)] ?? []
 
   return (
-    <div className="mx-auto flex max-w-3xl flex-col items-center gap-3">
-      {/* the "paper" */}
-      <div className="relative min-h-[70vh] w-full space-y-1 rounded-2xl bg-white px-8 py-10 shadow-sm dark:bg-neutral-950/60">
-        <span className="pointer-events-none absolute right-4 top-3 text-[10px] font-medium uppercase tracking-wide text-neutral-300 dark:text-neutral-600">
+    <div className="flex flex-col items-center gap-4">
+      {/* the "paper" — always a white Letter sheet like Word, regardless of theme */}
+      <div
+        className="relative space-y-1 bg-white text-neutral-900 shadow-[0_2px_12px_rgba(0,0,0,0.18)] ring-1 ring-black/10"
+        style={{
+          width: '8.5in',
+          maxWidth: '100%',
+          minHeight: '11in',
+          padding: '1in',
+          fontFamily: 'Calibri, "Segoe UI", Cambria, Georgia, serif',
+          fontSize: '11pt',
+          lineHeight: 1.5,
+        }}
+      >
+        <span className="pointer-events-none absolute right-3 top-2 text-[10px] font-medium uppercase tracking-wide text-neutral-300">
           Page {page + 1}
         </span>
         <AnimatePresence mode="wait" initial={false}>
