@@ -38,6 +38,8 @@ def _parse(doc: _Doc, *, title: str) -> DocumentGraph:
     root = Node(type=NodeType.DOCUMENT, metadata={"source": "docx"})
     graph = DocumentGraph(root=root, title=title)
 
+    root.metadata["page"] = _page_geometry(doc)
+
     in_references = False
     body = doc.element.body
 
@@ -56,6 +58,39 @@ def _parse(doc: _Doc, *, title: str) -> DocumentGraph:
 
     _attach_headers_footers(doc, root)
     return graph
+
+
+def _page_geometry(doc: _Doc) -> dict:
+    """Real page size + margins (inches) from the first section, so the editor can
+    render the sheet at the document's actual dimensions (A4, Letter, …)."""
+    def _in(v, default: float) -> float:
+        try:
+            return round(float(v.inches), 3)
+        except Exception:
+            return default
+
+    try:
+        sec = doc.sections[0]
+    except (IndexError, Exception):  # noqa: B014 - defensive
+        return {"width_in": 8.5, "height_in": 11.0,
+                "margin": {"top": 1.0, "right": 1.0, "bottom": 1.0, "left": 1.0}}
+
+    w = _in(sec.page_width, 8.5)
+    h = _in(sec.page_height, 11.0)
+    landscape = str(getattr(sec, "orientation", "")).endswith("LANDSCAPE")
+    if landscape and w < h:
+        w, h = h, w
+    return {
+        "width_in": w,
+        "height_in": h,
+        "landscape": landscape,
+        "margin": {
+            "top": _in(sec.top_margin, 1.0),
+            "right": _in(sec.right_margin, 1.0),
+            "bottom": _in(sec.bottom_margin, 1.0),
+            "left": _in(sec.left_margin, 1.0),
+        },
+    }
 
 
 def _looks_like_references(text: str) -> bool:

@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 import clsx from 'clsx'
 import { motion } from 'framer-motion'
@@ -78,6 +79,8 @@ export function DashboardLayout({
   theme: 'light' | 'dark'
   onToggleTheme: () => void
 }) {
+  const [navOpen, setNavOpen] = useState(false)
+
   return (
     <div className="min-h-full bg-gradient-to-br from-neutral-50 via-white to-neutral-100 dark:from-neutral-950 dark:via-neutral-900 dark:to-neutral-950">
       {/* ambient glow */}
@@ -87,8 +90,22 @@ export function DashboardLayout({
 
       <div className="relative mx-auto flex min-h-screen max-w-7xl">
 
-        {/* ── Sidebar ── */}
-        <aside className="hidden w-60 shrink-0 border-r border-neutral-200/60 p-4 sm:flex sm:flex-col dark:border-white/8">
+        {/* backdrop — click to close the overlaying sidebar */}
+        {navOpen && (
+          <button
+            aria-label="Close menu"
+            onClick={() => setNavOpen(false)}
+            className="absolute inset-0 z-30 cursor-default bg-black/20 backdrop-blur-[1px]"
+          />
+        )}
+
+        {/* ── Sidebar (overlays content when open) ── */}
+        <aside
+          className={clsx(
+            'absolute inset-y-0 left-0 z-40 flex w-60 flex-col border-r border-neutral-200/60 bg-white/80 p-4 shadow-xl backdrop-blur-md transition-transform duration-300 dark:border-white/8 dark:bg-neutral-950/85',
+            navOpen ? 'translate-x-0' : '-translate-x-full',
+          )}
+        >
 
           {/* Brand */}
           <div className="rounded-2xl border border-neutral-200/60 bg-white/60 p-4 shadow-sm backdrop-blur-sm dark:border-white/8 dark:bg-white/5">
@@ -114,6 +131,7 @@ export function DashboardLayout({
                 key={item.to}
                 to={item.to}
                 end={item.to === '/app'}
+                onClick={() => setNavOpen(false)}
                 className={({ isActive }) =>
                   clsx(
                     'flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm transition-all',
@@ -147,6 +165,21 @@ export function DashboardLayout({
         {/* ── Main ── */}
         <main className="flex flex-1 flex-col p-4 sm:p-6">
           <div className="mb-5 flex items-center justify-between gap-3">
+            {/* Menu toggle */}
+            <button
+              onClick={() => setNavOpen((o) => !o)}
+              aria-label={navOpen ? 'Close menu' : 'Open menu'}
+              className="z-40 flex h-9 w-9 items-center justify-center rounded-xl border border-neutral-200/60 bg-white/70 text-neutral-700 shadow-sm transition-colors hover:bg-white dark:border-white/8 dark:bg-white/5 dark:text-neutral-200"
+            >
+              <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
+                {navOpen ? (
+                  <path fillRule="evenodd" d="M4.28 4.28a.75.75 0 011.06 0L10 8.94l4.66-4.66a.75.75 0 111.06 1.06L11.06 10l4.66 4.66a.75.75 0 11-1.06 1.06L10 11.06l-4.66 4.66a.75.75 0 01-1.06-1.06L8.94 10 4.28 5.34a.75.75 0 010-1.06z" clipRule="evenodd" />
+                ) : (
+                  <path fillRule="evenodd" d="M2.5 5.5A.75.75 0 013.25 5h13.5a.75.75 0 010 1.5H3.25a.75.75 0 01-.75-.75zm0 4.5A.75.75 0 013.25 9.5h13.5a.75.75 0 010 1.5H3.25A.75.75 0 012.5 10zm.75 3.75a.75.75 0 000 1.5h13.5a.75.75 0 000-1.5H3.25z" clipRule="evenodd" />
+                )}
+              </svg>
+            </button>
+
             {/* Mobile brand */}
             <div className="flex items-center gap-2 sm:hidden">
               <div className="flex h-7 w-7 items-center justify-center rounded-xl bg-gradient-to-br from-violet-600 to-purple-600">

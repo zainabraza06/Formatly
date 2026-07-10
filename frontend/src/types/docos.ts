@@ -25,9 +25,25 @@ export interface GraphNode {
   children: GraphNode[]
 }
 
+export interface PageGeometry {
+  width_in: number
+  height_in: number
+  landscape?: boolean
+  margin: { top: number; right: number; bottom: number; left: number }
+}
+
 export interface DocumentGraph {
   root: GraphNode
   title: string
+}
+
+const DEFAULT_PAGE: PageGeometry = {
+  width_in: 8.5, height_in: 11, margin: { top: 1, right: 1, bottom: 1, left: 1 },
+}
+
+export function pageGeometry(graph: DocumentGraph | null): PageGeometry {
+  const p = graph?.root?.metadata?.page as PageGeometry | undefined
+  return p && p.width_in && p.height_in ? p : DEFAULT_PAGE
 }
 
 export interface VersionInfo {
