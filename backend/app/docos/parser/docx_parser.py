@@ -68,9 +68,16 @@ def _paragraph_node(para: _Paragraph, in_references: bool) -> Optional[Node]:
     lname = style_name.lower()
     text = para.text or ""
 
-    # page break: paragraph containing an explicit break
-    if _has_page_break(para):
-        return Node(type=NodeType.PAGE_BREAK, metadata={"style_name": style_name})
+    # Page-boundary signals. `lastRenderedPageBreak` markers are written by Word
+    # and record where each page actually broke on the last render — we use them
+    # so the editor's page count matches the real document (not a node count).
+    explicit, rendered = _page_break_signals(para)
+    breaks_before = (1 if explicit else 0) + rendered
+
+    # dedicated page-break paragraph (a break with no real content)
+    if breaks_before and not text.strip() and not _has_drawing(para):
+        return Node(type=NodeType.PAGE_BREAK,
+                    metadata={"style_name": style_name, "breaks": breaks_before})
 
     # image / figure: paragraph carrying a drawing
     if _has_drawing(para):
@@ -81,7 +88,10 @@ def _paragraph_node(para: _Paragraph, in_references: bool) -> Optional[Node]:
             metadata={"style_name": style_name, "is_figure": True},
         )
         # a figure is an image wrapped with a caption relationship
-        return Node(type=NodeType.FIGURE, children=[node], metadata={"style_name": style_name})
+        fig = Node(type=NodeType.FIGURE, children=[node], metadata={"style_name": style_name})
+        if breaks_before:
+            fig.metadata["page_break_before"] = breaks_before
+        return fig
 
     # horizontal rule: empty paragraph with a bottom border
     if not text.strip() and _has_bottom_border(para):
@@ -92,11 +102,14 @@ def _paragraph_node(para: _Paragraph, in_references: bool) -> Optional[Node]:
         return None
 
     node_type = _classify_paragraph(lname, in_references)
+    meta: dict = {"style_name": style_name, "level": _heading_level(lname)}
+    if breaks_before:
+        meta["page_break_before"] = breaks_before
     return Node(
         type=node_type,
         content=text,
         style=_paragraph_style(para),
-        metadata={"style_name": style_name, "level": _heading_level(lname)},
+        metadata=meta,
     )
 
 
@@ -207,11 +220,19 @@ def _has_drawing(para: _Paragraph) -> bool:
     )
 
 
-def _has_page_break(para: _Paragraph) -> bool:
-    for br in para._p.findall(".//" + qn("w:br")):
-        if br.get(qn("w:type")) == "page":
-            return True
-    return bool(para._p.findall(".//" + qn("w:lastRenderedPageBreak")))
+def _page_break_signals(para: _Paragraph) -> tuple[bool, int]:
+    """Return (has_explicit_break, rendered_break_count).
+
+    `explicit`  — a manual page break the author inserted (w:br type=page).
+    `rendered`  — how many `w:lastRenderedPageBreak` markers Word left in this
+                  paragraph, i.e. how many page boundaries fall on it.
+    """
+    explicit = any(
+        br.get(qn("w:type")) == "page"
+        for br in para._p.findall(".//" + qn("w:br"))
+    )
+    rendered = len(para._p.findall(".//" + qn("w:lastRenderedPageBreak")))
+    return explicit, rendered
 
 
 def _has_bottom_border(para: _Paragraph) -> bool:

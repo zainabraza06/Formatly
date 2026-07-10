@@ -11,27 +11,45 @@ interface Props {
   removingIds: string[]
 }
 
-// Max content nodes per page before we start a new one (explicit page breaks
-// always start a new page regardless of this cap).
-const MAX_PER_PAGE = 12
+// Fallback only: when a document carries no real page-break markers (e.g. it was
+// never rendered/saved by Word), chunk by node count so we still show pages.
+const FALLBACK_PER_PAGE = 40
+
+function breaksBefore(n: GraphNode): number {
+  const v = (n.metadata as Record<string, unknown> | undefined)?.page_break_before
+  return typeof v === 'number' ? v : v ? 1 : 0
+}
+
+function pageBreakCount(n: GraphNode): number {
+  const v = (n.metadata as Record<string, unknown> | undefined)?.breaks
+  return typeof v === 'number' && v > 0 ? v : 1
+}
 
 function paginate(nodes: GraphNode[]): GraphNode[][] {
+  // Real page boundaries come from Word's saved layout markers; only fall back
+  // to node-count chunking when the document has none.
+  const hasMarkers = nodes.some((n) => n.type === 'page_break' || breaksBefore(n) > 0)
+
   const pages: GraphNode[][] = []
   let current: GraphNode[] = []
+  const flush = () => {
+    pages.push(current)
+    current = []
+  }
+
   for (const n of nodes) {
     if (n.type === 'page_break') {
-      current.push(n)
-      pages.push(current)
-      current = []
-      continue
+      // a blank break paragraph: end this page, plus any extra blank pages
+      if (current.length) flush()
+      const extra = pageBreakCount(n) - 1
+      for (let i = 0; i < extra; i++) pages.push([])
+      continue // the break marker itself is not rendered as content
     }
+    if (breaksBefore(n) > 0 && current.length) flush()
     current.push(n)
-    if (current.length >= MAX_PER_PAGE) {
-      pages.push(current)
-      current = []
-    }
+    if (!hasMarkers && current.length >= FALLBACK_PER_PAGE) flush()
   }
-  if (current.length) pages.push(current)
+  if (current.length) flush()
   return pages.length ? pages : [[]]
 }
 
