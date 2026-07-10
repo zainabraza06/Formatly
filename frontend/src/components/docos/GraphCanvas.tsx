@@ -48,13 +48,6 @@ export function GraphCanvas({ graph, selectedIds, activeId, removingIds }: Props
     setPage((p) => Math.min(Math.max(p, 0), pages.length - 1))
   }, [pages.length])
 
-  // follow the AI: jump to whichever page the active node lives on
-  useEffect(() => {
-    if (!activeId) return
-    const idx = pages.findIndex((pg) => pg.some((n) => n.id === activeId))
-    if (idx >= 0) setPage(idx)
-  }, [activeId, pages])
-
   if (!graph) {
     return (
       <div className="flex h-full items-center justify-center text-sm text-neutral-500">
