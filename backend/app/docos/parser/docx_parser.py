@@ -124,8 +124,7 @@ def _paragraph_node(para: _Paragraph, in_references: bool) -> Optional[Node]:
         )
         # a figure is an image wrapped with a caption relationship
         fig = Node(type=NodeType.FIGURE, children=[node], metadata={"style_name": style_name})
-        if breaks_before:
-            fig.metadata["page_break_before"] = breaks_before
+        _apply_breaks(fig.metadata, breaks_before)
         return fig
 
     # horizontal rule: empty paragraph with a bottom border
@@ -138,14 +137,23 @@ def _paragraph_node(para: _Paragraph, in_references: bool) -> Optional[Node]:
 
     node_type = _classify_paragraph(lname, in_references)
     meta: dict = {"style_name": style_name, "level": _heading_level(lname)}
-    if breaks_before:
-        meta["page_break_before"] = breaks_before
+    _apply_breaks(meta, breaks_before)
     return Node(
         type=node_type,
         content=text,
         style=_paragraph_style(para),
         metadata=meta,
     )
+
+
+def _apply_breaks(meta: dict, breaks_before: int) -> None:
+    """Encode page-boundary metadata: `page_break_before` starts a new page before
+    this node; `extra_pages` is how many *additional* pages the node spans (a long
+    paragraph or a table that Word split across pages)."""
+    if breaks_before >= 1:
+        meta["page_break_before"] = True
+    if breaks_before > 1:
+        meta["extra_pages"] = breaks_before - 1
 
 
 def _classify_paragraph(lname: str, in_references: bool) -> NodeType:
@@ -229,11 +237,13 @@ def _table_node(table: _Table, doc: _Doc) -> Node:
                 )
             )
         rows.append(Node(type=NodeType.TABLE_ROW, children=cells))
-    return Node(
-        type=NodeType.TABLE,
-        children=rows,
-        metadata={"rows": len(table.rows), "cols": len(table.columns)},
-    )
+    meta: dict = {"rows": len(table.rows), "cols": len(table.columns)}
+    # A long table Word split across pages carries lastRenderedPageBreak markers
+    # inside its cells; count them so the total page count stays accurate.
+    internal_breaks = len(table._tbl.findall(".//" + qn("w:lastRenderedPageBreak")))
+    if internal_breaks:
+        meta["extra_pages"] = internal_breaks
+    return Node(type=NodeType.TABLE, children=rows, metadata=meta)
 
 
 def _attach_headers_footers(doc: _Doc, root: Node) -> None:

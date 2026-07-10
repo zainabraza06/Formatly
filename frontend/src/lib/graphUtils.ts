@@ -1,15 +1,11 @@
 import type { DocumentGraph, GraphNode, NodeType, Style } from '../types/docos'
 
-/** Flatten the graph into document-order nodes (excluding the document root). */
+/** Top-level block nodes to render, in document order. Container nodes (tables,
+ * figures) render their own children, so we do NOT descend into them here —
+ * otherwise table cells would also appear as stray paragraphs. */
 export function flatten(graph: DocumentGraph | null): GraphNode[] {
   if (!graph) return []
-  const out: GraphNode[] = []
-  const walk = (n: GraphNode, isRoot: boolean) => {
-    if (!isRoot) out.push(n)
-    n.children?.forEach((c) => walk(c, false))
-  }
-  walk(graph.root, true)
-  return out
+  return graph.root.children ?? []
 }
 
 /** Return a new graph with `fn` applied to the node matching `id`. */

@@ -16,20 +16,27 @@ interface Props {
 // never rendered/saved by Word), chunk by node count so we still show pages.
 const FALLBACK_PER_PAGE = 40
 
-function breaksBefore(n: GraphNode): number {
-  const v = (n.metadata as Record<string, unknown> | undefined)?.page_break_before
-  return typeof v === 'number' ? v : v ? 1 : 0
+function meta(n: GraphNode): Record<string, unknown> {
+  return (n.metadata as Record<string, unknown> | undefined) ?? {}
 }
-
+function startsNewPage(n: GraphNode): boolean {
+  return Boolean(meta(n).page_break_before)
+}
+function extraPages(n: GraphNode): number {
+  const v = meta(n).extra_pages
+  return typeof v === 'number' && v > 0 ? v : 0
+}
 function pageBreakCount(n: GraphNode): number {
-  const v = (n.metadata as Record<string, unknown> | undefined)?.breaks
+  const v = meta(n).breaks
   return typeof v === 'number' && v > 0 ? v : 1
 }
 
 function paginate(nodes: GraphNode[]): GraphNode[][] {
   // Real page boundaries come from Word's saved layout markers; only fall back
   // to node-count chunking when the document has none.
-  const hasMarkers = nodes.some((n) => n.type === 'page_break' || breaksBefore(n) > 0)
+  const hasMarkers = nodes.some(
+    (n) => n.type === 'page_break' || startsNewPage(n) || extraPages(n) > 0,
+  )
 
   const pages: GraphNode[][] = []
   let current: GraphNode[] = []
@@ -40,15 +47,20 @@ function paginate(nodes: GraphNode[]): GraphNode[][] {
 
   for (const n of nodes) {
     if (n.type === 'page_break') {
-      // a blank break paragraph: end this page, plus any extra blank pages
       if (current.length) flush()
-      const extra = pageBreakCount(n) - 1
-      for (let i = 0; i < extra; i++) pages.push([])
+      for (let i = 0; i < pageBreakCount(n) - 1; i++) pages.push([]) // extra blank pages
       continue // the break marker itself is not rendered as content
     }
-    if (breaksBefore(n) > 0 && current.length) flush()
+    if (startsNewPage(n) && current.length) flush()
     current.push(n)
-    if (!hasMarkers && current.length >= FALLBACK_PER_PAGE) flush()
+    const spans = extraPages(n)
+    if (spans > 0) {
+      // node continues across additional pages (long paragraph / split table)
+      flush()
+      for (let i = 0; i < spans; i++) pages.push([])
+    } else if (!hasMarkers && current.length >= FALLBACK_PER_PAGE) {
+      flush()
+    }
   }
   if (current.length) flush()
   return pages.length ? pages : [[]]
