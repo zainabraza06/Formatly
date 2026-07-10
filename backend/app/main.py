@@ -43,6 +43,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# DocOS — visual AI document editor (graph + command + execution + version engines)
+from app.docos.api import router as docos_router  # noqa: E402
+
+app.include_router(docos_router)
+
 
 @app.get("/health")
 def health() -> dict[str, str]:

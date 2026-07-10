@@ -23,6 +23,15 @@ const NAV = [
     ),
   },
   {
+    to: '/app/editor',
+    label: 'Document OS',
+    icon: (
+      <svg viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
+        <path fillRule="evenodd" d="M4.5 2A1.5 1.5 0 003 3.5v13A1.5 1.5 0 004.5 18h11a1.5 1.5 0 001.5-1.5V7.621a1.5 1.5 0 00-.44-1.06l-3.62-3.622A1.5 1.5 0 0011.878 2H4.5zm2 6.5A.75.75 0 017.25 8h5.5a.75.75 0 010 1.5h-5.5A.75.75 0 016.5 8.5zm.75 2.5a.75.75 0 000 1.5h5.5a.75.75 0 000-1.5h-5.5z" clipRule="evenodd" />
+      </svg>
+    ),
+  },
+  {
     to: '/app/templates',
     label: 'Templates',
     icon: (

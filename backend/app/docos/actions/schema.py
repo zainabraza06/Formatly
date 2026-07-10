@@ -1,0 +1,123 @@
+"""Action language: the structured contract the AI emits and the engine executes.
+
+The AI never mutates the document — it only produces an `ActionBatch`. Every batch
+is validated (type + target + params) before execution; anything invalid or
+dangerous is rejected and the graph is left untouched.
+"""
+from __future__ import annotations
+
+from enum import Enum
+from typing import Any, Optional
+
+from pydantic import BaseModel, Field, ValidationError
+
+from app.docos.graph import Style
+from app.docos.graph.model import TARGET_TO_TYPES
+
+
+class ActionType(str, Enum):
+    SELECT = "select"
+    FORMAT = "format"
+    DELETE = "delete"
+    INSERT = "insert"
+    REPLACE = "replace"
+    HIGHLIGHT = "highlight"
+    JUSTIFY = "justify"
+    ALIGN = "align"
+    RESIZE = "resize"
+    MOVE = "move"
+    COPY = "copy"
+    PASTE = "paste"
+    MERGE = "merge"
+    SPLIT = "split"
+    NORMALIZE = "normalize"
+
+
+TARGETS: frozenset[str] = frozenset(TARGET_TO_TYPES.keys())
+
+# Operations that must name a target or explicit node ids to run.
+_NEEDS_SCOPE = {
+    ActionType.SELECT, ActionType.FORMAT, ActionType.DELETE, ActionType.HIGHLIGHT,
+    ActionType.JUSTIFY, ActionType.ALIGN, ActionType.RESIZE, ActionType.MOVE,
+    ActionType.COPY, ActionType.REPLACE, ActionType.MERGE, ActionType.SPLIT,
+    ActionType.NORMALIZE,
+}
+
+
+class Action(BaseModel):
+    type: ActionType
+    target: Optional[str] = None                 # high-level target, e.g. "heading"
+    node_ids: list[str] = Field(default_factory=list)  # explicit scope (overrides target)
+    style: Optional[Style] = None                # for format/highlight
+    params: dict[str, Any] = Field(default_factory=dict)  # op-specific extras
+
+    def scope_ok(self) -> bool:
+        if self.type in _NEEDS_SCOPE:
+            return bool(self.node_ids) or bool(self.target)
+        return True
+
+
+class ActionBatch(BaseModel):
+    actions: list[Action] = Field(default_factory=list)
+    reasoning: str = ""          # short human-readable summary (for the AI panel)
+
+
+class ActionValidationError(Exception):
+    def __init__(self, errors: list[str]):
+        self.errors = errors
+        super().__init__("; ".join(errors))
+
+
+def validate_batch(raw: dict[str, Any]) -> ActionBatch:
+    """Parse + validate an untrusted action batch. Raises on any problem."""
+    try:
+        batch = ActionBatch.model_validate(raw)
+    except ValidationError as exc:
+        raise ActionValidationError([_fmt(e) for e in exc.errors()]) from exc
+
+    errors: list[str] = []
+    if not batch.actions:
+        errors.append("batch contains no actions")
+
+    for i, a in enumerate(batch.actions):
+        if a.target is not None and a.target not in TARGETS:
+            errors.append(f"action[{i}]: unknown target '{a.target}'")
+        if not a.scope_ok():
+            errors.append(f"action[{i}]: '{a.type.value}' requires a target or node_ids")
+        _validate_params(i, a, errors)
+
+    _reject_dangerous(batch, errors)
+
+    if errors:
+        raise ActionValidationError(errors)
+    return batch
+
+
+def _validate_params(i: int, a: Action, errors: list[str]) -> None:
+    if a.type == ActionType.ALIGN:
+        val = a.params.get("alignment") or (a.style.alignment if a.style else None)
+        if val not in {"left", "center", "right", "justify"}:
+            errors.append(f"action[{i}]: align needs params.alignment in left|center|right|justify")
+    if a.type == ActionType.RESIZE:
+        if "font_size" not in a.params and not (a.style and a.style.font_size):
+            errors.append(f"action[{i}]: resize needs a font_size")
+    if a.type == ActionType.REPLACE:
+        if "find" not in a.params and "with" not in a.params:
+            errors.append(f"action[{i}]: replace needs params.find and params.with")
+    if a.type in (ActionType.FORMAT, ActionType.HIGHLIGHT) and a.style is None and not a.params:
+        errors.append(f"action[{i}]: {a.type.value} needs a style")
+
+
+def _reject_dangerous(batch: ActionBatch, errors: list[str]) -> None:
+    # A delete that targets the whole document body with no id scope is refused.
+    for i, a in enumerate(batch.actions):
+        if a.type == ActionType.DELETE and a.target in {"paragraph", "body"} and not a.node_ids:
+            if a.params.get("confirm") is not True:
+                errors.append(
+                    f"action[{i}]: refusing to delete every '{a.target}' without confirm=true or node_ids"
+                )
+
+
+def _fmt(err: dict[str, Any]) -> str:
+    loc = ".".join(str(x) for x in err.get("loc", ()))
+    return f"{loc}: {err.get('msg', 'invalid')}"

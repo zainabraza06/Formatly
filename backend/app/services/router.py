@@ -1,7 +1,7 @@
 """
 Multi-provider AI router for Formatly.
 
-Priority order: Groq -> Gemini -> OpenRouter -> HuggingFace
+Priority order: Mistral -> Groq -> Gemini -> OpenRouter -> HuggingFace
 On rate-limit  -> cool down that provider for 60 s, try next
 On timeout     -> cool down for 30 s, try next
 On other error -> cool down for 10 s, try next
@@ -16,15 +16,17 @@ import time
 from typing import Any
 
 # ── Provider IDs ──────────────────────────────────────────────────────────────
+MISTRAL     = "mistral"
 GROQ        = "groq"
 GEMINI      = "gemini"
 OPENROUTER  = "openrouter"
 HUGGINGFACE = "huggingface"
 
-DEFAULT_ORDER: list[str] = [GROQ, GEMINI, OPENROUTER, HUGGINGFACE]
+DEFAULT_ORDER: list[str] = [MISTRAL, GROQ, GEMINI, OPENROUTER, HUGGINGFACE]
 
 # ── Default models ────────────────────────────────────────────────────────────
 _DEFAULT_MODELS: dict[str, str] = {
+    MISTRAL:     "mistral-large-latest",
     GROQ:        "llama-3.3-70b-versatile",
     GEMINI:      "gemini-1.5-flash",
     OPENROUTER:  "meta-llama/llama-3.3-70b-instruct:free",
@@ -66,6 +68,7 @@ class ProviderRouter:
     def _key(self, provider: str) -> str:
         return os.environ.get(
             {
+                MISTRAL:     "MISTRAL_API_KEY",
                 GROQ:        "GROQ_API_KEY",
                 GEMINI:      "GEMINI_API_KEY",
                 OPENROUTER:  "OPENROUTER_API_KEY",
@@ -77,6 +80,7 @@ class ProviderRouter:
     def _model(self, provider: str) -> str:
         return os.environ.get(
             {
+                MISTRAL:     "MISTRAL_MODEL",
                 GROQ:        "GROQ_MODEL",
                 GEMINI:      "GEMINI_MODEL",
                 OPENROUTER:  "OPENROUTER_MODEL",
@@ -94,6 +98,32 @@ class ProviderRouter:
         self._cooldowns[provider] = time.time() + secs
 
     # ── per-provider callers ──────────────────────────────────────────────────
+    def _call_mistral(self, messages: list[dict[str, str]], max_tokens: int) -> str:
+        import httpx
+
+        try:
+            resp = httpx.post(
+                "https://api.mistral.ai/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {self._key(MISTRAL)}",
+                    "Content-Type":  "application/json",
+                    "Accept":        "application/json",
+                },
+                json={
+                    "model":      self._model(MISTRAL),
+                    "messages":   messages,
+                    "max_tokens": max_tokens,
+                },
+                timeout=30,
+            )
+        except httpx.TimeoutException as exc:
+            raise ProviderTimeout(MISTRAL) from exc
+
+        if resp.status_code == 429:
+            raise RateLimitExceeded(MISTRAL)
+        resp.raise_for_status()
+        return resp.json()["choices"][0]["message"]["content"]
+
     def _call_groq(self, messages: list[dict[str, str]], max_tokens: int) -> str:
         from groq import Groq
 
@@ -222,6 +252,7 @@ class ProviderRouter:
         AllProvidersFailed — when every configured provider fails.
         """
         _callers = {
+            MISTRAL:     self._call_mistral,
             GROQ:        self._call_groq,
             GEMINI:      self._call_gemini,
             OPENROUTER:  self._call_openrouter,

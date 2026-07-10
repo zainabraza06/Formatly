@@ -4,6 +4,7 @@ import { DashboardLayout } from './layout/DashboardLayout'
 import { applyTheme, getInitialTheme, type ThemeMode } from './lib/theme'
 import { AIAssistant } from './pages/AIAssistant'
 import { DashboardHome } from './pages/DashboardHome'
+import { DocumentEditor } from './pages/DocumentEditor'
 import { GeneratedFiles } from './pages/GeneratedFiles'
 import { LandingPage } from './pages/LandingPage'
 import { NewDocument } from './pages/NewDocument'
@@ -31,6 +32,7 @@ export default function App() {
         }
       >
         <Route index element={<DashboardHome />} />
+        <Route path="editor" element={<DocumentEditor />} />
         <Route path="new" element={<NewDocument />} />
         <Route path="templates" element={<Templates />} />
         <Route path="files" element={<GeneratedFiles />} />
