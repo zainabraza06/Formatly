@@ -45,7 +45,9 @@ app.add_middleware(
 
 # DocOS — visual AI document editor (graph + command + execution + version engines)
 from app.docos.api import router as docos_router  # noqa: E402
+from app.docos.auth import auth_router  # noqa: E402
 
+app.include_router(auth_router)
 app.include_router(docos_router)
 
 

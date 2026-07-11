@@ -55,6 +55,7 @@ class VersionStore:
                     title           TEXT NOT NULL DEFAULT '',
                     current_version TEXT,
                     redo_version    TEXT,
+                    owner_id        TEXT,
                     created_at      TEXT NOT NULL
                 );
                 CREATE TABLE IF NOT EXISTS versions (
@@ -72,13 +73,18 @@ class VersionStore:
                 CREATE INDEX IF NOT EXISTS idx_versions_parent ON versions(parent_id);
                 """
             )
+            # migration: add owner_id to pre-existing databases
+            cols = {r["name"] for r in c.execute("PRAGMA table_info(documents)").fetchall()}
+            if "owner_id" not in cols:
+                c.execute("ALTER TABLE documents ADD COLUMN owner_id TEXT")
 
     # ── documents ───────────────────────────────────────────────────────────
-    def create_document(self, doc_id: str, title: str, created_at: str) -> None:
+    def create_document(self, doc_id: str, title: str, created_at: str,
+                        owner_id: Optional[str] = None) -> None:
         with self._lock, self._conn() as c:
             c.execute(
-                "INSERT OR REPLACE INTO documents(id, title, created_at) VALUES (?,?,?)",
-                (doc_id, title, created_at),
+                "INSERT OR REPLACE INTO documents(id, title, created_at, owner_id) VALUES (?,?,?,?)",
+                (doc_id, title, created_at, owner_id),
             )
 
     def get_document(self, doc_id: str) -> Optional[dict[str, Any]]:
@@ -99,9 +105,15 @@ class VersionStore:
         with self._lock, self._conn() as c:
             c.execute(f"UPDATE documents SET {', '.join(sets)} WHERE id=?", vals)
 
-    def list_documents(self) -> list[dict[str, Any]]:
+    def list_documents(self, owner_id: Optional[str] = None) -> list[dict[str, Any]]:
         with self._conn() as c:
-            rows = c.execute("SELECT * FROM documents ORDER BY created_at DESC").fetchall()
+            if owner_id is None:
+                rows = c.execute("SELECT * FROM documents ORDER BY created_at DESC").fetchall()
+            else:
+                rows = c.execute(
+                    "SELECT * FROM documents WHERE owner_id=? ORDER BY created_at DESC",
+                    (owner_id,),
+                ).fetchall()
             return [dict(r) for r in rows]
 
     # ── versions ────────────────────────────────────────────────────────────

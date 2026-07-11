@@ -1,4 +1,5 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import clsx from 'clsx'
 import { GlassCard } from '../components/GlassCard'
 import { AIPanel } from '../components/docos/AIPanel'
@@ -8,9 +9,21 @@ import { useDocOS } from '../hooks/useDocOS'
 
 export function DocumentEditor() {
   const doc = useDocOS()
+  const [searchParams] = useSearchParams()
   const fileRef = useRef<HTMLInputElement>(null)
   const [dragOver, setDragOver] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // open a document passed via ?doc=<id> (from My Uploads / after import)
+  const requestedId = searchParams.get('doc')
+  useEffect(() => {
+    if (requestedId && requestedId !== doc.docId) {
+      doc.loadDocument(requestedId).catch((e) =>
+        setError(e instanceof Error ? e.message : 'Failed to open document'),
+      )
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [requestedId])
 
   const running = doc.status === 'running'
   const noDoc = !doc.docId

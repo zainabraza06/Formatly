@@ -3,6 +3,7 @@ import { NavLink, Outlet } from 'react-router-dom'
 import clsx from 'clsx'
 import { motion } from 'framer-motion'
 import { ThemeToggle } from '../components/ThemeToggle'
+import { useAuth } from '../context/AuthContext'
 
 const NAV = [
   {
@@ -20,6 +21,16 @@ const NAV = [
     icon: (
       <svg viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
         <path d="M10.75 4.75a.75.75 0 00-1.5 0v4.5h-4.5a.75.75 0 000 1.5h4.5v4.5a.75.75 0 001.5 0v-4.5h4.5a.75.75 0 000-1.5h-4.5v-4.5z" />
+      </svg>
+    ),
+  },
+  {
+    to: '/app/documents',
+    label: 'My Uploads',
+    icon: (
+      <svg viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
+        <path d="M3 3.5A1.5 1.5 0 014.5 2h3.879a1.5 1.5 0 011.06.44l1.122 1.12A1.5 1.5 0 0011.62 4H15.5A1.5 1.5 0 0117 5.5v2H3v-4z" />
+        <path fillRule="evenodd" d="M3 9h14v5.5a1.5 1.5 0 01-1.5 1.5h-11A1.5 1.5 0 013 14.5V9zm7 1.5a.75.75 0 01.75.75v1.19l.47-.47a.75.75 0 111.06 1.06l-1.75 1.75a.75.75 0 01-1.06 0l-1.75-1.75a.75.75 0 111.06-1.06l.47.47v-1.19A.75.75 0 0110 10.5z" clipRule="evenodd" />
       </svg>
     ),
   },
@@ -80,6 +91,7 @@ export function DashboardLayout({
   onToggleTheme: () => void
 }) {
   const [navOpen, setNavOpen] = useState(false)
+  const { user, logout } = useAuth()
 
   return (
     <div className="min-h-full bg-gradient-to-br from-neutral-50 via-white to-neutral-100 dark:from-neutral-950 dark:via-neutral-900 dark:to-neutral-950">
@@ -153,12 +165,23 @@ export function DashboardLayout({
             ))}
           </nav>
 
-          {/* Bottom badge */}
-          <div className="mt-4 rounded-xl border border-violet-500/20 bg-violet-500/8 p-3 text-center">
-            <div className="text-[10px] font-semibold text-violet-600 dark:text-violet-400">✦ AI-Powered</div>
-            <div className="mt-0.5 text-[10px] text-neutral-500 dark:text-neutral-400">
-              Prompt → Plan → Format → Export
+          {/* Account */}
+          <div className="mt-4 rounded-xl border border-neutral-200/60 bg-white/60 p-3 dark:border-white/8 dark:bg-white/5">
+            <div className="flex items-center gap-2">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-violet-600 to-purple-600 text-xs font-bold uppercase text-white">
+                {(user?.name || user?.email || '?').slice(0, 1)}
+              </div>
+              <div className="min-w-0">
+                <div className="truncate text-xs font-semibold text-neutral-900 dark:text-neutral-100">{user?.name || 'Account'}</div>
+                <div className="truncate text-[10px] text-neutral-500">{user?.email}</div>
+              </div>
             </div>
+            <button
+              onClick={logout}
+              className="mt-2 w-full rounded-lg border border-neutral-200/60 bg-white/70 px-2 py-1.5 text-[11px] font-medium text-neutral-600 hover:bg-white dark:border-white/8 dark:bg-white/5 dark:text-neutral-300"
+            >
+              Sign out
+            </button>
           </div>
         </aside>
 

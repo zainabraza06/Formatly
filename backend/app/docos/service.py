@@ -28,8 +28,31 @@ class DocOSService:
         self.commands = commands or CommandEngine()
         self.executor = executor or ExecutionEngine()
 
+    # ── ownership ─────────────────────────────────────────────────────────
+    def _require_owner(self, doc_id: str, owner_id: Optional[str]) -> dict[str, Any]:
+        doc = self.versions.store.get_document(doc_id)
+        if not doc:
+            raise KeyError(doc_id)
+        if owner_id is not None and doc.get("owner_id") not in (None, owner_id):
+            raise PermissionError("not your document")
+        return doc
+
+    def list_documents(self, owner_id: Optional[str]) -> list[dict[str, Any]]:
+        out = []
+        for doc in self.versions.store.list_documents(owner_id=owner_id):
+            versions = self.versions.store.list_versions(doc["id"])
+            out.append({
+                "document_id": doc["id"],
+                "title": doc["title"],
+                "created_at": doc["created_at"],
+                "current_version": doc["current_version"],
+                "versions": len(versions),
+            })
+        return out
+
     # ── import / read ─────────────────────────────────────────────────────
-    def import_docx(self, data: bytes, *, title: str = "", user: str = "user") -> dict[str, Any]:
+    def import_docx(self, data: bytes, *, title: str = "", user: str = "user",
+                    owner_id: Optional[str] = None) -> dict[str, Any]:
         doc_id = new_id("doc")
         graph = parse_docx_bytes(data, title=title)
         graph.title = title or "Untitled"
@@ -40,28 +63,31 @@ class DocOSService:
             exact_pages = repaginate(graph, data)
         except Exception:
             exact_pages = None
-        info = self.versions.init_document(doc_id, graph.title, graph, user=user)
+        info = self.versions.init_document(doc_id, graph.title, graph, user=user, owner_id=owner_id)
         return {"document_id": doc_id, "title": graph.title,
                 "version": info.to_dict(), "graph": graph.to_dict(),
                 "exact_pages": exact_pages}
 
-    def get_document(self, doc_id: str) -> dict[str, Any]:
+    def get_document(self, doc_id: str, owner_id: Optional[str] = None) -> dict[str, Any]:
+        doc = self._require_owner(doc_id, owner_id)
         graph = self.versions.current_graph(doc_id)
-        doc = self.versions.store.get_document(doc_id)
         return {"document_id": doc_id, "title": graph.title,
                 "current_version": doc["current_version"] if doc else None,
                 "graph": graph.to_dict()}
 
-    def history(self, doc_id: str) -> list[dict[str, Any]]:
+    def history(self, doc_id: str, owner_id: Optional[str] = None) -> list[dict[str, Any]]:
+        self._require_owner(doc_id, owner_id)
         return [v.to_dict() for v in self.versions.history(doc_id)]
 
-    def diff(self, doc_id: str, seq_a: int, seq_b: int) -> dict[str, Any]:
+    def diff(self, doc_id: str, seq_a: int, seq_b: int, owner_id: Optional[str] = None) -> dict[str, Any]:
+        self._require_owner(doc_id, owner_id)
         va, vb = self._version_by_seq(doc_id, seq_a), self._version_by_seq(doc_id, seq_b)
         return self.versions.diff(va, vb).to_dict()
 
     # ── command execution (streams events via `emit`) ─────────────────────
     async def run_command(self, doc_id: str, command: str, emit: Emit,
-                          *, user: str = "user") -> dict[str, Any]:
+                          *, user: str = "user", owner_id: Optional[str] = None) -> dict[str, Any]:
+        self._require_owner(doc_id, owner_id)
         graph = self.versions.current_graph(doc_id)
         result = self.commands.parse(command, graph)
 

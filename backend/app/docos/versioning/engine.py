@@ -52,10 +52,10 @@ class VersionEngine:
 
     # ── lifecycle ───────────────────────────────────────────────────────────
     def init_document(self, doc_id: str, title: str, graph: DocumentGraph,
-                      user: str = "user") -> VersionInfo:
+                      user: str = "user", owner_id: Optional[str] = None) -> VersionInfo:
         """Create a document with its version 0 (the imported DOCX), always a checkpoint."""
         now = _now()
-        self.store.create_document(doc_id, title, now)
+        self.store.create_document(doc_id, title, now, owner_id=owner_id)
         row = VersionRow(
             id=new_id("v"), document_id=doc_id, parent_id=None, seq=0, timestamp=now,
             user=user, label="import", actions={"actions": [], "reasoning": "initial import"},
