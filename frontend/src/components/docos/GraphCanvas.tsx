@@ -31,7 +31,21 @@ function pageBreakCount(n: GraphNode): number {
   return typeof v === 'number' && v > 0 ? v : 1
 }
 
-function paginate(nodes: GraphNode[]): GraphNode[][] {
+function pageIndex(n: GraphNode): number | null {
+  const v = meta(n).page_index
+  return typeof v === 'number' ? v : null
+}
+
+function paginate(nodes: GraphNode[], exactCount?: number): GraphNode[][] {
+  // Best case: LibreOffice gave every node an exact page_index — group by it.
+  if (nodes.some((n) => pageIndex(n) !== null)) {
+    const maxIdx = nodes.reduce((m, n) => Math.max(m, pageIndex(n) ?? 0), 0)
+    const count = Math.max(maxIdx + 1, exactCount ?? 0)
+    const pages: GraphNode[][] = Array.from({ length: count }, () => [])
+    for (const n of nodes) pages[Math.min(pageIndex(n) ?? 0, count - 1)].push(n)
+    return pages
+  }
+
   // Real page boundaries come from Word's saved layout markers; only fall back
   // to node-count chunking when the document has none.
   const hasMarkers = nodes.some(
@@ -68,7 +82,8 @@ function paginate(nodes: GraphNode[]): GraphNode[][] {
 
 export function GraphCanvas({ graph, selectedIds, activeId, removingIds }: Props) {
   const nodes = flatten(graph)
-  const pages = useMemo(() => paginate(nodes), [nodes])
+  const geo = pageGeometry(graph)
+  const pages = useMemo(() => paginate(nodes, geo.count), [nodes, geo.count])
   const [page, setPage] = useState(0)
 
   const selected = new Set(selectedIds)
@@ -89,7 +104,6 @@ export function GraphCanvas({ graph, selectedIds, activeId, removingIds }: Props
 
   const total = pages.length
   const currentPage = pages[Math.min(page, total - 1)] ?? []
-  const geo = pageGeometry(graph)
   const m = geo.margin
 
   return (

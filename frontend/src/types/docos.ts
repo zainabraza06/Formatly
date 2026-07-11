@@ -30,6 +30,8 @@ export interface PageGeometry {
   height_in: number
   landscape?: boolean
   margin: { top: number; right: number; bottom: number; left: number }
+  count?: number    // exact page count when repaginated via LibreOffice
+  exact?: boolean
 }
 
 export interface DocumentGraph {

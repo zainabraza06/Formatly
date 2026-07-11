@@ -10,7 +10,7 @@ from typing import Any, Awaitable, Callable, Optional
 from app.docos.command import CommandEngine, ControlOp
 from app.docos.execution import ExecutionEngine
 from app.docos.graph import DocumentGraph
-from app.docos.parser import parse_docx_bytes
+from app.docos.parser import parse_docx_bytes, repaginate
 from app.docos.versioning import VersionEngine
 from app.services.storage import new_id
 
@@ -33,9 +33,17 @@ class DocOSService:
         doc_id = new_id("doc")
         graph = parse_docx_bytes(data, title=title)
         graph.title = title or "Untitled"
+        # Exact pagination via LibreOffice when available; silently keeps the
+        # marker heuristic otherwise.
+        exact_pages: Optional[int] = None
+        try:
+            exact_pages = repaginate(graph, data)
+        except Exception:
+            exact_pages = None
         info = self.versions.init_document(doc_id, graph.title, graph, user=user)
         return {"document_id": doc_id, "title": graph.title,
-                "version": info.to_dict(), "graph": graph.to_dict()}
+                "version": info.to_dict(), "graph": graph.to_dict(),
+                "exact_pages": exact_pages}
 
     def get_document(self, doc_id: str) -> dict[str, Any]:
         graph = self.versions.current_graph(doc_id)
