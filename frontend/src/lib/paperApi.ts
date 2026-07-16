@@ -37,8 +37,11 @@ export interface StyleSummary {
   id: string
   name: string
   columns: string
-  builtin: string        // "true" | "false" (server sends strings)
+  builtin: string          // "true" | "false" (server sends strings)
   derived_from: string
+  detected: string         // comma-separated conventions read from the sample
+  heading_scheme: string
+  table_borders: string
 }
 
 export interface VisualizationNote {

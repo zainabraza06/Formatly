@@ -98,15 +98,36 @@ export function StyleManager({ styles, onChanged }: {
       {custom.length > 0 && (
         <div>
           <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-neutral-400">My styles</div>
-          <div className="flex flex-wrap gap-1.5">
+          <div className="space-y-1.5">
             {custom.map((s) => (
-              <span key={s.id} className="flex items-center gap-1.5 rounded-lg border border-violet-500/20 bg-violet-500/10 px-2 py-1 text-[11px] text-violet-700 dark:text-violet-300">
-                {s.name}
-                {s.derived_from && <span className="text-[9px] text-neutral-400">from {s.derived_from}</span>}
-                <button onClick={() => openEditor(s.id)} className="text-neutral-400 hover:text-violet-500">✎</button>
-                <button onClick={() => remove(s.id)} disabled={busy}
-                        className="text-neutral-400 hover:text-red-500">×</button>
-              </span>
+              <div key={s.id} className="rounded-lg border border-violet-500/20 bg-violet-500/10 p-2">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] font-semibold text-violet-700 dark:text-violet-300">{s.name}</span>
+                  <span className="text-[9px] text-neutral-400">
+                    {s.columns} col · {s.heading_scheme} · {s.table_borders} rules
+                  </span>
+                  <span className="flex-1" />
+                  <button onClick={() => openEditor(s.id)} className="text-neutral-400 hover:text-violet-500">✎</button>
+                  <button onClick={() => remove(s.id)} disabled={busy}
+                          className="text-neutral-400 hover:text-red-500">×</button>
+                </div>
+                {s.derived_from && (
+                  <div className="mt-1 text-[9px] text-neutral-500">
+                    Learned from <span className="font-medium">{s.derived_from}</span>
+                    {s.detected && (
+                      <>
+                        {' — read '}
+                        {s.detected.split(',').filter(Boolean).map((d) => (
+                          <span key={d} className="mr-1 rounded bg-emerald-500/15 px-1 text-emerald-600 dark:text-emerald-300">
+                            {d.replace(/_/g, ' ')}
+                          </span>
+                        ))}
+                        <span className="text-neutral-400">· the rest came from the base style</span>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
             ))}
           </div>
         </div>
@@ -132,7 +153,9 @@ export function StyleManager({ styles, onChanged }: {
           </button>
         </div>
         <div className="mt-1.5 text-[10px] text-neutral-400">
-          Upload a document you like — its fonts, sizes, alignment and page setup become a reusable style.
+          Upload a document you like — its fonts, sizes, alignment, page setup <em>and conventions</em>{' '}
+          (columns, heading numbering, caption placement, table rules) become a reusable style.
+          The base style only fills in whatever the sample doesn't reveal.
         </div>
       </div>
 

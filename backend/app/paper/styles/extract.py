@@ -1,22 +1,28 @@
 """Derive a StyleSheet from a reference DOCX.
 
 When a user says "follow this example", we should learn the example's *actual*
-formatting — not just feed its text to the LLM. This reuses the DocOS parser,
-which already reads fonts, sizes, bold/italic and alignment per node, plus the
-real page geometry, and folds them into a StyleSheet.
+format — not just feed its text to the LLM. Two halves are learned:
+
+  typography  — fonts, sizes, bold/italic, alignment, page geometry (this module)
+  conventions — columns, heading numbering, caption position/wording, table rules
+                (app.paper.styles.conventions)
 
 Whatever the sample doesn't reveal falls back to a chosen base style, so the
 result is always complete and renderable.
 """
 from __future__ import annotations
 
+import io
 from collections import Counter
-from typing import Iterable, Optional
+from typing import Any, Iterable, Optional
+
+from docx import Document
 
 from app.docos.graph import DocumentGraph, NodeType
 from app.docos.parser import parse_docx_bytes
 from app.paper.schema import PageSetup, Style
 from app.paper.styles.base import StyleSheet
+from app.paper.styles.conventions import detect_conventions
 
 
 def derive_stylesheet_from_docx(
@@ -35,6 +41,16 @@ def derive_stylesheet_from_docx(
     sheet.derived_from = source_filename or "reference.docx"
 
     sheet.page = _page_from(graph, base.page)
+
+    # structural conventions read from the sample; anything it doesn't reveal
+    # keeps the base's value
+    detected: dict[str, Any] = {}
+    try:
+        detected = detect_conventions(Document(io.BytesIO(data)), graph)
+    except Exception:
+        detected = {}
+    _apply_conventions(sheet, detected)
+    sheet.detected = sorted(detected.keys())
 
     body = _style_for(graph, (NodeType.BODY, NodeType.PARAGRAPH), base.body)
     sheet.body = body
@@ -61,6 +77,17 @@ def derive_stylesheet_from_docx(
             setattr(sheet, field, current.merged(Style(font=body.font)))
 
     return sheet
+
+
+def _apply_conventions(sheet: StyleSheet, detected: dict[str, Any]) -> None:
+    """Fold detected conventions onto the sheet. `columns`/`column_spacing_in`
+    belong to the page setup; everything else is a top-level field."""
+    page_keys = {"columns": "columns", "column_spacing_in": "column_spacing_in"}
+    for key, value in detected.items():
+        if key in page_keys:
+            setattr(sheet.page, page_keys[key], value)
+        elif hasattr(sheet, key):
+            setattr(sheet, key, value)
 
 
 def _page_from(graph: DocumentGraph, fallback: PageSetup) -> PageSetup:

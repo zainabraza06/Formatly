@@ -69,6 +69,9 @@ class StyleSheet(BaseModel):
     # provenance
     builtin: bool = True
     derived_from: str = ""   # e.g. "reference.docx" when learned from a sample
+    # which conventions were actually read from the sample (the rest came from the
+    # base style) — lets the UI show what was learned vs. inherited
+    detected: list[str] = Field(default_factory=list)
 
     def heading_style(self, level: int) -> Style:
         return {1: self.heading1, 2: self.heading2, 3: self.heading3}.get(level, self.heading3)

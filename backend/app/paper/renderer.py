@@ -192,12 +192,29 @@ def _apply_para(p, style: Style) -> None:
         pf.keep_with_next = style.keep_with_next
 
 
-def _styled_paragraph(doc: Document, text: str, style: Style):
+# Real Word heading styles, so generated documents carry semantic structure:
+# navigation pane, table of contents, accessibility, and correct re-parsing.
+_WORD_HEADING = {1: "Heading 1", 2: "Heading 2", 3: "Heading 3"}
+
+
+def _styled_paragraph(doc: Document, text: str, style: Style,
+                      word_style: Optional[str] = None):
     p = doc.add_paragraph()
+    if word_style:
+        try:
+            p.style = doc.styles[word_style]
+        except KeyError:
+            pass  # unusual template without the built-in styles
     _apply_para(p, style)
     if text:
         _apply_run(p.add_run(text), style)
     return p
+
+
+def _as_heading(style: Style) -> Style:
+    """Word's built-in Heading styles are blue by default; our stylesheets decide
+    colour, so pin it to black unless the sheet asks for something else."""
+    return style if style.color else style.merged(Style(color="#000000"))
 
 
 # ── title block ─────────────────────────────────────────────────────────────
@@ -214,7 +231,8 @@ def _title_block(doc: Document, spec: PaperSpec, sheet: StyleSheet) -> None:
 
     if m.abstract:
         if sheet.abstract_as_heading:
-            _styled_paragraph(doc, "Abstract", sheet.heading1)
+            _styled_paragraph(doc, "Abstract", _as_heading(sheet.heading1),
+                              word_style=_WORD_HEADING[1])
             _styled_paragraph(doc, m.abstract, sheet.abstract)
         else:
             p = doc.add_paragraph()
@@ -247,8 +265,8 @@ def _heading(doc: Document, block: Heading, counters: dict[str, int], sheet: Sty
         counters["h3"] += 1
 
     label = ss.heading_label(sheet, level, counters)
-    style = block.style or sheet.heading_style(level)
-    _styled_paragraph(doc, f"{label}{block.text}", style)
+    style = _as_heading(block.style or sheet.heading_style(level))
+    _styled_paragraph(doc, f"{label}{block.text}", style, word_style=_WORD_HEADING.get(level))
 
 
 def _list(doc: Document, block: ListBlock, sheet: StyleSheet) -> None:
@@ -406,7 +424,8 @@ def _figure(doc: Document, block: Figure, number: int, assets: Path,
 # ── references ──────────────────────────────────────────────────────────────
 
 def _references(doc: Document, spec: PaperSpec, sheet: StyleSheet) -> None:
-    _styled_paragraph(doc, sheet.references_title, sheet.references_heading)
+    _styled_paragraph(doc, sheet.references_title, _as_heading(sheet.references_heading),
+                      word_style=_WORD_HEADING[1])
     for i, ref in enumerate(spec.references, start=1):
         text = f"[{i}] {ref}" if sheet.number_references else ref
         _styled_paragraph(doc, text, sheet.reference)

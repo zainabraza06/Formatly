@@ -67,16 +67,26 @@ def resolve_style(style: StyleLike, owner_id: Optional[str] = None) -> StyleShee
     return _REGISTRY[DEFAULT_STYLE]
 
 
+def _summary(sheet: StyleSheet, builtin: bool) -> dict[str, str]:
+    return {
+        "id": sheet.id,
+        "name": sheet.name,
+        "columns": str(sheet.page.columns),
+        "builtin": "true" if builtin else "false",
+        "derived_from": sheet.derived_from,
+        # what was read from a reference sample rather than inherited from a base
+        "detected": ",".join(sheet.detected),
+        "heading_scheme": sheet.heading_scheme,
+        "table_borders": sheet.table_borders,
+    }
+
+
 def list_styles(owner_id: Optional[str] = None) -> list[dict[str, str]]:
     """Built-in styles, plus the user's custom styles when an owner is given."""
-    out = [{"id": s.id, "name": s.name, "columns": str(s.page.columns),
-            "builtin": "true", "derived_from": s.derived_from}
-           for s in _REGISTRY.values()]
+    out = [_summary(s, True) for s in _REGISTRY.values()]
     if owner_id:
         from app.paper.styles.store import get_style_store
-        out += [{"id": s.id, "name": s.name, "columns": str(s.page.columns),
-                 "builtin": "false", "derived_from": s.derived_from}
-                for s in get_style_store().list(owner_id)]
+        out += [_summary(s, False) for s in get_style_store().list(owner_id)]
     return out
 
 
