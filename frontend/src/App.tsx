@@ -5,6 +5,7 @@ import { AuthProvider } from './context/AuthContext'
 import { DashboardLayout } from './layout/DashboardLayout'
 import { applyTheme, getInitialTheme, type ThemeMode } from './lib/theme'
 import { AIAssistant } from './pages/AIAssistant'
+import { ComposePaper } from './pages/ComposePaper'
 import { DashboardHome } from './pages/DashboardHome'
 import { DocumentEditor } from './pages/DocumentEditor'
 import { GeneratedFiles } from './pages/GeneratedFiles'
@@ -40,6 +41,7 @@ export default function App() {
           }
         >
           <Route index element={<DashboardHome />} />
+          <Route path="compose" element={<ComposePaper />} />
           <Route path="documents" element={<MyDocuments />} />
           <Route path="editor" element={<DocumentEditor />} />
           <Route path="new" element={<NewDocument />} />

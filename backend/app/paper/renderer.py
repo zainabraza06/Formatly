@@ -23,7 +23,7 @@ from app.paper.figures import render_figure
 from app.paper.schema import (
     Code, Equation, Figure, Heading, ListBlock, Paragraph as PBlock, PaperSpec, Style, Table,
 )
-from app.paper.styles import get_stylesheet
+from app.paper.styles import StyleLike, resolve_style
 from app.paper.styles.base import StyleSheet
 
 _ALIGN = {
@@ -36,11 +36,17 @@ _ALIGN = {
 
 def render_paper(spec: PaperSpec, out_path: str | Path,
                  assets_dir: Optional[Path] = None,
-                 style: Optional[str] = None) -> Path:
-    """Render a PaperSpec to .docx. `style` overrides spec.meta.style."""
-    if style or not spec.resolved:
-        spec = ss.resolve(spec, style)
-    sheet = get_stylesheet(spec.meta.style)
+                 style: StyleLike = None,
+                 owner_id: Optional[str] = None) -> Path:
+    """Render a PaperSpec to .docx.
+
+    `style` overrides spec.meta.style and may be a built-in id, a user's custom
+    style id/name, or a StyleSheet object. `owner_id` scopes custom-style lookup.
+    """
+    if style is not None or not spec.resolved:
+        spec = ss.resolve(spec, style, owner_id)
+    sheet = (style if isinstance(style, StyleSheet)
+             else resolve_style(spec.meta.style, owner_id))
 
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -308,8 +314,8 @@ def _table(doc: Document, block: Table, number: int, sheet: StyleSheet) -> None:
             cp = table.rows[0].cells[i].paragraphs[0]
             _apply_para(cp, header_style)
             _apply_run(cp.add_run(str(name)), header_style)
-            if sheet.table_borders == "grid":
-                _shade_cell(table.rows[0].cells[i], "1F3864")
+            if sheet.table_header_fill:
+                _shade_cell(table.rows[0].cells[i], sheet.table_header_fill.lstrip("#"))
 
         for row in block.rows:
             cells = table.add_row().cells

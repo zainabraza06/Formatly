@@ -14,7 +14,7 @@ from pydantic import ValidationError
 
 from app.paper.prompt import build_user_message, system_prompt
 from app.paper.schema import Author, PaperSpec
-from app.paper.styles import DEFAULT_STYLE, get_stylesheet
+from app.paper.styles import DEFAULT_STYLE, StyleLike, is_builtin, resolve_style
 from app.paper.stylesheet import resolve
 
 
@@ -25,7 +25,7 @@ class PaperGenerationError(Exception):
 def generate_paper(
     *,
     raw_text: str,
-    style: str = DEFAULT_STYLE,
+    style: StyleLike = DEFAULT_STYLE,
     doc_kind: str = "paper",
     code: Optional[str] = None,
     results: Optional[str] = None,
@@ -33,6 +33,7 @@ def generate_paper(
     instructions: Optional[str] = None,
     title_hint: Optional[str] = None,
     authors: Optional[list[dict[str, str]]] = None,
+    owner_id: Optional[str] = None,
     router: Any = None,
     max_tokens: int = 4000,
 ) -> tuple[PaperSpec, str]:
@@ -40,21 +41,24 @@ def generate_paper(
     if not (raw_text or "").strip():
         raise PaperGenerationError("no source material supplied")
 
-    style_id = get_stylesheet(style).id  # normalise aliases ("IEEE" → "ieee")
+    sheet = resolve_style(style, owner_id)
+    # Steer the writer with the closest built-in convention; a custom style only
+    # changes typography, not what good prose for that document kind looks like.
+    guide_id = sheet.id if is_builtin(sheet.id) else DEFAULT_STYLE
 
     if router is None:
         from app.services.router import get_router
         router = get_router()
 
     user_msg = build_user_message(
-        raw_text=raw_text, style=style_id, doc_kind=doc_kind, code=code, results=results,
+        raw_text=raw_text, style=guide_id, doc_kind=doc_kind, code=code, results=results,
         reference_example=reference_example, instructions=instructions,
         title_hint=title_hint, authors=authors,
     )
 
     try:
         text, provider, _elapsed = router.chat(
-            [{"role": "system", "content": system_prompt(style_id)},
+            [{"role": "system", "content": system_prompt(guide_id)},
              {"role": "user", "content": user_msg}],
             max_tokens=max_tokens,
         )
@@ -79,7 +83,7 @@ def generate_paper(
     if title_hint and not spec.meta.title.strip():
         spec.meta.title = title_hint
 
-    return resolve(spec, style_id), provider
+    return resolve(spec, sheet), provider
 
 
 def _extract_json(text: str) -> Optional[dict[str, Any]]:

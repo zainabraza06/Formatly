@@ -11,15 +11,20 @@ from __future__ import annotations
 from app.paper.schema import (
     Block, Code, Equation, Figure, Heading, ListBlock, Paragraph, PaperSpec, Table,
 )
-from app.paper.styles import DEFAULT_STYLE, get_stylesheet
+from app.paper.styles import DEFAULT_STYLE, StyleLike, resolve_style
 from app.paper.styles.base import StyleSheet
 
 
-def resolve(spec: PaperSpec, style: str | None = None) -> PaperSpec:
-    """Return a copy of `spec` fully resolved against the requested stylesheet."""
+def resolve(spec: PaperSpec, style: StyleLike = None,
+            owner_id: str | None = None) -> PaperSpec:
+    """Return a copy of `spec` fully resolved against the requested stylesheet.
+
+    `style` may be a built-in id/alias, a user's custom style id/name, or a
+    StyleSheet object outright.
+    """
     out = spec.model_copy(deep=True)
-    chosen = style or out.meta.style or DEFAULT_STYLE
-    sheet = get_stylesheet(chosen)
+    chosen = style if style is not None else (out.meta.style or DEFAULT_STYLE)
+    sheet = resolve_style(chosen, owner_id)
 
     out.meta.style = sheet.id
     out.meta.page = sheet.page.model_copy()

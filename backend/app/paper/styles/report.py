@@ -60,6 +60,7 @@ REPORT = StyleSheet(
     figure_caption_prefix="Figure {num}. ",
     figure_caption_position="below",
     table_borders="grid",
+    table_header_fill="1F3864",
     references_title="References",
     abstract_lead="",
     abstract_as_heading=True,
