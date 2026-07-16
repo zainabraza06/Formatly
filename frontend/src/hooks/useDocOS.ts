@@ -8,6 +8,12 @@ import type {
   VersionInfo,
 } from '../types/docos'
 
+/** One prompt the user gave while formatting, and what came of it. */
+export interface HistoryEntry {
+  prompt: string
+  outcome: string
+}
+
 export interface PanelState {
   task: string
   reasoning: string
@@ -15,7 +21,7 @@ export interface PanelState {
   source: string
   currentAction: string
   progress: { done: number; total: number } | null
-  history: string[]
+  history: HistoryEntry[]
   upcoming: string[]
   error: string | null
 }
@@ -184,7 +190,14 @@ export function useDocOS() {
       setGraph(doc.graph)
       setVersions(hist)
       setStatus('ready')
-      setPanel((s) => ({ ...s, history: [s.currentAction, ...s.history].filter(Boolean).slice(0, 20) }))
+      // Record the prompt and its outcome. Several events (batch_finished,
+      // version_committed) sync, so update the current prompt's entry in place
+      // rather than logging it repeatedly.
+      setPanel((s) => {
+        if (!s.task) return s
+        const rest = s.history[0]?.prompt === s.task ? s.history.slice(1) : s.history
+        return { ...s, history: [{ prompt: s.task, outcome: s.currentAction }, ...rest].slice(0, 20) }
+      })
     } catch {
       setStatus('ready')
     }

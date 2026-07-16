@@ -13,8 +13,6 @@ from fastapi.responses import FileResponse
 
 from app.schemas import (
     ChartSpec,
-    ChatRequest,
-    ChatResponse,
     GenerateRequest,
     GenerateResponse,
     TemplateAnalyzeResponse,
@@ -207,20 +205,9 @@ def download_excel(document_id: str) -> FileResponse:
     )
 
 
-# ── Chat ───────────────────────────────────────────────────────────────────────
-
-@app.post("/chat", response_model=ChatResponse)
-def chat(req: ChatRequest) -> Any:
-    last_user = next((m.content for m in reversed(req.messages) if m.role == "user"), "")
-    msg = (
-        "I can help refine your document.\n\n"
-        "Try:\n"
-        "- 'Rewrite the Executive Summary in a simpler tone'\n"
-        "- 'Regenerate the Recommendations with 5 bullet points'\n"
-        "- 'Apply a more academic style and add citations placeholders'\n\n"
-        f"Your last message: {last_user}"
-    )
-    return {"message": msg}
+# The old /chat endpoint returned canned text and never reached a model. The real
+# assistant lives in DocOS (/docos/{id}/command and the WebSocket), where a prompt
+# becomes validated actions applied to the document.
 
 
 # ── Templates ─────────────────────────────────────────────────────────────────

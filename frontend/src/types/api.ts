@@ -85,10 +85,6 @@ export type RecentDocument = {
   style_preset: StylePreset
 }
 
-export type ChatMessage = { role: 'user' | 'assistant' | 'system'; content: string }
-export type ChatRequest = { document_id?: string | null; messages: ChatMessage[] }
-export type ChatResponse = { message: string }
-
 export type AnalyzeChartsResponse = {
   suggested_charts: ChartSpec[]
 }

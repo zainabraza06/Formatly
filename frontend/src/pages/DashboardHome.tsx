@@ -33,7 +33,7 @@ const quickActions = [
     ),
   },
   {
-    to: '/app/assistant',
+    to: '/app/editor',
     label: 'AI Assistant',
     desc: 'Refine & rewrite',
     color: 'from-emerald-500/15 to-teal-500/10',

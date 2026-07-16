@@ -61,20 +61,6 @@ class GenerateResponse(BaseModel):
     suggested_charts: list[ChartSpec] = Field(default_factory=list)
 
 
-class ChatMessage(BaseModel):
-    role: Literal["user", "assistant", "system"]
-    content: str
-
-
-class ChatRequest(BaseModel):
-    document_id: Optional[str] = None
-    messages: list[ChatMessage]
-
-
-class ChatResponse(BaseModel):
-    message: str
-
-
 class TemplateAnalyzeResponse(BaseModel):
     template_id: str
     filename: str

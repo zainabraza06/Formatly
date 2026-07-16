@@ -36,7 +36,11 @@ export function AIPanel({ panel, running, disabled, onRun }: Props) {
     <div className="flex h-full flex-col gap-3">
       <div>
         <div className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">AI Assistant</div>
-        <div className="text-xs text-neutral-500">Every action is shown live in the editor.</div>
+        <div className="text-xs text-neutral-500">
+          {disabled
+            ? 'Import a document, then tell the assistant how to format it.'
+            : 'Describe a change — every action is shown live in the document.'}
+        </div>
       </div>
 
       <div className="flex gap-2">
@@ -45,7 +49,7 @@ export function AIPanel({ panel, running, disabled, onRun }: Props) {
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && submit()}
           disabled={disabled}
-          placeholder="e.g. Highlight all figures"
+          placeholder={disabled ? 'Import a document first…' : 'e.g. Highlight all figures'}
           className="flex-1 rounded-xl border border-white/10 bg-white/10 px-3 py-2 text-sm text-neutral-900 outline-none placeholder:text-neutral-500 focus:ring-2 focus:ring-sky-400/30 disabled:opacity-50 dark:bg-white/5 dark:text-neutral-100"
         />
         <button
@@ -113,9 +117,12 @@ export function AIPanel({ panel, running, disabled, onRun }: Props) {
       )}
 
       {panel.history.length > 0 && (
-        <Section title="History">
+        <Section title="Earlier prompts">
           {panel.history.map((h, i) => (
-            <li key={i} className="text-neutral-500">✓ {h}</li>
+            <li key={i} className="border-l border-white/10 pl-2">
+              <div className="text-neutral-700 dark:text-neutral-200">{h.prompt}</div>
+              <div className="text-[10px] text-neutral-500">↳ {h.outcome}</div>
+            </li>
           ))}
         </Section>
       )}

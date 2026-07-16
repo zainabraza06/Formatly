@@ -1,7 +1,5 @@
 import type {
   AnalyzeChartsResponse,
-  ChatRequest,
-  ChatResponse,
   ChartSpec,
   Draft,
   GenerateRequest,
@@ -106,12 +104,4 @@ export const api = {
 
   analyzeTemplate: (templateId: string) =>
     http<TemplateAnalyzeResponse>(`/templates/${templateId}/analyze`),
-
-  // ── Chat ─────────────────────────────────────────────────────────────────
-  chat: (payload: ChatRequest) =>
-    http<ChatResponse>('/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    }),
 }

@@ -4,7 +4,6 @@ import { RequireAuth } from './components/RequireAuth'
 import { AuthProvider } from './context/AuthContext'
 import { DashboardLayout } from './layout/DashboardLayout'
 import { applyTheme, getInitialTheme, type ThemeMode } from './lib/theme'
-import { AIAssistant } from './pages/AIAssistant'
 import { ComposePaper } from './pages/ComposePaper'
 import { DashboardHome } from './pages/DashboardHome'
 import { DocumentEditor } from './pages/DocumentEditor'
@@ -47,7 +46,9 @@ export default function App() {
           <Route path="new" element={<Navigate to="/app/compose" replace />} />
           <Route path="templates" element={<Templates />} />
           <Route path="files" element={<GeneratedFiles />} />
-          <Route path="assistant" element={<AIAssistant />} />
+          {/* The assistant is not a place you go — it lives in Document OS,
+              where you prompt it while formatting a real document. */}
+          <Route path="assistant" element={<Navigate to="/app/editor" replace />} />
           <Route path="settings" element={<Settings />} />
         </Route>
 
