@@ -137,7 +137,7 @@ export function LandingPage() {
           <div className="flex items-center gap-3">
             <ThemeToggle mode={theme} onToggle={() => setTheme(t => t === 'dark' ? 'light' : 'dark')} />
             <Link
-              to="/app/new"
+              to="/app/compose"
               className="rounded-xl bg-neutral-900 px-4 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-neutral-700 dark:bg-white dark:text-neutral-950 dark:hover:bg-neutral-200"
             >
               Open App →
@@ -189,7 +189,7 @@ export function LandingPage() {
             className="mt-7 flex flex-wrap items-center justify-center gap-3"
           >
             <Link
-              to="/app/new"
+              to="/app/compose"
               className="rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 px-6 py-2.5 text-sm font-semibold text-white shadow-lg shadow-violet-500/30 transition hover:shadow-violet-500/50 hover:scale-[1.02] active:scale-[0.98]"
             >
               Start a New Document
@@ -329,7 +329,7 @@ export function LandingPage() {
                 ))}
               </ol>
               <Link
-                to="/app/new"
+                to="/app/compose"
                 className="mt-4 inline-flex items-center gap-1 text-xs font-semibold text-sky-600 hover:text-sky-500 dark:text-sky-400"
               >
                 Try it → New Document
@@ -388,7 +388,7 @@ export function LandingPage() {
             No configuration needed — just describe what you want.
           </p>
           <Link
-            to="/app/new"
+            to="/app/compose"
             className="mt-6 inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 px-8 py-3 text-sm font-semibold text-white shadow-lg shadow-violet-500/30 transition hover:shadow-violet-500/50 hover:scale-[1.02] active:scale-[0.98]"
           >
             Open Formatly App →

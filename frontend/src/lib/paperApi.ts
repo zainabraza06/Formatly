@@ -65,12 +65,18 @@ export interface PaperSpec {
   resolved: boolean
 }
 
+/** Any extra material under the user's own label — measurements, a transcript,
+ *  survey responses, source code, citations. Nothing domain-specific. */
+export interface Attachment {
+  label: string
+  content: string
+}
+
 export interface ComposeRequest {
   raw_text: string
   style: string
   doc_kind: string
-  code?: string | null
-  results?: string | null
+  attachments?: Attachment[]
   reference_example?: string | null
   instructions?: string | null
   title_hint?: string | null

@@ -38,6 +38,12 @@ _COOLDOWN_RATE_LIMIT = 60
 _COOLDOWN_TIMEOUT    = 30
 _COOLDOWN_ERROR      = 10
 
+# ── Request timeout ───────────────────────────────────────────────────────────
+# Writing a whole document is a long generation: a large model emitting a few
+# thousand tokens routinely runs past a minute. Too short a timeout burns the
+# provider and cools it down for no reason. Override with LLM_TIMEOUT.
+_TIMEOUT = float(os.environ.get("LLM_TIMEOUT", "120"))
+
 
 # ── Custom exceptions ─────────────────────────────────────────────────────────
 class RateLimitExceeded(Exception):
@@ -59,6 +65,18 @@ class AllProvidersFailed(Exception):
         self.errors = errors
 
 
+def _is_placeholder(key: str) -> bool:
+    """`.env.example` ships values like `your_gemini_api_key_here`. Those are
+    truthy, so without this the router would 'try' the provider, fail on a bad
+    key and waste a fallback rung — and `/providers/status` would claim ready."""
+    if not key:
+        return True
+    low = key.lower()
+    return (low.startswith(("your_", "<", "changeme", "replace_"))
+            or low.endswith(("_here", "_key_here"))
+            or low in {"none", "null", "todo"})
+
+
 # ── Router ────────────────────────────────────────────────────────────────────
 class ProviderRouter:
     def __init__(self) -> None:
@@ -66,7 +84,7 @@ class ProviderRouter:
 
     # ── config helpers ────────────────────────────────────────────────────────
     def _key(self, provider: str) -> str:
-        return os.environ.get(
+        raw = os.environ.get(
             {
                 MISTRAL:     "MISTRAL_API_KEY",
                 GROQ:        "GROQ_API_KEY",
@@ -75,7 +93,8 @@ class ProviderRouter:
                 HUGGINGFACE: "HUGGINGFACE_API_KEY",
             }[provider],
             "",
-        )
+        ).strip()
+        return "" if _is_placeholder(raw) else raw
 
     def _model(self, provider: str) -> str:
         return os.environ.get(
@@ -114,7 +133,7 @@ class ProviderRouter:
                     "messages":   messages,
                     "max_tokens": max_tokens,
                 },
-                timeout=30,
+                timeout=_TIMEOUT,
             )
         except httpx.TimeoutException as exc:
             raise ProviderTimeout(MISTRAL) from exc
@@ -138,7 +157,7 @@ class ProviderRouter:
                 model=self._model(GROQ),
                 messages=messages,  # type: ignore[arg-type]
                 max_tokens=max_tokens,
-                timeout=25,
+                timeout=_TIMEOUT,
             )
             return resp.choices[0].message.content or ""
         except Exception as exc:
@@ -194,7 +213,7 @@ class ProviderRouter:
                     "messages":   messages,
                     "max_tokens": max_tokens,
                 },
-                timeout=30,
+                timeout=_TIMEOUT,
             )
         except httpx.TimeoutException as exc:
             raise ProviderTimeout(OPENROUTER) from exc
@@ -220,7 +239,7 @@ class ProviderRouter:
                     "messages":   messages,
                     "max_tokens": max_tokens,
                 },
-                timeout=60,
+                timeout=_TIMEOUT,
             )
         except httpx.TimeoutException as exc:
             raise ProviderTimeout(HUGGINGFACE) from exc

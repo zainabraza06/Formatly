@@ -7,7 +7,7 @@ import type { RecentDocument } from '../types/api'
 
 const quickActions = [
   {
-    to: '/app/new',
+    to: '/app/compose',
     label: 'New Document',
     desc: 'Prompt → formatted doc',
     color: 'from-violet-500/15 to-purple-500/10',
@@ -164,7 +164,7 @@ export function DashboardHome() {
               <div className="rounded-xl border border-dashed border-neutral-300/60 p-6 text-center dark:border-white/10">
                 <div className="text-xs text-neutral-500 dark:text-neutral-400">
                   No documents yet.{' '}
-                  <Link to="/app/new" className="font-semibold text-violet-600 hover:underline dark:text-violet-400">
+                  <Link to="/app/compose" className="font-semibold text-violet-600 hover:underline dark:text-violet-400">
                     Generate your first →
                   </Link>
                 </div>
@@ -198,7 +198,7 @@ export function DashboardHome() {
               Templates
             </Link>
             <Link
-              to="/app/new"
+              to="/app/compose"
               className="rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 px-3 py-2 text-center text-xs font-semibold text-white shadow-sm shadow-violet-500/25 transition hover:shadow-violet-500/40"
             >
               New Doc

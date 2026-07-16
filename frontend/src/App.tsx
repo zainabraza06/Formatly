@@ -12,7 +12,6 @@ import { GeneratedFiles } from './pages/GeneratedFiles'
 import { LandingPage } from './pages/LandingPage'
 import { Login } from './pages/Login'
 import { MyDocuments } from './pages/MyDocuments'
-import { NewDocument } from './pages/NewDocument'
 import { Settings } from './pages/Settings'
 import { Templates } from './pages/Templates'
 
@@ -44,7 +43,8 @@ export default function App() {
           <Route path="compose" element={<ComposePaper />} />
           <Route path="documents" element={<MyDocuments />} />
           <Route path="editor" element={<DocumentEditor />} />
-          <Route path="new" element={<NewDocument />} />
+          {/* /app/new was the old generator — Compose supersedes it */}
+          <Route path="new" element={<Navigate to="/app/compose" replace />} />
           <Route path="templates" element={<Templates />} />
           <Route path="files" element={<GeneratedFiles />} />
           <Route path="assistant" element={<AIAssistant />} />

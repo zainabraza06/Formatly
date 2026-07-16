@@ -153,9 +153,19 @@ def test_apa_caption_has_separator(tmp_path):
 class _StubRouter:
     def __init__(self, reply: str):
         self.reply = reply
+        self.messages = None      # captured so tests can inspect the prompt
 
     def chat(self, messages, **kwargs):
+        self.messages = messages
         return self.reply, "stub", 0.01
+
+    @property
+    def system(self) -> str:
+        return next(m["content"] for m in self.messages if m["role"] == "system")
+
+    @property
+    def user(self) -> str:
+        return next(m["content"] for m in self.messages if m["role"] == "user")
 
 
 def test_generator_validates_and_resolves():
@@ -190,3 +200,56 @@ def test_generator_keeps_visualization_plan():
     spec, _ = generate_paper(raw_text="x", router=_StubRouter(json.dumps(SPEC)))
     assert spec.visualization_plan[0].kind == "bar"
     assert "accuracy" in spec.visualization_plan[0].data
+
+
+# ── arbitrary labelled material (no fixed "code"/"results" fields) ──────────
+
+def test_attachments_reach_the_prompt_under_their_own_labels():
+    router = _StubRouter(json.dumps(SPEC))
+    generate_paper(
+        raw_text="Write up the churn analysis.",
+        doc_kind="report",
+        attachments=[
+            {"label": "Survey responses", "content": "412 replies; 63% cited price"},
+            {"label": "Interview transcript", "content": "Q: why did you leave? A: too costly"},
+        ],
+        router=router,
+    )
+    user = router.user
+    assert "Survey responses" in user and "63% cited price" in user
+    assert "Interview transcript" in user and "too costly" in user
+    assert "churn analysis" in user
+    assert "report" in user
+
+
+def test_blank_attachments_are_dropped():
+    router = _StubRouter(json.dumps(SPEC))
+    generate_paper(
+        raw_text="material",
+        attachments=[{"label": "Empty", "content": "   "}],
+        router=router,
+    )
+    assert "additional_material" not in router.user
+
+
+def test_no_attachments_is_fine():
+    router = _StubRouter(json.dumps(SPEC))
+    spec, _ = generate_paper(raw_text="Just prose, nothing else.", router=router)
+    assert spec.resolved is True
+    assert "additional_material" not in router.user
+
+
+def test_prompt_is_domain_neutral():
+    """The pipeline must not assume machine learning — that was only one example."""
+    router = _StubRouter(json.dumps(SPEC))
+    generate_paper(raw_text="A legal memorandum on lease obligations.",
+                   doc_kind="memo", router=router)
+    system = router.system.lower()
+    for ml_ism in ("epoch", "model accuracy", "cnn", "svm", "dataset"):
+        assert ml_ism not in system, f"prompt leaks a domain assumption: {ml_ism!r}"
+
+
+def test_doc_kind_is_free_text():
+    router = _StubRouter(json.dumps(SPEC))
+    generate_paper(raw_text="x", doc_kind="grant proposal", router=router)
+    assert "grant proposal" in router.user

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Any, Optional
+from typing import Any, Optional, Sequence
 
 from pydantic import ValidationError
 
@@ -26,9 +26,8 @@ def generate_paper(
     *,
     raw_text: str,
     style: StyleLike = DEFAULT_STYLE,
-    doc_kind: str = "paper",
-    code: Optional[str] = None,
-    results: Optional[str] = None,
+    doc_kind: str = "document",
+    attachments: Optional[Sequence[dict[str, str]]] = None,
     reference_example: Optional[str] = None,
     instructions: Optional[str] = None,
     title_hint: Optional[str] = None,
@@ -37,7 +36,14 @@ def generate_paper(
     router: Any = None,
     max_tokens: int = 4000,
 ) -> tuple[PaperSpec, str]:
-    """Returns (resolved_spec, provider_used). Raises PaperGenerationError on failure."""
+    """Turn raw material into a fully-styled PaperSpec.
+
+    `attachments` is any number of freely-labelled extra material blocks
+    ({"label": ..., "content": ...}) — data, transcripts, code, citations, notes;
+    whatever the document happens to need.
+
+    Returns (resolved_spec, provider_used). Raises PaperGenerationError on failure.
+    """
     if not (raw_text or "").strip():
         raise PaperGenerationError("no source material supplied")
 
@@ -51,7 +57,7 @@ def generate_paper(
         router = get_router()
 
     user_msg = build_user_message(
-        raw_text=raw_text, style=guide_id, doc_kind=doc_kind, code=code, results=results,
+        raw_text=raw_text, style=guide_id, doc_kind=doc_kind, attachments=attachments,
         reference_example=reference_example, instructions=instructions,
         title_hint=title_hint, authors=authors,
     )

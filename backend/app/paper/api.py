@@ -30,16 +30,25 @@ router = APIRouter(prefix="/paper", tags=["paper"])
 _DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
 
+class Attachment(BaseModel):
+    """Any extra material the user wants considered, under their own label:
+    measurements, survey responses, a transcript, source code, citations…"""
+    label: str = ""
+    content: str = ""
+
+
 class GenerateRequest(BaseModel):
     raw_text: str = Field(min_length=1)
-    style: str = DEFAULT_STYLE          # ieee | apa | acm | report | …
-    doc_kind: str = "paper"             # paper | report | thesis | …
-    code: Optional[str] = None
-    results: Optional[str] = None
+    style: str = DEFAULT_STYLE          # ieee | apa | acm | report | <custom id> …
+    doc_kind: str = "document"          # paper | report | memo | proposal | …
+    attachments: list[Attachment] = Field(default_factory=list)
     reference_example: Optional[str] = None
     instructions: Optional[str] = None
     title_hint: Optional[str] = None
     authors: list[dict[str, str]] = Field(default_factory=list)
+
+    def attachment_dicts(self) -> list[dict[str, str]]:
+        return [a.model_dump() for a in self.attachments]
 
 
 @router.get("/styles")
@@ -103,7 +112,7 @@ def generate(req: GenerateRequest, user: User = Depends(get_current_user)) -> di
     try:
         spec, provider = generate_paper(
             raw_text=req.raw_text, style=req.style, doc_kind=req.doc_kind,
-            code=req.code, results=req.results,
+            attachments=req.attachment_dicts(),
             reference_example=req.reference_example, instructions=req.instructions,
             title_hint=req.title_hint, authors=req.authors or None,
             owner_id=user.id,
@@ -134,7 +143,7 @@ def compose(req: GenerateRequest, user: User = Depends(get_current_user)) -> Fil
     try:
         spec, _provider = generate_paper(
             raw_text=req.raw_text, style=req.style, doc_kind=req.doc_kind,
-            code=req.code, results=req.results,
+            attachments=req.attachment_dicts(),
             reference_example=req.reference_example, instructions=req.instructions,
             title_hint=req.title_hint, authors=req.authors or None,
             owner_id=user.id,
