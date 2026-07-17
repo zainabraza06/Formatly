@@ -72,10 +72,13 @@ export interface Attachment {
   content: string
 }
 
+export type Depth = 'brief' | 'standard' | 'detailed'
+
 export interface ComposeRequest {
   raw_text: string
   style: string
   doc_kind: string
+  depth?: Depth
   attachments?: Attachment[]
   reference_example?: string | null
   instructions?: string | null

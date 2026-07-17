@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Annotated, Any, Literal, Optional, Union
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 # ── formatting ──────────────────────────────────────────────────────────────
@@ -53,6 +53,28 @@ class Series(BaseModel):
 ChartKind = Literal["bar", "line", "pie", "scatter", "grouped_bar"]
 
 
+def normalize_chart_kind(value: Any) -> Any:
+    """Coerce the loose phrasings a model actually emits ("pie chart",
+    "line graph", "stacked bar") to the enum. Models rarely return the bare
+    token, so validating strictly would throw away otherwise-good documents."""
+    if not isinstance(value, str):
+        return value
+    v = value.strip().lower()
+    if v in {"bar", "line", "pie", "scatter", "grouped_bar"}:
+        return v
+    if "pie" in v or "donut" in v or "doughnut" in v:
+        return "pie"
+    if "scatter" in v:
+        return "scatter"
+    if "line" in v or "trend" in v:
+        return "line"
+    if "group" in v or "cluster" in v or "stack" in v or "multi" in v:
+        return "grouped_bar"
+    if "bar" in v or "column" in v or "histogram" in v:
+        return "bar"
+    return "bar"  # last resort — a chart the reader can still read
+
+
 class ChartSpec(BaseModel):
     """A visualisation the model derived from the supplied data."""
     kind: ChartKind = "bar"
@@ -64,6 +86,11 @@ class ChartSpec(BaseModel):
     series: list[Series] = Field(default_factory=list)   # multi-series data
     source: str = ""      # which part of the user's data this came from
     rationale: str = ""   # why this chart type suits the data
+
+    @field_validator("kind", mode="before")
+    @classmethod
+    def _coerce_kind(cls, v: Any) -> Any:
+        return normalize_chart_kind(v)
 
 
 # ── blocks ──────────────────────────────────────────────────────────────────
@@ -158,9 +185,14 @@ class PaperMeta(BaseModel):
 
 class VisualizationNote(BaseModel):
     """Explicit statement of a chart opportunity found in the user's data."""
-    data: str          # what data it is
-    kind: ChartKind    # what visualisation to generate
-    rationale: str     # why
+    data: str = ""     # what data it is
+    kind: ChartKind = "bar"    # what visualisation to generate
+    rationale: str = ""  # why
+
+    @field_validator("kind", mode="before")
+    @classmethod
+    def _coerce_kind(cls, v: Any) -> Any:
+        return normalize_chart_kind(v)
 
 
 class PaperSpec(BaseModel):

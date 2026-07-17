@@ -6,8 +6,16 @@ import { StyleManager } from '../components/paper/StyleManager'
 import { SpecPreview } from '../components/paper/SpecPreview'
 import {
   downloadBlob, paperApi,
-  type Attachment, type ComposeRequest, type PaperSpec, type StyleSummary,
+  type Attachment, type ComposeRequest, type Depth, type PaperSpec, type StyleSummary,
 } from '../lib/paperApi'
+
+// A model left to itself writes concisely, so depth has to be asked for.
+// "detailed" is written section-by-section because one call cannot hold it.
+const DEPTH_OPTIONS: { id: Depth; label: string; hint: string }[] = [
+  { id: 'brief', label: 'Brief', hint: '1–2 paragraphs per section' },
+  { id: 'standard', label: 'Standard', hint: '2–3 paragraphs per section' },
+  { id: 'detailed', label: 'Detailed', hint: 'in-depth, written section by section — slower' },
+]
 
 // Suggestions only — the field is free text, so any document kind works.
 const DOC_KINDS = [
@@ -29,6 +37,7 @@ export function ComposePaper() {
   const [styles, setStyles] = useState<StyleSummary[]>([])
   const [style, setStyle] = useState('report')
   const [docKind, setDocKind] = useState('report')
+  const [depth, setDepth] = useState<Depth>('standard')
 
   const [rawText, setRawText] = useState('')
   const [attachments, setAttachments] = useState<(Attachment & { key: number })[]>([])
@@ -60,6 +69,7 @@ export function ComposePaper() {
     raw_text: rawText,
     style,
     doc_kind: docKind,
+    depth,
     attachments: attachments
       .filter((a) => a.content.trim())
       .map(({ label, content }) => ({ label: label.trim() || 'additional material', content })),
@@ -269,6 +279,25 @@ export function ComposePaper() {
               </datalist>
             </Field>
 
+            <Field label="Depth" hint={DEPTH_OPTIONS.find((d) => d.id === depth)?.hint}>
+              <div className="flex gap-1">
+                {DEPTH_OPTIONS.map((d) => (
+                  <button
+                    key={d.id}
+                    onClick={() => setDepth(d.id)}
+                    className={clsx(
+                      'flex-1 rounded-lg border px-2 py-1.5 text-[11px] font-semibold transition-colors',
+                      depth === d.id
+                        ? 'border-violet-500/40 bg-violet-500/15 text-violet-700 dark:text-violet-300'
+                        : 'border-white/10 bg-white/5 text-neutral-500 hover:bg-white/10',
+                    )}
+                  >
+                    {d.label}
+                  </button>
+                ))}
+              </div>
+            </Field>
+
             <Field label="Title hint">
               <input value={titleHint} onChange={(e) => setTitleHint(e.target.value)}
                      placeholder="Leave blank to let the AI title it" className={input} />
@@ -308,11 +337,17 @@ export function ComposePaper() {
           </GlassCard>
 
           {busy === 'generating' && (
-            <GlassCard>
+            <GlassCard className="space-y-1">
               <motion.div animate={{ opacity: [0.4, 1, 0.4] }} transition={{ repeat: Infinity, duration: 1.4 }}
                           className="text-xs text-neutral-500">
                 Reading your material, planning sections and visualisations…
               </motion.div>
+              {depth === 'detailed' && (
+                <div className="text-[10px] text-neutral-400">
+                  Detailed documents are planned first, then written one section at a time,
+                  so this takes a few minutes. Leave the tab open.
+                </div>
+              )}
             </GlassCard>
           )}
 

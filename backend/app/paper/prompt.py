@@ -123,13 +123,184 @@ EQUATIONS — include any formulae the material relies on, if any.
 """
 
 
-def system_prompt(style: str) -> str:
+# How much the model should write. Left to itself a model is markedly concise —
+# it stops well short of any token ceiling — so depth has to be asked for
+# explicitly rather than bought with a bigger max_tokens.
+DEPTHS = ("brief", "standard", "detailed")
+DEFAULT_DEPTH = "standard"
+
+_DEPTH_GUIDE: dict[str, str] = {
+    "brief": (
+        "LENGTH — brief: keep the document tight. One or two short paragraphs per section, "
+        "no subsections unless the material genuinely needs them. Favour clarity over coverage."
+    ),
+    "standard": (
+        "LENGTH — standard: give each section two to three developed paragraphs. Use level-2 "
+        "subsections where a section has distinct parts."
+    ),
+    "detailed": (
+        "LENGTH — detailed: write an in-depth, thorough document. Give every major section at "
+        "least four substantial paragraphs, and break each one into level-2 subsections that "
+        "are themselves developed rather than one-liners. Draw out implications, discuss "
+        "limitations and alternatives, and explain reasoning fully. Do not summarise where you "
+        "could analyse. Still never invent facts that are absent from the material — depth must "
+        "come from analysis of what is given, not from fabricated detail."
+    ),
+}
+
+
+def system_prompt(style: str, depth: str = DEFAULT_DEPTH) -> str:
     guide = _STYLE_GUIDE.get(style, _STYLE_GUIDE["report"])
-    return f"{_BASE}\n{guide}\n"
+    depth_guide = _DEPTH_GUIDE.get(depth, _DEPTH_GUIDE[DEFAULT_DEPTH])
+    return f"{_BASE}\n{guide}\n{depth_guide}\n"
+
+
+# ── multi-pass (agentic) prompts ────────────────────────────────────────────
+#
+# A single call cannot produce a genuinely detailed document: asked for depth, the
+# model runs past any token ceiling and the JSON truncates, losing the whole
+# document rather than part of it. So depth is produced in passes — plan once,
+# then write each section on its own — and every call returns small, complete,
+# validatable JSON.
+
+PLAN_SYSTEM = """You are planning a document before it is written.
+
+Return ONLY strict JSON. No markdown fences, no commentary.
+
+Produce the front matter and a section plan — NOT the prose itself.
+
+{
+  "meta": {
+    "title": "<concise, specific title>",
+    "authors": [{"name": "...", "affiliation": "...", "email": "..."}],
+    "abstract": "<150-250 word summary of the finished document>",
+    "keywords": ["<4-6 terms>"]
+  },
+  "outline": [
+    {"heading": "Introduction",
+     "brief": "<what this section must cover, and which of the supplied material it draws on>",
+     "subsections": ["<level-2 heading>", "..."]}
+  ],
+  "references": ["<formatted per the requested style>"],
+  "visualization_plan": [
+    {"data":"<which values in the input>","kind":"bar","rationale":"<why this chart suits them>"}
+  ]
+}
+
+Rules:
+- Choose the sections the material actually supports; do not pad with empty sections.
+- Do NOT include an "Abstract" or "References" section in the outline — they are handled
+  separately via meta.abstract and references.
+- Assign each chartable set of values in the material to "visualization_plan", stating what
+  the data is, the chart kind, and why. If there are no chartable values, return an empty list.
+- Never invent facts, citations or numbers that are absent from the material.
+"""
+
+SECTION_SYSTEM = """You are writing ONE section of a document that is already planned.
+
+Return ONLY strict JSON. No markdown fences, no commentary.
+
+{"blocks": [ {"type":"heading","level":1,"text":"<this section's heading>"},
+             {"type":"paragraph","text":"..."},
+             {"type":"heading","level":2,"text":"<a subsection>"},
+             {"type":"paragraph","text":"..."},
+             {"type":"list","ordered":false,"items":["..."]},
+             {"type":"table","caption":"...","columns":["..."],"rows":[["..."]]},
+             {"type":"figure","caption":"...",
+              "chart":{"kind":"bar","title":"...","x_label":"...","y_label":"...",
+                       "labels":["..."],"values":[1.0],
+                       "source":"...","rationale":"..."}},
+             {"type":"equation","text":"...","numbered":true} ] }
+
+Rules:
+- Write ONLY the section you are given. Start with its level-1 heading. Do not write any
+  other section, and do not restate what other sections cover.
+- Headings are numbered automatically; do not put numbers in heading text.
+- Include a table or figure ONLY if this section is the one that should carry it according to
+  the visualisation plan you are given, and only using values present in the material.
+- Never invent facts, citations or numbers that are absent from the material.
+"""
+
+
+def plan_system_prompt(style: str, depth: str = DEFAULT_DEPTH) -> str:
+    guide = _STYLE_GUIDE.get(style, _STYLE_GUIDE["report"])
+    depth_guide = _DEPTH_GUIDE.get(depth, _DEPTH_GUIDE[DEFAULT_DEPTH])
+    return f"{PLAN_SYSTEM}\n{guide}\n{depth_guide}\n"
+
+
+def section_system_prompt(style: str, depth: str = DEFAULT_DEPTH) -> str:
+    guide = _STYLE_GUIDE.get(style, _STYLE_GUIDE["report"])
+    depth_guide = _DEPTH_GUIDE.get(depth, _DEPTH_GUIDE[DEFAULT_DEPTH])
+    return f"{SECTION_SYSTEM}\n{guide}\n{depth_guide}\n"
+
+
+def build_plan_message(**kwargs: Any) -> str:
+    """Same material payload as a single-pass run, framed as a planning task."""
+    return _material_message(
+        lead="Plan the document for the following material.", **kwargs
+    )
+
+
+def build_section_message(
+    *,
+    section: dict[str, Any],
+    outline: Sequence[dict[str, Any]],
+    title: str,
+    visualization_plan: Sequence[dict[str, Any]],
+    written_so_far: Sequence[str],
+    raw_text: str,
+    attachments: Optional[Sequence[dict[str, str]]] = None,
+    instructions: Optional[str] = None,
+) -> str:
+    payload: dict[str, Any] = {
+        "task": f"Write the section '{section.get('heading', '')}' of the document.",
+        "document_title": title,
+        "this_section": section,
+        "full_outline": [s.get("heading", "") for s in outline],
+        "sections_already_written": list(written_so_far),
+        "visualization_plan": list(visualization_plan),
+        "source_material": raw_text,
+    }
+    extras = _clean_attachments(attachments)
+    if extras:
+        payload["additional_material"] = extras
+    if instructions:
+        payload["extra_instructions"] = instructions
+    return ("Produce the JSON for this section only.\n"
+            + json.dumps(payload, indent=2, ensure_ascii=False))
+
+
+def _clean_attachments(attachments: Optional[Sequence[dict[str, str]]]) -> list[dict[str, str]]:
+    return [
+        {"label": (a.get("label") or "additional material").strip(),
+         "content": a.get("content", "")}
+        for a in (attachments or [])
+        if (a.get("content") or "").strip()
+    ]
 
 
 def build_user_message(
     *,
+    raw_text: str,
+    style: str = "report",
+    doc_kind: str = "document",
+    attachments: Optional[Sequence[dict[str, str]]] = None,
+    reference_example: Optional[str] = None,
+    instructions: Optional[str] = None,
+    title_hint: Optional[str] = None,
+    authors: Optional[list[dict[str, str]]] = None,
+) -> str:
+    return _material_message(
+        lead="Produce the document JSON for the following material.",
+        raw_text=raw_text, style=style, doc_kind=doc_kind, attachments=attachments,
+        reference_example=reference_example, instructions=instructions,
+        title_hint=title_hint, authors=authors,
+    )
+
+
+def _material_message(
+    *,
+    lead: str,
     raw_text: str,
     style: str = "report",
     doc_kind: str = "document",
@@ -146,12 +317,7 @@ def build_user_message(
 
     # Arbitrary user-labelled material: data, results, code, transcripts, notes,
     # citations — whatever this particular job involves.
-    extras = [
-        {"label": (a.get("label") or "additional material").strip(),
-         "content": a.get("content", "")}
-        for a in (attachments or [])
-        if (a.get("content") or "").strip()
-    ]
+    extras = _clean_attachments(attachments)
     if extras:
         payload["additional_material"] = extras
 
@@ -164,5 +330,4 @@ def build_user_message(
     if authors:
         payload["authors"] = authors
 
-    return ("Produce the document JSON for the following material.\n"
-            + json.dumps(payload, indent=2, ensure_ascii=False))
+    return f"{lead}\n" + json.dumps(payload, indent=2, ensure_ascii=False)

@@ -20,6 +20,7 @@ import sys
 from pathlib import Path
 
 from app.paper.generator import PaperGenerationError, generate_paper
+from app.paper.prompt import DEFAULT_DEPTH, DEPTHS
 from app.paper.renderer import render_paper
 from app.paper.schema import PaperSpec
 from app.paper.styles import DEFAULT_STYLE, list_styles
@@ -42,6 +43,8 @@ def main(argv: list[str] | None = None) -> int:
                     help=f"document style: {', '.join(s['id'] for s in list_styles())}")
     ap.add_argument("--kind", default="document",
                     help="what to write: paper, report, memo, proposal, case study…")
+    ap.add_argument("--depth", default=DEFAULT_DEPTH, choices=list(DEPTHS),
+                    help="how much to write; 'detailed' is generated section by section")
     args = ap.parse_args(argv)
 
     if args.from_text:
@@ -55,10 +58,12 @@ def main(argv: list[str] | None = None) -> int:
                 raw_text=Path(args.from_text).read_text(encoding="utf-8"),
                 style=args.style or DEFAULT_STYLE,
                 doc_kind=args.kind,
+                depth=args.depth,
                 attachments=attachments,
                 reference_example=_read(args.reference),
                 instructions=args.instructions,
                 title_hint=args.title,
+                on_progress=lambda h, i, n: print(f"  [{i}/{n}] {h}", file=sys.stderr),
             )
         except PaperGenerationError as exc:
             print(f"generation failed: {exc}", file=sys.stderr)

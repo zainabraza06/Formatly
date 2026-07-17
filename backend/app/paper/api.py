@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 from app.docos.auth import get_current_user
 from app.docos.auth.store import User
 from app.paper.generator import PaperGenerationError, generate_paper
+from app.paper.prompt import DEFAULT_DEPTH, DEPTHS
 from app.paper.renderer import render_paper
 from app.paper.schema import PaperSpec
 from app.paper.styles import DEFAULT_STYLE, get_stylesheet, list_styles, resolve_style
@@ -41,6 +42,7 @@ class GenerateRequest(BaseModel):
     raw_text: str = Field(min_length=1)
     style: str = DEFAULT_STYLE          # ieee | apa | acm | report | <custom id> …
     doc_kind: str = "document"          # paper | report | memo | proposal | …
+    depth: str = DEFAULT_DEPTH          # brief | standard | detailed
     attachments: list[Attachment] = Field(default_factory=list)
     reference_example: Optional[str] = None
     instructions: Optional[str] = None
@@ -112,7 +114,7 @@ def generate(req: GenerateRequest, user: User = Depends(get_current_user)) -> di
     try:
         spec, provider = generate_paper(
             raw_text=req.raw_text, style=req.style, doc_kind=req.doc_kind,
-            attachments=req.attachment_dicts(),
+            depth=req.depth, attachments=req.attachment_dicts(),
             reference_example=req.reference_example, instructions=req.instructions,
             title_hint=req.title_hint, authors=req.authors or None,
             owner_id=user.id,
@@ -143,7 +145,7 @@ def compose(req: GenerateRequest, user: User = Depends(get_current_user)) -> Fil
     try:
         spec, _provider = generate_paper(
             raw_text=req.raw_text, style=req.style, doc_kind=req.doc_kind,
-            attachments=req.attachment_dicts(),
+            depth=req.depth, attachments=req.attachment_dicts(),
             reference_example=req.reference_example, instructions=req.instructions,
             title_hint=req.title_hint, authors=req.authors or None,
             owner_id=user.id,
