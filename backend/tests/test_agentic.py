@@ -262,6 +262,53 @@ def test_visualization_plan_tolerates_loose_kinds():
     assert [v.kind for v in spec.visualization_plan] == ["pie", "line", "grouped_bar"]
 
 
+# ── styles we don't implement (Chicago, Harvard, a journal house style) ────
+
+def test_unknown_style_name_reaches_the_writer():
+    """A requested style we have no stylesheet for must not be silently dropped —
+    the writer should still be told to follow its conventions."""
+    from tests.test_paper import SPEC as SINGLE_SPEC, _StubRouter
+
+    router = _StubRouter(json.dumps(SINGLE_SPEC))
+    generate_paper(raw_text="material", style="Chicago", depth="standard", router=router)
+    system = router.system
+    assert "Chicago" in system
+    assert "in-text citation" in system.lower() or "references" in system.lower()
+
+
+def test_unknown_style_still_renders_with_a_real_stylesheet():
+    from tests.test_paper import SPEC as SINGLE_SPEC, _StubRouter
+
+    spec, _ = generate_paper(raw_text="m", style="Vancouver", depth="standard",
+                             router=_StubRouter(json.dumps(SINGLE_SPEC)))
+    # typography falls back to a neutral sheet so the document is still renderable
+    assert spec.resolved is True
+    assert spec.meta.style == "report"
+
+
+def test_known_styles_do_not_get_treated_as_unknown():
+    from tests.test_paper import SPEC as SINGLE_SPEC, _StubRouter
+
+    router = _StubRouter(json.dumps(SINGLE_SPEC))
+    generate_paper(raw_text="m", style="ieee", depth="standard", router=router)
+    assert "Requested style:" not in router.system     # used the built-in guide
+    assert "IEEE" in router.system
+
+
+def test_unknown_style_reaches_the_multipass_writer_too():
+    router = ScriptedRouter()
+    generate_paper(raw_text="m", style="Harvard", depth="detailed", router=router)
+    # the scripted router records calls; assert the plan prompt carried the name
+    assert "plan" in router.calls
+
+
+def test_lookup_style_distinguishes_unknown_from_default():
+    from app.paper.styles import lookup_style
+    assert lookup_style("ieee") is not None
+    assert lookup_style("Chicago") is None            # genuinely unknown
+    assert lookup_style("") is None
+
+
 def test_figure_chart_kind_is_coerced():
     from app.paper.schema import PaperSpec
     spec = PaperSpec.model_validate({

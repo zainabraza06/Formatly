@@ -141,9 +141,16 @@ export function StyleManager({ styles, onChanged }: {
         <div className="flex flex-wrap items-center gap-2">
           <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Style name"
                  className="min-w-32 flex-1 rounded-lg border border-white/10 bg-white/10 px-2 py-1.5 text-[11px] text-neutral-900 outline-none dark:bg-white/5 dark:text-neutral-100" />
+          {/* opaque colours: the OS draws the option list and ignores translucency,
+              which otherwise leaves white text on white in dark mode */}
           <select value={base} onChange={(e) => setBase(e.target.value)}
-                  className="rounded-lg border border-white/10 bg-white/10 px-2 py-1.5 text-[11px] text-neutral-900 outline-none dark:bg-white/5 dark:text-neutral-100">
-            {builtins.map((s) => <option key={s.id} value={s.id}>base: {s.name}</option>)}
+                  className="rounded-lg border border-white/10 bg-white px-2 py-1.5 text-[11px] text-neutral-900 outline-none dark:bg-neutral-900 dark:text-neutral-100">
+            {builtins.map((s) => (
+              <option key={s.id} value={s.id}
+                      className="bg-white text-neutral-900 dark:bg-neutral-900 dark:text-neutral-100">
+                base: {s.name}
+              </option>
+            ))}
           </select>
           <input ref={fileRef} type="file" accept=".docx" hidden
                  onChange={(e) => upload(e.target.files?.[0])} />

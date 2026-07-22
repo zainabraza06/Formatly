@@ -42,6 +42,29 @@ def is_builtin(name: str | None) -> bool:
     return _ALIASES.get(key, key) in _REGISTRY
 
 
+def lookup_style(style: StyleLike, owner_id: Optional[str] = None) -> Optional[StyleSheet]:
+    """Find a stylesheet, or None if the name is not one we implement.
+
+    Distinct from `resolve_style`, which always returns something. Callers that
+    need to know a name was *unrecognised* — so they can still honour it, e.g. by
+    asking the writer to follow Chicago conventions — must use this.
+    """
+    if isinstance(style, StyleSheet):
+        return style
+
+    key = (style or "").strip()
+    if not key:
+        return None
+    if is_builtin(key):
+        return get_stylesheet(key)
+
+    if owner_id:
+        from app.paper.styles.store import get_style_store
+        store = get_style_store()
+        return store.get(key, owner_id) or store.get_by_name(key, owner_id)
+    return None
+
+
 def resolve_style(style: StyleLike, owner_id: Optional[str] = None) -> StyleSheet:
     """Resolve a style from an object, a built-in id/alias, or a user's custom style.
 
@@ -91,6 +114,6 @@ def list_styles(owner_id: Optional[str] = None) -> list[dict[str, str]]:
 
 
 __all__ = [
-    "StyleSheet", "StyleLike", "get_stylesheet", "resolve_style", "list_styles",
-    "is_builtin", "DEFAULT_STYLE",
+    "StyleSheet", "StyleLike", "get_stylesheet", "resolve_style", "lookup_style",
+    "list_styles", "is_builtin", "DEFAULT_STYLE",
 ]

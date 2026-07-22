@@ -56,12 +56,14 @@ def generate_sectioned(
     title_hint: Optional[str] = None,
     authors: Optional[list[dict[str, str]]] = None,
     on_progress: Optional[Progress] = None,
+    style_note: Optional[str] = None,
 ) -> tuple[dict[str, Any], str]:
     """Returns (raw_spec_dict, provider_used). Raises if the plan pass fails."""
     plan, provider = _plan(
         raw_text=raw_text, style_guide=style_guide, depth=depth, doc_kind=doc_kind,
         router=router, attachments=attachments, reference_example=reference_example,
         instructions=instructions, title_hint=title_hint, authors=authors,
+        style_note=style_note,
     )
 
     outline: list[dict[str, Any]] = [s for s in plan.get("outline", []) if s.get("heading")]
@@ -84,7 +86,7 @@ def generate_sectioned(
                 section=section, outline=outline, title=meta.get("title", ""),
                 viz=viz, written=written, raw_text=raw_text, style_guide=style_guide,
                 depth=depth, router=router, attachments=attachments,
-                instructions=instructions,
+                instructions=instructions, style_note=style_note,
             )
         except SectionFailure:
             # Keep the section present with its heading rather than silently
@@ -108,15 +110,15 @@ def generate_sectioned(
 # ── passes ──────────────────────────────────────────────────────────────────
 
 def _plan(*, raw_text: str, style_guide: str, depth: str, doc_kind: str, router: Any,
-          attachments, reference_example, instructions, title_hint, authors
-          ) -> tuple[dict[str, Any], str]:
+          attachments, reference_example, instructions, title_hint, authors,
+          style_note: Optional[str] = None) -> tuple[dict[str, Any], str]:
     msg = build_plan_message(
         raw_text=raw_text, style=style_guide, doc_kind=doc_kind, attachments=attachments,
         reference_example=reference_example, instructions=instructions,
         title_hint=title_hint, authors=authors,
     )
     text, provider, _elapsed = router.chat(
-        [{"role": "system", "content": plan_system_prompt(style_guide, depth)},
+        [{"role": "system", "content": plan_system_prompt(style_guide, depth, style_note)},
          {"role": "user", "content": msg}],
         max_tokens=_PLAN_TOKENS,
     )
@@ -128,8 +130,8 @@ def _plan(*, raw_text: str, style_guide: str, depth: str, doc_kind: str, router:
 
 def _write_section(*, section: dict[str, Any], outline: list[dict[str, Any]], title: str,
                    viz: list[dict[str, Any]], written: list[str], raw_text: str,
-                   style_guide: str, depth: str, router: Any, attachments, instructions
-                   ) -> list[dict[str, Any]]:
+                   style_guide: str, depth: str, router: Any, attachments, instructions,
+                   style_note: Optional[str] = None) -> list[dict[str, Any]]:
     msg = build_section_message(
         section=section, outline=outline, title=title, visualization_plan=viz,
         written_so_far=written, raw_text=raw_text, attachments=attachments,
@@ -137,7 +139,7 @@ def _write_section(*, section: dict[str, Any], outline: list[dict[str, Any]], ti
     )
     try:
         text, _provider, _elapsed = router.chat(
-            [{"role": "system", "content": section_system_prompt(style_guide, depth)},
+            [{"role": "system", "content": section_system_prompt(style_guide, depth, style_note)},
              {"role": "user", "content": msg}],
             max_tokens=_SECTION_TOKENS,
         )

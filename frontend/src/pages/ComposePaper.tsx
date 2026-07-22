@@ -23,9 +23,21 @@ const DOC_KINDS = [
   'memo', 'white paper', 'technical documentation', 'essay', 'thesis chapter',
 ]
 
+// Sentinel for the "name your own style" option.
+const OTHER = '__other__'
+
+// Established styles we have no stylesheet for, but whose conventions the writer
+// knows. Suggestions only — any name can be typed.
+const ESTABLISHED_STYLES = [
+  'Chicago', 'Harvard', 'MLA', 'Vancouver', 'AMA', 'Turabian',
+  'Oxford', 'AAA', 'ASA', 'Nature', 'Elsevier', 'Springer',
+]
+
 export function ComposePaper() {
   const [styles, setStyles] = useState<StyleSummary[]>([])
   const [style, setStyle] = useState('report')
+  const [isOther, setIsOther] = useState(false)
+  const [otherStyle, setOtherStyle] = useState('')
   const [docKind, setDocKind] = useState('report')
   const [depth, setDepth] = useState<Depth>('standard')
 
@@ -50,9 +62,13 @@ export function ComposePaper() {
   // Everything goes in one box. The API still accepts labelled attachments —
   // the CLI uses them for files — but the UI should not make a person decide
   // which bucket their notes belong in.
+  // An "other" style is sent by name: the backend has no stylesheet for it, so it
+  // instructs the writer to follow that style's conventions instead.
+  const effectiveStyle = isOther ? (otherStyle.trim() || 'report') : style
+
   const buildRequest = (): ComposeRequest => ({
     raw_text: rawText,
-    style,
+    style: effectiveStyle,
     doc_kind: docKind,
     depth,
     reference_example: referenceExample.trim() || null,
@@ -94,7 +110,9 @@ export function ComposePaper() {
     }
   }
 
-  const styleName = styles.find((s) => s.id === style)?.name || style
+  const styleName = isOther
+    ? (otherStyle.trim() || 'standard layout')
+    : (styles.find((s) => s.id === style)?.name || style)
 
   return (
     <div className="space-y-4">
@@ -106,12 +124,6 @@ export function ComposePaper() {
             you get a formatted DOCX.
           </div>
         </div>
-        <button
-          onClick={() => setShowStyles((s) => !s)}
-          className="shrink-0 rounded-xl border border-white/10 bg-white/10 px-3 py-2 text-xs font-semibold text-neutral-700 hover:bg-white/20 dark:bg-white/5 dark:text-neutral-200"
-        >
-          {showStyles ? 'Hide styles' : 'Manage styles'}
-        </button>
       </div>
 
       {showStyles && (
@@ -160,22 +172,71 @@ Interview: "The renewal price jumped 40% with no warning."`}
         {/* ── settings + actions ── */}
         <div className="space-y-4">
           <GlassCard className="space-y-3">
-            <Field label="Style">
-              <select value={style} onChange={(e) => setStyle(e.target.value)} className={input}>
+            <div>
+              <div className="mb-1 flex items-center justify-between">
+                <span className="text-[11px] font-semibold uppercase tracking-wide text-neutral-500">
+                  Style
+                </span>
+                <button
+                  onClick={() => setShowStyles((s) => !s)}
+                  className="text-[10px] font-semibold text-violet-600 hover:underline dark:text-violet-400"
+                >
+                  {showStyles ? 'Hide manager' : 'Manage / add styles'}
+                </button>
+              </div>
+
+              <select
+                value={isOther ? OTHER : style}
+                onChange={(e) => {
+                  const v = e.target.value
+                  if (v === OTHER) {
+                    setIsOther(true)
+                  } else {
+                    setIsOther(false)
+                    setStyle(v)
+                  }
+                }}
+                className={select}
+              >
                 <optgroup label="Built-in">
                   {styles.filter((s) => s.builtin === 'true').map((s) => (
-                    <option key={s.id} value={s.id}>{s.name} ({s.columns} col)</option>
+                    <option key={s.id} value={s.id} className={option}>
+                      {s.name} ({s.columns} col)
+                    </option>
                   ))}
                 </optgroup>
                 {styles.some((s) => s.builtin === 'false') && (
                   <optgroup label="My styles">
                     {styles.filter((s) => s.builtin === 'false').map((s) => (
-                      <option key={s.id} value={s.id}>{s.name}</option>
+                      <option key={s.id} value={s.id} className={option}>{s.name}</option>
                     ))}
                   </optgroup>
                 )}
+                <optgroup label="Other">
+                  <option value={OTHER} className={option}>Another style — name it…</option>
+                </optgroup>
               </select>
-            </Field>
+
+              {isOther && (
+                <>
+                  <input
+                    value={otherStyle}
+                    onChange={(e) => setOtherStyle(e.target.value)}
+                    list="known-styles"
+                    placeholder="e.g. Chicago, Harvard, MLA, Vancouver, AMA"
+                    className={clsx(input, 'mt-2')}
+                  />
+                  <datalist id="known-styles">
+                    {ESTABLISHED_STYLES.map((s) => <option key={s} value={s} />)}
+                  </datalist>
+                  <span className="mt-1 block text-[10px] text-neutral-400">
+                    Its citation format and section conventions will be followed. Page
+                    typography uses our standard layout — for exact typography, upload a
+                    sample under <span className="font-medium">Manage / add styles</span>.
+                  </span>
+                </>
+              )}
+            </div>
 
             <Field label="Document kind" hint="Free text — anything you like.">
               <input value={docKind} onChange={(e) => setDocKind(e.target.value)}
@@ -267,6 +328,13 @@ Interview: "The renewal price jumped 40% with no warning."`}
 const input =
   'w-full rounded-xl border border-white/10 bg-white/10 px-3 py-2 text-sm text-neutral-900 outline-none placeholder:text-neutral-500 focus:ring-2 focus:ring-violet-400/30 dark:bg-white/5 dark:text-neutral-100'
 const area = clsx(input, 'resize-y leading-relaxed')
+
+// A <select>'s native option list is drawn by the OS, which ignores translucent
+// backgrounds — `bg-white/10` left white text on white in dark mode. Selects and
+// their options need opaque colours of their own.
+const select =
+  'w-full rounded-xl border border-white/10 bg-white px-3 py-2 text-sm text-neutral-900 outline-none focus:ring-2 focus:ring-violet-400/30 dark:border-white/10 dark:bg-neutral-900 dark:text-neutral-100'
+const option = 'bg-white text-neutral-900 dark:bg-neutral-900 dark:text-neutral-100'
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (

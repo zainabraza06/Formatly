@@ -15,7 +15,9 @@ from pydantic import ValidationError
 from app.paper.agentic import Progress, generate_sectioned
 from app.paper.prompt import DEFAULT_DEPTH, build_user_message, system_prompt
 from app.paper.schema import Author, PaperSpec
-from app.paper.styles import DEFAULT_STYLE, StyleLike, is_builtin, resolve_style
+from app.paper.styles import (
+    DEFAULT_STYLE, StyleLike, is_builtin, lookup_style, resolve_style,
+)
 from app.paper.stylesheet import resolve
 
 # Depths a single call cannot hold: measured, `detailed` overruns the ceiling and
@@ -59,7 +61,16 @@ def generate_paper(
     if not (raw_text or "").strip():
         raise PaperGenerationError("no source material supplied")
 
-    sheet = resolve_style(style, owner_id)
+    # A name we don't implement (Chicago, Harvard, a journal house style) must not
+    # be silently swallowed: we cannot reproduce its typography without a
+    # stylesheet, but the writer can still follow its conventions, so the name is
+    # carried through to the prompt and a neutral sheet supplies the layout.
+    known = lookup_style(style, owner_id)
+    style_note: Optional[str] = None
+    if known is None and isinstance(style, str) and style.strip():
+        style_note = style.strip()
+    sheet = known or resolve_style(DEFAULT_STYLE, owner_id)
+
     # Steer the writer with the closest built-in convention; a custom style only
     # changes typography, not what good prose for that document kind looks like.
     guide_id = sheet.id if is_builtin(sheet.id) else DEFAULT_STYLE
@@ -77,7 +88,7 @@ def generate_paper(
                 raw_text=raw_text, style_guide=guide_id, depth=depth, doc_kind=doc_kind,
                 router=router, attachments=attachments, reference_example=reference_example,
                 instructions=instructions, title_hint=title_hint, authors=authors,
-                on_progress=on_progress,
+                on_progress=on_progress, style_note=style_note,
             )
         except Exception as exc:
             raise PaperGenerationError(f"multi-pass generation failed: {exc}") from exc
@@ -89,7 +100,7 @@ def generate_paper(
         )
         try:
             text, provider, _elapsed = router.chat(
-                [{"role": "system", "content": system_prompt(guide_id, depth)},
+                [{"role": "system", "content": system_prompt(guide_id, depth, style_note)},
                  {"role": "user", "content": user_msg}],
                 max_tokens=max_tokens,
             )

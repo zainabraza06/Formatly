@@ -149,8 +149,30 @@ _DEPTH_GUIDE: dict[str, str] = {
 }
 
 
-def system_prompt(style: str, depth: str = DEFAULT_DEPTH) -> str:
-    guide = _STYLE_GUIDE.get(style, _STYLE_GUIDE["report"])
+def named_style_guide(name: str) -> str:
+    """Guidance for an established style we do not implement a stylesheet for
+    (Chicago, Harvard, MLA, Vancouver, a journal's house style…).
+
+    We cannot reproduce such a style's typography without a stylesheet, but the
+    model knows its *conventions*, and those are what a reader recognises: how
+    sources are cited, how the reference list is ordered and formatted, how
+    sections are conventionally arranged. So the request is honoured where it
+    can be, rather than silently discarded.
+    """
+    return (
+        f"Requested style: {name}.\n"
+        f"Follow the conventions of {name} as they are commonly published: use its "
+        f"in-text citation form, format every entry in `references` exactly as {name} "
+        f"prescribes, and arrange the sections the way documents in {name} normally are. "
+        f"If {name} has a conventional structure for this kind of document, use it. "
+        f"Where {name} says nothing about a detail, choose what a careful editor would."
+    )
+
+
+def system_prompt(style: str, depth: str = DEFAULT_DEPTH,
+                  style_note: Optional[str] = None) -> str:
+    guide = named_style_guide(style_note) if style_note else _STYLE_GUIDE.get(
+        style, _STYLE_GUIDE["report"])
     depth_guide = _DEPTH_GUIDE.get(depth, _DEPTH_GUIDE[DEFAULT_DEPTH])
     return f"{_BASE}\n{guide}\n{depth_guide}\n"
 
@@ -222,14 +244,18 @@ Rules:
 """
 
 
-def plan_system_prompt(style: str, depth: str = DEFAULT_DEPTH) -> str:
-    guide = _STYLE_GUIDE.get(style, _STYLE_GUIDE["report"])
+def plan_system_prompt(style: str, depth: str = DEFAULT_DEPTH,
+                       style_note: Optional[str] = None) -> str:
+    guide = named_style_guide(style_note) if style_note else _STYLE_GUIDE.get(
+        style, _STYLE_GUIDE["report"])
     depth_guide = _DEPTH_GUIDE.get(depth, _DEPTH_GUIDE[DEFAULT_DEPTH])
     return f"{PLAN_SYSTEM}\n{guide}\n{depth_guide}\n"
 
 
-def section_system_prompt(style: str, depth: str = DEFAULT_DEPTH) -> str:
-    guide = _STYLE_GUIDE.get(style, _STYLE_GUIDE["report"])
+def section_system_prompt(style: str, depth: str = DEFAULT_DEPTH,
+                          style_note: Optional[str] = None) -> str:
+    guide = named_style_guide(style_note) if style_note else _STYLE_GUIDE.get(
+        style, _STYLE_GUIDE["report"])
     depth_guide = _DEPTH_GUIDE.get(depth, _DEPTH_GUIDE[DEFAULT_DEPTH])
     return f"{SECTION_SYSTEM}\n{guide}\n{depth_guide}\n"
 
