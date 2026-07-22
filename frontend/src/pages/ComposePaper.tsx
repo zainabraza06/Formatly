@@ -6,7 +6,7 @@ import { StyleManager } from '../components/paper/StyleManager'
 import { SpecPreview } from '../components/paper/SpecPreview'
 import {
   downloadBlob, paperApi,
-  type Attachment, type ComposeRequest, type Depth, type PaperSpec, type StyleSummary,
+  type ComposeRequest, type Depth, type PaperSpec, type StyleSummary,
 } from '../lib/paperApi'
 
 // A model left to itself writes concisely, so depth has to be asked for.
@@ -23,16 +23,6 @@ const DOC_KINDS = [
   'memo', 'white paper', 'technical documentation', 'essay', 'thesis chapter',
 ]
 
-// Starting points for labelling extra material. Users can type any label.
-const LABEL_IDEAS = [
-  'Data', 'Results', 'Survey responses', 'Interview transcript',
-  'Source code', 'Financials', 'Citations', 'Meeting notes', 'Specifications',
-]
-
-let attachSeq = 0
-const newAttachment = (label = ''): Attachment & { key: number } =>
-  ({ key: ++attachSeq, label, content: '' })
-
 export function ComposePaper() {
   const [styles, setStyles] = useState<StyleSummary[]>([])
   const [style, setStyle] = useState('report')
@@ -40,7 +30,6 @@ export function ComposePaper() {
   const [depth, setDepth] = useState<Depth>('standard')
 
   const [rawText, setRawText] = useState('')
-  const [attachments, setAttachments] = useState<(Attachment & { key: number })[]>([])
   const [referenceExample, setReferenceExample] = useState('')
   const [instructions, setInstructions] = useState('')
   const [titleHint, setTitleHint] = useState('')
@@ -58,21 +47,14 @@ export function ComposePaper() {
   }
   useEffect(loadStyles, [])
 
-  const addAttachment = (label = '') =>
-    setAttachments((a) => [...a, newAttachment(label)])
-  const updateAttachment = (key: number, patch: Partial<Attachment>) =>
-    setAttachments((a) => a.map((x) => (x.key === key ? { ...x, ...patch } : x)))
-  const removeAttachment = (key: number) =>
-    setAttachments((a) => a.filter((x) => x.key !== key))
-
+  // Everything goes in one box. The API still accepts labelled attachments —
+  // the CLI uses them for files — but the UI should not make a person decide
+  // which bucket their notes belong in.
   const buildRequest = (): ComposeRequest => ({
     raw_text: rawText,
     style,
     doc_kind: docKind,
     depth,
-    attachments: attachments
-      .filter((a) => a.content.trim())
-      .map(({ label, content }) => ({ label: label.trim() || 'additional material', content })),
     reference_example: referenceExample.trim() || null,
     instructions: instructions.trim() || null,
     title_hint: titleHint.trim() || null,
@@ -145,98 +127,22 @@ export function ComposePaper() {
         <GlassCard className="space-y-3">
           <Field
             label="Your material *"
-            hint="Anything: notes, findings, a brief, raw text. Say what you want written."
+            hint="Everything goes here: what you want written, plus any notes, data, transcripts or code it should draw on. Numbers become tables and charts automatically."
           >
             <textarea
               value={rawText}
               onChange={(e) => setRawText(e.target.value)}
-              rows={12}
-              placeholder={
-                'e.g. "Write a report on our Q3 customer churn analysis…"\n' +
-                'or paste the notes, brief, findings or transcript you want written up.'
-              }
+              rows={20}
+              placeholder={`Say what you need, then paste everything it should be based on. For example:
+
+Write a report on our Q3 customer churn for the leadership team.
+
+Survey: 412 cancelling customers. Price 63%, missing features 21%, support 11%, other 5%.
+Churn by month: July 4.2%, August 5.1%, September 6.8%.
+Interview: "The renewal price jumped 40% with no warning."`}
               className={area}
             />
           </Field>
-
-          {/* arbitrary labelled extra material */}
-          <div>
-            <div className="mb-1 flex items-center justify-between">
-              <span className="text-[11px] font-semibold uppercase tracking-wide text-neutral-500">
-                Extra material
-              </span>
-              <span className="text-[10px] text-neutral-400">optional · add as many as you need</span>
-            </div>
-
-            {attachments.length === 0 && (
-              <div className="rounded-xl border border-dashed border-white/15 p-3 text-center">
-                <div className="text-[11px] text-neutral-500">
-                  Add data, a transcript, code, citations — anything the document should draw on.
-                  <br />
-                  <span className="text-neutral-400">
-                    Numbers you include here become tables and charts automatically.
-                  </span>
-                </div>
-              </div>
-            )}
-
-            <div className="space-y-2">
-              {attachments.map((a) => (
-                <motion.div
-                  key={a.key}
-                  initial={{ opacity: 0, y: -4 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="rounded-xl border border-white/10 bg-white/5 p-2"
-                >
-                  <div className="mb-1.5 flex items-center gap-2">
-                    <input
-                      value={a.label}
-                      onChange={(e) => updateAttachment(a.key, { label: e.target.value })}
-                      list="attachment-labels"
-                      placeholder="Label (e.g. Results, Transcript, Code)"
-                      className="flex-1 rounded-lg border border-white/10 bg-white/10 px-2 py-1 text-[11px] font-medium text-neutral-900 outline-none dark:bg-white/5 dark:text-neutral-100"
-                    />
-                    <button
-                      onClick={() => removeAttachment(a.key)}
-                      className="rounded px-1.5 text-neutral-400 hover:text-red-500"
-                      title="Remove"
-                    >
-                      ×
-                    </button>
-                  </div>
-                  <textarea
-                    value={a.content}
-                    onChange={(e) => updateAttachment(a.key, { content: e.target.value })}
-                    rows={4}
-                    placeholder="Paste this material…"
-                    className={clsx(area, 'text-[11px]')}
-                  />
-                </motion.div>
-              ))}
-            </div>
-
-            <datalist id="attachment-labels">
-              {LABEL_IDEAS.map((l) => <option key={l} value={l} />)}
-            </datalist>
-
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              <button
-                onClick={() => addAttachment()}
-                className="rounded-lg border border-white/10 bg-white/10 px-2.5 py-1 text-[11px] font-semibold text-neutral-700 hover:bg-white/20 dark:bg-white/5 dark:text-neutral-200"
-              >
-                + Add material
-              </button>
-              {LABEL_IDEAS.slice(0, 5).map((l) => (
-                <button
-                  key={l}
-                  onClick={() => addAttachment(l)}
-                  className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[10px] text-neutral-500 hover:bg-white/10 dark:text-neutral-400"
-                >
-                  + {l}
-                </button>
-              ))}
-            </div>
-          </div>
 
           <Field label="Reference example" hint="A sample whose writing style should be followed.">
             <textarea value={referenceExample} onChange={(e) => setReferenceExample(e.target.value)}
