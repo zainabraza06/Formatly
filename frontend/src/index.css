@@ -23,18 +23,18 @@
 }
 
 :root.dark {
-  --canvas: 14 14 13;
-  --surface: 22 22 21;
-  --surface-2: 30 30 28;
-  --line: 40 40 37;
-  --line-strong: 55 55 51;
-  --ink: 237 237 232;
-  --muted: 158 158 150;
-  --faint: 110 110 103;
-  --accent: 237 237 232;
-  --accent-fg: 16 16 15;
-  --focus: 96 140 245;
-  --danger: 232 106 106;
+  --canvas: 17 17 19; /* graphite, not pure black */
+  --surface: 24 24 27;
+  --surface-2: 33 33 37;
+  --line: 44 44 49;
+  --line-strong: 63 63 69;
+  --ink: 232 232 236; /* soft white, not pure */
+  --muted: 156 156 165;
+  --faint: 110 110 118;
+  --accent: 232 232 236;
+  --accent-fg: 20 20 23;
+  --focus: 110 150 250;
+  --danger: 235 110 110;
 }
 
 html,

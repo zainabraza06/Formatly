@@ -85,22 +85,23 @@ export function DashboardLayout({
   const { user, logout } = useAuth()
 
   return (
-    <div className="min-h-full bg-canvas text-ink">
-      <div className="relative mx-auto flex min-h-screen max-w-7xl">
+    <div className="min-h-screen bg-canvas text-ink">
+      <div className="flex min-h-screen">
 
-        {/* backdrop — click to close the overlaying sidebar */}
+        {/* backdrop — only on mobile, when the drawer is open */}
         {navOpen && (
           <button
             aria-label="Close menu"
             onClick={() => setNavOpen(false)}
-            className="fixed inset-0 z-30 cursor-default bg-ink/20"
+            className="fixed inset-0 z-40 cursor-default bg-ink/30 lg:hidden"
           />
         )}
 
-        {/* ── Sidebar (overlays content when open) ── */}
+        {/* ── Sidebar: a real column on desktop, a solid drawer on mobile ── */}
         <aside
           className={clsx(
-            'fixed inset-y-0 left-0 z-40 flex w-64 flex-col border-r border-line bg-surface px-3 py-4 transition-transform duration-200',
+            'fixed inset-y-0 left-0 z-50 flex w-64 shrink-0 flex-col border-r border-line bg-surface px-3 py-4 transition-transform duration-200',
+            'lg:static lg:z-auto lg:translate-x-0',
             navOpen ? 'translate-x-0' : '-translate-x-full',
           )}
         >
@@ -165,12 +166,13 @@ export function DashboardLayout({
         </aside>
 
         {/* ── Main ── */}
-        <main className="flex flex-1 flex-col">
+        <main className="flex min-w-0 flex-1 flex-col">
           <header className="sticky top-0 z-20 flex items-center gap-3 border-b border-line bg-canvas/90 px-4 py-3 backdrop-blur-sm sm:px-6">
+            {/* mobile menu button — desktop has the persistent sidebar */}
             <button
               onClick={() => setNavOpen((o) => !o)}
               aria-label={navOpen ? 'Close menu' : 'Open menu'}
-              className="flex h-8 w-8 items-center justify-center rounded-lg border border-line bg-surface text-muted transition-colors hover:bg-surface-2 hover:text-ink"
+              className="flex h-8 w-8 items-center justify-center rounded-lg border border-line bg-surface text-muted transition-colors hover:bg-surface-2 hover:text-ink lg:hidden"
             >
               <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
                 {navOpen ? (
@@ -181,8 +183,8 @@ export function DashboardLayout({
               </svg>
             </button>
 
-            <div className="flex items-center gap-2">
-              <div className="flex h-6 w-6 items-center justify-center rounded-md bg-accent text-[11px] font-semibold text-accent-fg sm:hidden">
+            <div className="flex items-center gap-2 lg:hidden">
+              <div className="flex h-6 w-6 items-center justify-center rounded-md bg-accent text-[11px] font-semibold text-accent-fg">
                 F
               </div>
               <span className="text-sm font-medium text-ink">Formatly</span>
