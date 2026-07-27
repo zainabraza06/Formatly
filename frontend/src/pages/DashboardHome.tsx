@@ -71,25 +71,13 @@ export function DashboardHome() {
  return (
  <div className="space-y-5">
 
- {/* ── Welcome banner ── */}
- <motion.div
- initial={{ opacity: 0, y: 10 }}
- animate={{ opacity: 1, y: 0 }}
- transition={{ duration: 0.3 }}
- className="rounded-2xl border border-line bg-surface-2 p-5"
- >
- <div className="flex items-center gap-3">
- <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-accent shadow-lg ">
- <span className="text-base font-semibold text-accent-fg">F</span>
- </div>
+ {/* ── Page header ── */}
  <div>
- <div className="text-sm font-bold text-ink">Welcome to Formatly</div>
- <div className="mt-0.5 text-xs text-muted">
+ <h1 className="text-xl font-semibold tracking-tight text-ink">Home</h1>
+ <p className="mt-0.5 text-sm text-muted">
  AI-powered document production — prompt to polished export in seconds.
+ </p>
  </div>
- </div>
- </div>
- </motion.div>
 
  {/* ── Quick actions ── */}
  <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
