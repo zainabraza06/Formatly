@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
-import { motion } from 'framer-motion'
 import clsx from 'clsx'
 import { GlassCard } from '../components/GlassCard'
+import { GenerationStatus } from '../components/paper/GenerationStatus'
 import { StyleManager } from '../components/paper/StyleManager'
 import { SpecPreview } from '../components/paper/SpecPreview'
 import {
@@ -150,12 +150,6 @@ export function ComposePaper() {
         <GlassCard>
           <StyleManager styles={styles} onChanged={loadStyles} />
         </GlassCard>
-      )}
-
-      {error && (
-        <div className="rounded-lg border border-danger/30 bg-danger/5 px-3 py-2 text-xs text-danger">
-          {error}
-        </div>
       )}
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_400px]">
@@ -345,22 +339,22 @@ Interview: "The renewal price jumped 40% with no warning."`}
             </div>
           </GlassCard>
 
-          {busy === 'generating' && (
-            <GlassCard className="space-y-1">
-              <motion.div animate={{ opacity: [0.45, 1, 0.45] }} transition={{ repeat: Infinity, duration: 1.4 }}
-                          className="text-xs text-muted">
-                Reading your material, planning sections and visualisations…
-              </motion.div>
-              {depth === 'detailed' && (
-                <div className="text-[10px] text-faint">
-                  Detailed documents are planned first, then written one section at a time,
-                  so this takes a few minutes. Leave the tab open.
-                </div>
-              )}
-            </GlassCard>
-          )}
+          {/* Working / error status appears right where the result will, so
+              attention stays in one place instead of jumping to the top. */}
+          <GenerationStatus
+            state={
+              busy === 'generating' || (busy === 'rendering' && !spec)
+                ? 'generating'
+                : error
+                  ? 'error'
+                  : null
+            }
+            depth={depth}
+            error={error}
+            onRetry={generate}
+          />
 
-          {spec && <SpecPreview spec={spec} />}
+          {spec && busy !== 'generating' && !error && <SpecPreview spec={spec} />}
         </div>
       </div>
     </div>
