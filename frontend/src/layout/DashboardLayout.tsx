@@ -81,7 +81,10 @@ export function DashboardLayout({
   theme: 'light' | 'dark'
   onToggleTheme: () => void
 }) {
-  const [navOpen, setNavOpen] = useState(false)
+  // Open by default on desktop (a real column), closed on mobile (a drawer).
+  const [navOpen, setNavOpen] = useState(
+    () => (typeof window !== 'undefined' ? window.innerWidth >= 1024 : true),
+  )
   const { user, logout } = useAuth()
 
   return (
@@ -101,8 +104,11 @@ export function DashboardLayout({
         <aside
           className={clsx(
             'fixed inset-y-0 left-0 z-50 flex w-64 shrink-0 flex-col border-r border-line bg-surface px-3 py-4 transition-transform duration-200',
-            'lg:static lg:z-auto lg:translate-x-0',
-            navOpen ? 'translate-x-0' : '-translate-x-full',
+            // Open: overlay drawer on mobile, static column on desktop.
+            // Closed: off-screen on mobile, removed from the layout on desktop.
+            navOpen
+              ? 'translate-x-0 lg:static lg:z-auto lg:flex lg:translate-x-0'
+              : '-translate-x-full lg:hidden',
           )}
         >
           {/* Brand + close (close is drawer-only, hidden on desktop) */}
@@ -114,7 +120,7 @@ export function DashboardLayout({
             <button
               onClick={() => setNavOpen(false)}
               aria-label="Close menu"
-              className="ml-auto flex h-7 w-7 items-center justify-center rounded-md text-muted transition-colors hover:bg-surface-2 hover:text-ink lg:hidden"
+              className="ml-auto flex h-7 w-7 items-center justify-center rounded-md text-muted transition-colors hover:bg-surface-2 hover:text-ink"
             >
               <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
                 <path fillRule="evenodd" d="M4.28 4.28a.75.75 0 011.06 0L10 8.94l4.66-4.66a.75.75 0 111.06 1.06L11.06 10l4.66 4.66a.75.75 0 11-1.06 1.06L10 11.06l-4.66 4.66a.75.75 0 01-1.06-1.06L8.94 10 4.28 5.34a.75.75 0 010-1.06z" clipRule="evenodd" />
@@ -177,11 +183,11 @@ export function DashboardLayout({
         {/* ── Main ── */}
         <main className="flex min-w-0 flex-1 flex-col">
           <header className="sticky top-0 z-20 flex items-center gap-3 border-b border-line bg-canvas/90 px-4 py-3 backdrop-blur-sm sm:px-6">
-            {/* mobile menu button — desktop has the persistent sidebar */}
+            {/* menu toggle — collapses the sidebar on desktop, opens the drawer on mobile */}
             <button
               onClick={() => setNavOpen((o) => !o)}
-              aria-label={navOpen ? 'Close menu' : 'Open menu'}
-              className="flex h-8 w-8 items-center justify-center rounded-lg border border-line bg-surface text-muted transition-colors hover:bg-surface-2 hover:text-ink lg:hidden"
+              aria-label={navOpen ? 'Collapse menu' : 'Open menu'}
+              className="flex h-8 w-8 items-center justify-center rounded-lg border border-line bg-surface text-muted transition-colors hover:bg-surface-2 hover:text-ink"
             >
               <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
                 {navOpen ? (
@@ -192,7 +198,8 @@ export function DashboardLayout({
               </svg>
             </button>
 
-            <div className="flex items-center gap-2 lg:hidden">
+            {/* header brand: on mobile always; on desktop only when the sidebar is collapsed */}
+            <div className={clsx('flex items-center gap-2', navOpen && 'lg:hidden')}>
               <div className="flex h-6 w-6 items-center justify-center rounded-md bg-accent text-[11px] font-semibold text-accent-fg">
                 F
               </div>
