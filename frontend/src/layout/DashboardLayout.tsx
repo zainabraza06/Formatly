@@ -183,18 +183,18 @@ export function DashboardLayout({
         {/* ── Main ── */}
         <main className="flex min-w-0 flex-1 flex-col">
           <header className="sticky top-0 z-20 flex items-center gap-3 border-b border-line bg-canvas/90 px-4 py-3 backdrop-blur-sm sm:px-6">
-            {/* menu toggle — collapses the sidebar on desktop, opens the drawer on mobile */}
+            {/* Opens the sidebar. Hidden while it is open — the sidebar's own
+                cross is the single close control, so there are never two. */}
             <button
-              onClick={() => setNavOpen((o) => !o)}
-              aria-label={navOpen ? 'Collapse menu' : 'Open menu'}
-              className="flex h-8 w-8 items-center justify-center rounded-lg border border-line bg-surface text-muted transition-colors hover:bg-surface-2 hover:text-ink"
+              onClick={() => setNavOpen(true)}
+              aria-label="Open menu"
+              className={clsx(
+                'flex h-8 w-8 items-center justify-center rounded-lg border border-line bg-surface text-muted transition-colors hover:bg-surface-2 hover:text-ink',
+                navOpen && 'hidden',
+              )}
             >
               <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
-                {navOpen ? (
-                  <path fillRule="evenodd" d="M4.28 4.28a.75.75 0 011.06 0L10 8.94l4.66-4.66a.75.75 0 111.06 1.06L11.06 10l4.66 4.66a.75.75 0 11-1.06 1.06L10 11.06l-4.66 4.66a.75.75 0 01-1.06-1.06L8.94 10 4.28 5.34a.75.75 0 010-1.06z" clipRule="evenodd" />
-                ) : (
-                  <path fillRule="evenodd" d="M2.5 5.5A.75.75 0 013.25 5h13.5a.75.75 0 010 1.5H3.25a.75.75 0 01-.75-.75zm0 4.5A.75.75 0 013.25 9.5h13.5a.75.75 0 010 1.5H3.25A.75.75 0 012.5 10zm.75 3.75a.75.75 0 000 1.5h13.5a.75.75 0 000-1.5H3.25z" clipRule="evenodd" />
-                )}
+                <path fillRule="evenodd" d="M2.5 5.5A.75.75 0 013.25 5h13.5a.75.75 0 010 1.5H3.25a.75.75 0 01-.75-.75zm0 4.5A.75.75 0 013.25 9.5h13.5a.75.75 0 010 1.5H3.25A.75.75 0 012.5 10zm.75 3.75a.75.75 0 000 1.5h13.5a.75.75 0 000-1.5H3.25z" clipRule="evenodd" />
               </svg>
             </button>
 
