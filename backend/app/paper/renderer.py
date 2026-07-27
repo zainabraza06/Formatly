@@ -7,6 +7,7 @@ Swap the stylesheet and the same JSON renders as IEEE, APA, ACM or a report.
 """
 from __future__ import annotations
 
+import re
 import tempfile
 from pathlib import Path
 from typing import Optional
@@ -197,8 +198,32 @@ def _apply_para(p, style: Style) -> None:
 _WORD_HEADING = {1: "Heading 1", 2: "Heading 2", 3: "Heading 3"}
 
 
+# **bold** / __bold__ / *italic* / _italic_
+_EMPHASIS = re.compile(r"\*\*(.+?)\*\*|__(.+?)__|\*(.+?)\*|_(.+?)_", re.DOTALL)
+
+
+def _add_text(p, text: str, style: Style) -> None:
+    """Write text, turning markdown emphasis into real runs.
+
+    Models routinely italicise with asterisks — unavoidably so in styles whose
+    reference format calls for an italic title. Written verbatim those land in
+    the document as literal `*` characters, so they become formatting instead.
+    """
+    pos = 0
+    for m in _EMPHASIS.finditer(text):
+        if m.start() > pos:
+            _apply_run(p.add_run(text[pos:m.start()]), style)
+        bold = m.group(1) is not None or m.group(2) is not None
+        inner = next(g for g in m.groups() if g is not None)
+        _apply_run(p.add_run(inner),
+                   style.merged(Style(bold=True) if bold else Style(italic=True)))
+        pos = m.end()
+    if pos < len(text):
+        _apply_run(p.add_run(text[pos:]), style)
+
+
 def _styled_paragraph(doc: Document, text: str, style: Style,
-                      word_style: Optional[str] = None):
+                      word_style: Optional[str] = None, rich: bool = True):
     p = doc.add_paragraph()
     if word_style:
         try:
@@ -207,7 +232,11 @@ def _styled_paragraph(doc: Document, text: str, style: Style,
             pass  # unusual template without the built-in styles
     _apply_para(p, style)
     if text:
-        _apply_run(p.add_run(text), style)
+        # code is never markdown: underscores there are identifiers, not emphasis
+        if rich:
+            _add_text(p, text, style)
+        else:
+            _apply_run(p.add_run(text), style)
     return p
 
 
@@ -290,7 +319,7 @@ def _equation(doc: Document, block: Equation, number: int, col_w: float, sheet: 
 def _code(doc: Document, block: Code, sheet: StyleSheet) -> None:
     style = block.style or sheet.code
     for line in (block.text or "").splitlines() or [""]:
-        _styled_paragraph(doc, line, style)
+        _styled_paragraph(doc, line, style, rich=False)
 
 
 # ── tables ──────────────────────────────────────────────────────────────────

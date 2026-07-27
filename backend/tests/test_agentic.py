@@ -318,3 +318,50 @@ def test_figure_chart_kind_is_coerced():
     })
     fig = spec.blocks[0]
     assert fig.chart.kind == "line"
+
+
+# ── markdown emphasis in model output ───────────────────────────────────────
+
+def test_markdown_emphasis_becomes_real_formatting(tmp_path):
+    """Models italicise titles with asterisks — especially in reference formats
+    that require italics. Written verbatim they appear as literal '*' in Word."""
+    from docx import Document as Docx
+    from app.paper.renderer import render_paper
+    from app.paper.schema import PaperSpec
+
+    spec = PaperSpec.model_validate({
+        "meta": {"title": "T"},
+        "blocks": [{"type": "paragraph", "text": "See *The Printing Press* and **note this**."}],
+        "references": ["Eisenstein, E. 1979. *The Printing Press as an Agent of Change*."],
+    })
+    out = tmp_path / "emphasis.docx"
+    render_paper(spec, out, style="report")
+
+    doc = Docx(str(out))
+    body = next(p for p in doc.paragraphs if p.text.startswith("See "))
+    assert "*" not in body.text                      # no literal asterisks survive
+    assert any(r.italic and r.text == "The Printing Press" for r in body.runs)
+    assert any(r.bold and r.text == "note this" for r in body.runs)
+
+    ref = next(p for p in doc.paragraphs if "Eisenstein" in p.text)
+    assert "*" not in ref.text
+    assert any(r.italic for r in ref.runs)
+
+
+def test_code_blocks_keep_underscores_verbatim(tmp_path):
+    """snake_case identifiers must not be read as markdown emphasis."""
+    from docx import Document as Docx
+    from app.paper.renderer import render_paper
+    from app.paper.schema import PaperSpec
+
+    spec = PaperSpec.model_validate({
+        "meta": {"title": "T"},
+        "blocks": [{"type": "code", "language": "python",
+                    "text": "my_var = other_var * 2"}],
+    })
+    out = tmp_path / "code.docx"
+    render_paper(spec, out, style="report")
+
+    doc = Docx(str(out))
+    line = next(p for p in doc.paragraphs if "my_var" in p.text)
+    assert line.text == "my_var = other_var * 2"
