@@ -21,10 +21,9 @@ destroying the document.
 """
 from __future__ import annotations
 
-import json
-import re
 from typing import Any, Callable, Optional, Sequence
 
+from app.paper.jsonx import extract_json
 from app.paper.prompt import (
     build_plan_message, build_section_message, plan_system_prompt, section_system_prompt,
 )
@@ -169,15 +168,3 @@ def _write_section(*, section: dict[str, Any], outline: list[dict[str, Any]], ti
     return blocks
 
 
-def extract_json(text: str) -> Optional[dict[str, Any]]:
-    """Pull the first JSON object out of a reply, tolerating fences."""
-    if not text:
-        return None
-    cleaned = re.sub(r"^\s*```(?:json)?|```\s*$", "", text.strip(), flags=re.MULTILINE)
-    match = re.search(r"\{.*\}", cleaned, flags=re.DOTALL)
-    if not match:
-        return None
-    try:
-        return json.loads(match.group(0))
-    except json.JSONDecodeError:
-        return None

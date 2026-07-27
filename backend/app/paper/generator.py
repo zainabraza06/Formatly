@@ -13,6 +13,7 @@ from typing import Any, Optional, Sequence
 from pydantic import ValidationError
 
 from app.paper.agentic import Progress, generate_sectioned
+from app.paper.jsonx import extract_json
 from app.paper.prompt import DEFAULT_DEPTH, build_user_message, system_prompt
 from app.paper.schema import Author, PaperSpec
 from app.paper.styles import (
@@ -98,16 +99,29 @@ def generate_paper(
             reference_example=reference_example, instructions=instructions,
             title_hint=title_hint, authors=authors,
         )
-        try:
-            text, provider, _elapsed = router.chat(
-                [{"role": "system", "content": system_prompt(guide_id, depth, style_note)},
-                 {"role": "user", "content": user_msg}],
-                max_tokens=max_tokens,
-            )
-        except Exception as exc:
-            raise PaperGenerationError(f"all AI providers failed: {exc}") from exc
+        messages = [{"role": "system", "content": system_prompt(guide_id, depth, style_note)},
+                    {"role": "user", "content": user_msg}]
 
-        raw = _extract_json(text)
+        # A model occasionally returns unparseable JSON; a second sampling usually
+        # succeeds, so one retry beats losing the whole document.
+        raw = None
+        provider = ""
+        last_error = ""
+        for _attempt in range(2):
+            try:
+                text, provider, _elapsed = router.chat(messages, max_tokens=max_tokens)
+            except Exception as exc:
+                raise PaperGenerationError(f"all AI providers failed: {exc}") from exc
+            raw = extract_json(text)
+            if raw is not None:
+                break
+            last_error = (text or "").strip()[:160]
+
+        if raw is None:
+            raise PaperGenerationError(
+                "the model did not return usable JSON after a retry"
+                + (f" (started with: {last_error!r})" if last_error else "")
+            )
 
     if raw is None:
         raise PaperGenerationError("model did not return valid JSON")
