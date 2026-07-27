@@ -88,8 +88,9 @@ export function DashboardLayout({
   const { user, logout } = useAuth()
 
   return (
-    <div className="min-h-screen overflow-x-hidden bg-canvas text-ink">
-      <div className="flex min-h-screen w-full">
+    // Fixed shell: exactly the viewport, so the sidebar and header never move and
+    // only the content area scrolls — no long page scroll with empty space.
+    <div className="flex h-screen overflow-hidden bg-canvas text-ink">
 
         {/* backdrop — only on mobile, when the drawer is open */}
         {navOpen && (
@@ -181,8 +182,8 @@ export function DashboardLayout({
         </aside>
 
         {/* ── Main ── */}
-        <main className="flex min-w-0 flex-1 flex-col">
-          <header className="sticky top-0 z-20 flex items-center gap-3 border-b border-line bg-canvas/90 px-4 py-3 backdrop-blur-sm sm:px-6">
+        <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
+          <header className="flex shrink-0 items-center gap-3 border-b border-line px-4 py-3 sm:px-6">
             {/* Opens the sidebar. Hidden while it is open — the sidebar's own
                 cross is the single close control, so there are never two. */}
             <button
@@ -210,17 +211,19 @@ export function DashboardLayout({
             <ThemeToggle mode={theme} onToggle={onToggleTheme} />
           </header>
 
-          <motion.div
-            key="outlet"
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.2 }}
-            className="mx-auto w-full max-w-6xl flex-1 p-4 sm:p-6"
-          >
-            <Outlet />
-          </motion.div>
+          {/* the single scroll region */}
+          <div className="flex-1 overflow-y-auto overflow-x-hidden">
+            <motion.div
+              key="outlet"
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.2 }}
+              className="mx-auto flex min-h-full w-full max-w-6xl flex-col p-4 sm:p-6"
+            >
+              <Outlet />
+            </motion.div>
+          </div>
         </main>
-      </div>
     </div>
   )
 }
