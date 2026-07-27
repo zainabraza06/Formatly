@@ -23,9 +23,9 @@ const quickActions = [
  to: '/app/templates',
  label: 'Templates',
  desc: 'Clone a document style',
- color: 'from-sky-500/15 to-blue-500/10',
- border: 'border-sky-500/20',
- textColor: 'text-sky-700 dark:text-sky-300',
+ color: 'bg-surface',
+ border: 'border-line',
+ textColor: 'text-ink',
  icon: (
  <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
  <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clipRule="evenodd" />
@@ -36,9 +36,9 @@ const quickActions = [
  to: '/app/editor',
  label: 'AI Assistant',
  desc: 'Refine & rewrite',
- color: 'from-emerald-500/15 to-teal-500/10',
- border: 'border-emerald-500/20',
- textColor: 'text-emerald-700 dark:text-emerald-300',
+ color: 'bg-surface',
+ border: 'border-line',
+ textColor: 'text-ink',
  icon: (
  <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
  <path d="M3.505 2.365A41.369 41.369 0 019 2c1.863 0 3.697.124 5.495.365 1.247.167 2.18 1.108 2.435 2.268a4.45 4.45 0 00-.577-.069 43.141 43.141 0 00-4.706 0C9.229 4.696 7.5 6.727 7.5 8.998v2.24c0 1.413.67 2.735 1.76 3.562l-2.98 2.98A.75.75 0 015 17.25v-3.443c-.501-.048-1-.106-1.495-.172C2.033 13.438 1 12.162 1 10.72V5.28c0-1.441 1.033-2.717 2.505-2.914z" />
@@ -102,7 +102,7 @@ export function DashboardHome() {
  >
  <Link
  to={a.to}
- className={`flex items-center gap-3 rounded-2xl border ${a.border} bg-gradient-to-br ${a.color} p-4 transition-all hover:shadow-md hover:scale-[1.01]`}
+ className={`flex items-center gap-3 rounded-xl border ${a.border} ${a.color} p-4 transition-colors hover:bg-surface-2`}
  >
  <div className={`shrink-0 ${a.textColor}`}>{a.icon}</div>
  <div>
@@ -170,7 +170,7 @@ export function DashboardHome() {
  </div>
  </div>
  )}
- {error && <div className="text-xs text-rose-500">{error}</div>}
+ {error && <div className="text-xs text-danger">{error}</div>}
  </div>
  </GlassCard>
 
@@ -199,7 +199,7 @@ export function DashboardHome() {
  </Link>
  <Link
  to="/app/compose"
- className="rounded-xl bg-accent px-3 py-2 text-center text-xs font-medium text-accent-fg shadow-sm transition hover:"
+ className="rounded-xl bg-accent px-3 py-2 text-center text-xs font-medium text-accent-fg transition hover:opacity-90"
  >
  New Doc
  </Link>
