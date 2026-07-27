@@ -105,12 +105,21 @@ export function DashboardLayout({
             navOpen ? 'translate-x-0' : '-translate-x-full',
           )}
         >
-          {/* Brand */}
+          {/* Brand + close (close is drawer-only, hidden on desktop) */}
           <div className="flex items-center gap-2.5 px-2">
             <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-accent text-[13px] font-semibold text-accent-fg">
               F
             </div>
             <div className="text-sm font-semibold tracking-tight">Formatly</div>
+            <button
+              onClick={() => setNavOpen(false)}
+              aria-label="Close menu"
+              className="ml-auto flex h-7 w-7 items-center justify-center rounded-md text-muted transition-colors hover:bg-surface-2 hover:text-ink lg:hidden"
+            >
+              <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
+                <path fillRule="evenodd" d="M4.28 4.28a.75.75 0 011.06 0L10 8.94l4.66-4.66a.75.75 0 111.06 1.06L11.06 10l4.66 4.66a.75.75 0 11-1.06 1.06L10 11.06l-4.66 4.66a.75.75 0 01-1.06-1.06L8.94 10 4.28 5.34a.75.75 0 010-1.06z" clipRule="evenodd" />
+              </svg>
+            </button>
           </div>
 
           {/* Nav */}
