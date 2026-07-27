@@ -30,6 +30,8 @@ const DOC_KINDS = [
 
 // Sentinel for the "name your own style" option.
 const OTHER = '__other__'
+// Sentinel for a document kind not in the list.
+const CUSTOM_KIND = '__custom_kind__'
 
 // The built-in styles are fixed and always available, so the dropdown seeds with
 // them and never collapses to a single option if the styles request hiccups. A
@@ -260,12 +262,30 @@ Interview: "The renewal price jumped 40% with no warning."`}
               )}
             </div>
 
-            <Field label="Document kind" hint="Free text — anything you like.">
-              <input value={docKind} onChange={(e) => setDocKind(e.target.value)}
-                     list="doc-kinds" placeholder="report" className={input} />
-              <datalist id="doc-kinds">
-                {DOC_KINDS.map((k) => <option key={k} value={k} />)}
-              </datalist>
+            <Field label="Document kind">
+              <select
+                value={DOC_KINDS.includes(docKind) ? docKind : CUSTOM_KIND}
+                onChange={(e) => {
+                  const v = e.target.value
+                  setDocKind(v === CUSTOM_KIND ? '' : v)
+                }}
+                className={select}
+              >
+                {DOC_KINDS.map((k) => (
+                  <option key={k} value={k} className={option}>
+                    {k.charAt(0).toUpperCase() + k.slice(1)}
+                  </option>
+                ))}
+                <option value={CUSTOM_KIND} className={option}>Something else…</option>
+              </select>
+              {!DOC_KINDS.includes(docKind) && (
+                <input
+                  value={docKind}
+                  onChange={(e) => setDocKind(e.target.value)}
+                  placeholder="e.g. grant proposal, policy brief"
+                  className={`${input} mt-2`}
+                />
+              )}
             </Field>
 
             <Field label="Depth" hint={DEPTH_OPTIONS.find((d) => d.id === depth)?.hint}>
