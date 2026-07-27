@@ -75,7 +75,7 @@ export function DocumentEditor() {
       )}
 
       {/* body: editor + side panels */}
-      <div className="grid flex-1 grid-cols-1 gap-4 overflow-hidden xl:grid-cols-[1fr_360px]">
+      <div className="grid flex-1 grid-cols-1 gap-4 overflow-hidden xl:grid-cols-[minmax(0,1fr)_360px]">
         {/* editor canvas */}
         <div
           onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}

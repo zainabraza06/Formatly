@@ -88,8 +88,8 @@ export function DashboardLayout({
   const { user, logout } = useAuth()
 
   return (
-    <div className="min-h-screen bg-canvas text-ink">
-      <div className="flex min-h-screen">
+    <div className="min-h-screen overflow-x-hidden bg-canvas text-ink">
+      <div className="flex min-h-screen w-full">
 
         {/* backdrop — only on mobile, when the drawer is open */}
         {navOpen && (

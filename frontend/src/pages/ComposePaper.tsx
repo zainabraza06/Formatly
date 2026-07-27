@@ -141,7 +141,7 @@ export function ComposePaper() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1fr_400px]">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_400px]">
         {/* ── material ── */}
         <GlassCard className="space-y-3">
           <Field
