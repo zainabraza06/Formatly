@@ -96,7 +96,7 @@ export function GraphCanvas({ graph, selectedIds, activeId, removingIds }: Props
 
   if (!graph) {
     return (
-      <div className="flex h-full items-center justify-center text-sm text-neutral-500">
+      <div className="flex h-full items-center justify-center text-sm text-muted">
         Import a DOCX to begin.
       </div>
     )
@@ -154,17 +154,17 @@ export function GraphCanvas({ graph, selectedIds, activeId, removingIds }: Props
         <button
           onClick={() => setPage((p) => Math.max(0, p - 1))}
           disabled={page === 0}
-          className="flex items-center gap-1 rounded-xl border border-white/10 bg-white/10 px-3 py-1.5 text-xs font-semibold text-neutral-700 transition-colors hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-white/5 dark:text-neutral-200"
+          className="flex items-center gap-1 rounded-lg border border-line bg-surface px-3 py-1.5 text-xs font-medium text-ink transition-colors hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-40"
         >
           ← Previous
         </button>
-        <span className="text-xs tabular-nums text-neutral-500">
+        <span className="text-xs tabular-nums text-muted">
           Page {page + 1} of {total}
         </span>
         <button
           onClick={() => setPage((p) => Math.min(total - 1, p + 1))}
           disabled={page >= total - 1}
-          className="flex items-center gap-1 rounded-xl border border-white/10 bg-white/10 px-3 py-1.5 text-xs font-semibold text-neutral-700 transition-colors hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-white/5 dark:text-neutral-200"
+          className="flex items-center gap-1 rounded-lg border border-line bg-surface px-3 py-1.5 text-xs font-medium text-ink transition-colors hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-40"
         >
           Next →
         </button>

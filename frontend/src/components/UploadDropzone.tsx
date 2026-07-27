@@ -50,21 +50,21 @@ export function UploadDropzone({
         }}
         className={clsx(
           'w-full rounded-2xl border border-dashed p-4 text-left transition',
-          'bg-white/10 dark:bg-white/5 backdrop-blur-md',
-          isDragging ? 'border-sky-400/60 ring-1 ring-sky-400/40' : 'border-white/20',
+          'bg-surface  ',
+          isDragging ? 'border-ink ring-1 ring-focus/40' : 'border-line-strong',
         )}
         disabled={busy}
       >
         <div className="flex items-center justify-between gap-3">
           <div>
-            <div className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">
+            <div className="text-sm font-semibold text-ink">
               Drag & drop a template
             </div>
-            <div className="mt-1 text-xs text-neutral-700 dark:text-neutral-300">
+            <div className="mt-1 text-xs text-muted">
               Upload DOCX/PDF/images. DOCX gives best style cloning.
             </div>
           </div>
-          <div className="text-xs text-neutral-700 dark:text-neutral-300">
+          <div className="text-xs text-muted">
             {busy ? (
               <span className="inline-flex items-center gap-2">
                 Analyzing <LoadingDots />
@@ -76,11 +76,11 @@ export function UploadDropzone({
         </div>
 
         {uploaded ? (
-          <div className="mt-3 rounded-xl border border-white/10 bg-white/5 p-3 text-xs text-neutral-200">
-            <div className="text-neutral-900 dark:text-neutral-100">
+          <div className="mt-3 rounded-xl border border-line bg-surface-2 p-3 text-xs text-neutral-200">
+            <div className="text-ink">
               <span className="font-semibold">Template:</span> {uploaded.filename} ({uploaded.kind})
             </div>
-            <div className="mt-1 text-neutral-700 dark:text-neutral-300">{uploaded.summary}</div>
+            <div className="mt-1 text-muted">{uploaded.summary}</div>
           </div>
         ) : null}
 

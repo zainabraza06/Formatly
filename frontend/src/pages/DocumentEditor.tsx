@@ -6,6 +6,7 @@ import { AIPanel } from '../components/docos/AIPanel'
 import { GraphCanvas } from '../components/docos/GraphCanvas'
 import { VersionTimeline } from '../components/docos/VersionTimeline'
 import { useDocOS } from '../hooks/useDocOS'
+import { btnPrimary } from '../lib/ui'
 
 export function DocumentEditor() {
   const doc = useDocOS()
@@ -43,13 +44,13 @@ export function DocumentEditor() {
       {/* header */}
       <div className="flex items-center justify-between gap-3">
         <div>
-          <div className="text-lg font-semibold text-neutral-900 dark:text-neutral-50">
+          <h1 className="text-xl font-semibold tracking-tight text-ink">
             {doc.title || 'Document OS'}
-          </div>
-          <div className="text-xs text-neutral-500">
+          </h1>
+          <div className="mt-0.5 text-sm text-muted">
             {noDoc ? 'Upload a DOCX to start editing with AI' : (
               <span className="flex items-center gap-1.5">
-                <span className={clsx('h-1.5 w-1.5 rounded-full', doc.connected ? 'bg-emerald-400' : 'bg-neutral-400')} />
+                <span className={clsx('h-1.5 w-1.5 rounded-full', doc.connected ? 'bg-emerald-500' : 'bg-faint')} />
                 {doc.connected ? 'live' : 'offline'} · {doc.versions.length} versions
               </span>
             )}
@@ -63,17 +64,14 @@ export function DocumentEditor() {
             hidden
             onChange={(e) => handleFile(e.target.files?.[0])}
           />
-          <button
-            onClick={() => fileRef.current?.click()}
-            className="rounded-xl bg-neutral-900 px-4 py-2 text-xs font-semibold text-white hover:bg-neutral-800 dark:bg-white dark:text-neutral-950"
-          >
+          <button onClick={() => fileRef.current?.click()} className={btnPrimary}>
             {noDoc ? 'Import DOCX' : 'Import another'}
           </button>
         </div>
       </div>
 
       {error && (
-        <div className="rounded-xl bg-red-500/10 px-3 py-2 text-xs text-red-500">{error}</div>
+        <div className="rounded-lg border border-danger/30 bg-danger/5 px-3 py-2 text-xs text-danger">{error}</div>
       )}
 
       {/* body: editor + side panels */}
@@ -88,12 +86,12 @@ export function DocumentEditor() {
           }}
           className={clsx(
             // Word-like gray canvas around the page — kept light in both themes
-            'overflow-auto rounded-2xl border border-black/10 bg-neutral-200/70 p-6 dark:bg-neutral-800/60',
-            dragOver && 'ring-2 ring-sky-400',
+            'overflow-auto rounded-xl border border-line bg-neutral-200/70 p-6 dark:bg-neutral-800/60',
+            dragOver && 'ring-2 ring-focus/50',
           )}
         >
           {noDoc ? (
-            <div className="flex h-full flex-col items-center justify-center gap-2 text-neutral-400">
+            <div className="flex h-full flex-col items-center justify-center gap-2 text-faint">
               <span className="text-4xl">📄</span>
               <div className="text-sm">Drag & drop a .docx here, or click Import</div>
             </div>

@@ -6,7 +6,7 @@ function statusClasses(status: PipelineStep['status']) {
   if (status === 'done') return 'bg-emerald-500/20 text-emerald-200 ring-1 ring-emerald-500/30'
   if (status === 'running') return 'bg-sky-500/20 text-sky-200 ring-1 ring-sky-500/30'
   if (status === 'error') return 'bg-rose-500/20 text-rose-200 ring-1 ring-rose-500/30'
-  return 'bg-neutral-500/10 text-neutral-200 ring-1 ring-white/10'
+  return 'bg-surface-20/10 text-neutral-200 ring-1 ring-white/10'
 }
 
 export function PipelineSteps({ steps }: { steps: PipelineStep[] }) {
@@ -20,7 +20,7 @@ export function PipelineSteps({ steps }: { steps: PipelineStep[] }) {
           transition={{ duration: 0.2 }}
           className={clsx(
             'flex items-center justify-between rounded-xl px-3 py-2 text-sm',
-            'bg-white/5 dark:bg-white/5',
+            'bg-surface-2 ',
             statusClasses(s.status),
           )}
         >

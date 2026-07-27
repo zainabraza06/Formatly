@@ -86,3 +86,4 @@ coverage/
 # local dev server logs
 backend/.uvicorn.out
 backend/.uvicorn.err
+frontend/.vite.out

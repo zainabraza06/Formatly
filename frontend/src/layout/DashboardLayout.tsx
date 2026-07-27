@@ -85,12 +85,7 @@ export function DashboardLayout({
   const { user, logout } = useAuth()
 
   return (
-    <div className="min-h-full bg-gradient-to-br from-neutral-50 via-white to-neutral-100 dark:from-neutral-950 dark:via-neutral-900 dark:to-neutral-950">
-      {/* ambient glow */}
-      <div className="pointer-events-none fixed inset-0 overflow-hidden">
-        <div className="absolute -top-60 left-0 h-[500px] w-[500px] rounded-full bg-violet-500/6 blur-[100px]" />
-      </div>
-
+    <div className="min-h-full bg-canvas text-ink">
       <div className="relative mx-auto flex min-h-screen max-w-7xl">
 
         {/* backdrop — click to close the overlaying sidebar */}
@@ -98,37 +93,27 @@ export function DashboardLayout({
           <button
             aria-label="Close menu"
             onClick={() => setNavOpen(false)}
-            className="absolute inset-0 z-30 cursor-default bg-black/20 backdrop-blur-[1px]"
+            className="fixed inset-0 z-30 cursor-default bg-ink/20"
           />
         )}
 
         {/* ── Sidebar (overlays content when open) ── */}
         <aside
           className={clsx(
-            'absolute inset-y-0 left-0 z-40 flex w-60 flex-col border-r border-neutral-200/60 bg-white/80 p-4 shadow-xl backdrop-blur-md transition-transform duration-300 dark:border-white/8 dark:bg-neutral-950/85',
+            'fixed inset-y-0 left-0 z-40 flex w-64 flex-col border-r border-line bg-surface px-3 py-4 transition-transform duration-200',
             navOpen ? 'translate-x-0' : '-translate-x-full',
           )}
         >
-
           {/* Brand */}
-          <div className="rounded-2xl border border-neutral-200/60 bg-white/60 p-4 shadow-sm backdrop-blur-sm dark:border-white/8 dark:bg-white/5">
-            <div className="flex items-center gap-2.5">
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-violet-600 to-purple-600 shadow-md shadow-violet-500/30">
-                <span className="text-sm font-bold text-white">F</span>
-              </div>
-              <div>
-                <div className="text-sm font-bold tracking-tight text-neutral-900 dark:text-neutral-100">
-                  Formatly
-                </div>
-                <div className="text-[10px] text-neutral-500 dark:text-neutral-400">
-                  AI Document Platform
-                </div>
-              </div>
+          <div className="flex items-center gap-2.5 px-2">
+            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-accent text-[13px] font-semibold text-accent-fg">
+              F
             </div>
+            <div className="text-sm font-semibold tracking-tight">Formatly</div>
           </div>
 
           {/* Nav */}
-          <nav className="mt-4 flex flex-1 flex-col gap-1">
+          <nav className="mt-6 flex flex-1 flex-col gap-0.5">
             {NAV.map((item) => (
               <NavLink
                 key={item.to}
@@ -137,16 +122,16 @@ export function DashboardLayout({
                 onClick={() => setNavOpen(false)}
                 className={({ isActive }) =>
                   clsx(
-                    'flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm transition-all',
+                    'flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm transition-colors',
                     isActive
-                      ? 'bg-gradient-to-r from-violet-500/15 to-purple-500/10 font-semibold text-violet-700 ring-1 ring-violet-500/20 dark:text-violet-300'
-                      : 'text-neutral-600 hover:bg-neutral-100/80 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-white/8 dark:hover:text-neutral-200',
+                      ? 'bg-surface-2 font-medium text-ink'
+                      : 'text-muted hover:bg-surface-2 hover:text-ink',
                   )
                 }
               >
                 {({ isActive }) => (
                   <>
-                    <span className={clsx('shrink-0 transition-colors', isActive ? 'text-violet-600 dark:text-violet-400' : '')}>
+                    <span className={clsx('shrink-0', isActive ? 'text-ink' : 'text-faint')}>
                       {item.icon}
                     </span>
                     {item.label}
@@ -157,33 +142,35 @@ export function DashboardLayout({
           </nav>
 
           {/* Account */}
-          <div className="mt-4 rounded-xl border border-neutral-200/60 bg-white/60 p-3 dark:border-white/8 dark:bg-white/5">
-            <div className="flex items-center gap-2">
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-violet-600 to-purple-600 text-xs font-bold uppercase text-white">
+          <div className="mt-4 border-t border-line pt-3">
+            <div className="flex items-center gap-2.5 px-1">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-line bg-surface-2 text-xs font-semibold uppercase text-ink">
                 {(user?.name || user?.email || '?').slice(0, 1)}
               </div>
-              <div className="min-w-0">
-                <div className="truncate text-xs font-semibold text-neutral-900 dark:text-neutral-100">{user?.name || 'Account'}</div>
-                <div className="truncate text-[10px] text-neutral-500">{user?.email}</div>
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-xs font-medium text-ink">{user?.name || 'Account'}</div>
+                <div className="truncate text-[10px] text-faint">{user?.email}</div>
               </div>
+              <button
+                onClick={logout}
+                title="Sign out"
+                className="flex h-7 w-7 items-center justify-center rounded-md text-faint transition-colors hover:bg-surface-2 hover:text-ink"
+              >
+                <svg viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
+                  <path fillRule="evenodd" d="M3 4.75A1.75 1.75 0 014.75 3h4.5a.75.75 0 010 1.5h-4.5a.25.25 0 00-.25.25v10.5c0 .138.112.25.25.25h4.5a.75.75 0 010 1.5h-4.5A1.75 1.75 0 013 15.25V4.75zm9.72 1.72a.75.75 0 011.06 0l3 3a.75.75 0 010 1.06l-3 3a.75.75 0 11-1.06-1.06l1.72-1.72H8a.75.75 0 010-1.5h6.44l-1.72-1.72a.75.75 0 010-1.06z" clipRule="evenodd" />
+                </svg>
+              </button>
             </div>
-            <button
-              onClick={logout}
-              className="mt-2 w-full rounded-lg border border-neutral-200/60 bg-white/70 px-2 py-1.5 text-[11px] font-medium text-neutral-600 hover:bg-white dark:border-white/8 dark:bg-white/5 dark:text-neutral-300"
-            >
-              Sign out
-            </button>
           </div>
         </aside>
 
         {/* ── Main ── */}
-        <main className="flex flex-1 flex-col p-4 sm:p-6">
-          <div className="mb-5 flex items-center justify-between gap-3">
-            {/* Menu toggle */}
+        <main className="flex flex-1 flex-col">
+          <header className="sticky top-0 z-20 flex items-center gap-3 border-b border-line bg-canvas/90 px-4 py-3 backdrop-blur-sm sm:px-6">
             <button
               onClick={() => setNavOpen((o) => !o)}
               aria-label={navOpen ? 'Close menu' : 'Open menu'}
-              className="z-40 flex h-9 w-9 items-center justify-center rounded-xl border border-neutral-200/60 bg-white/70 text-neutral-700 shadow-sm transition-colors hover:bg-white dark:border-white/8 dark:bg-white/5 dark:text-neutral-200"
+              className="flex h-8 w-8 items-center justify-center rounded-lg border border-line bg-surface text-muted transition-colors hover:bg-surface-2 hover:text-ink"
             >
               <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
                 {navOpen ? (
@@ -194,27 +181,23 @@ export function DashboardLayout({
               </svg>
             </button>
 
-            {/* Mobile brand */}
-            <div className="flex items-center gap-2 sm:hidden">
-              <div className="flex h-7 w-7 items-center justify-center rounded-xl bg-gradient-to-br from-violet-600 to-purple-600">
-                <span className="text-xs font-bold text-white">F</span>
+            <div className="flex items-center gap-2">
+              <div className="flex h-6 w-6 items-center justify-center rounded-md bg-accent text-[11px] font-semibold text-accent-fg sm:hidden">
+                F
               </div>
-              <span className="text-sm font-bold text-neutral-900 dark:text-neutral-100">Formatly</span>
+              <span className="text-sm font-medium text-ink">Formatly</span>
             </div>
 
-            <div className="hidden text-xs text-neutral-500 dark:text-neutral-400 sm:block">
-              AI document production platform
-            </div>
-
+            <div className="flex-1" />
             <ThemeToggle mode={theme} onToggle={onToggleTheme} />
-          </div>
+          </header>
 
           <motion.div
             key="outlet"
-            initial={{ opacity: 0, y: 8 }}
+            initial={{ opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.25 }}
-            className="flex-1"
+            transition={{ duration: 0.2 }}
+            className="mx-auto w-full max-w-6xl flex-1 p-4 sm:p-6"
           >
             <Outlet />
           </motion.div>

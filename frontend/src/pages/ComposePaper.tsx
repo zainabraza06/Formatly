@@ -8,6 +8,11 @@ import {
   downloadBlob, paperApi,
   type ComposeRequest, type Depth, type PaperSpec, type StyleSummary,
 } from '../lib/paperApi'
+import {
+  btnGhost, btnPrimary,
+  field as uiField, select as uiSelect, selectOption as uiSelectOption,
+  textarea as uiTextarea,
+} from '../lib/ui'
 
 // A model left to itself writes concisely, so depth has to be asked for.
 // "detailed" is written section-by-section because one call cannot hold it.
@@ -116,14 +121,12 @@ export function ComposePaper() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <div className="text-lg font-semibold text-neutral-900 dark:text-neutral-50">Compose</div>
-          <div className="text-xs text-neutral-500">
-            Describe what you need and give it your material — the AI writes the document,
-            you get a formatted DOCX.
-          </div>
-        </div>
+      <div>
+        <h1 className="text-xl font-semibold tracking-tight text-ink">Compose</h1>
+        <p className="mt-0.5 text-sm text-muted">
+          Describe what you need and give it your material — the AI writes the document,
+          you get a formatted DOCX.
+        </p>
       </div>
 
       {showStyles && (
@@ -132,7 +135,11 @@ export function ComposePaper() {
         </GlassCard>
       )}
 
-      {error && <div className="rounded-xl bg-red-500/10 px-3 py-2 text-xs text-red-500">{error}</div>}
+      {error && (
+        <div className="rounded-lg border border-danger/30 bg-danger/5 px-3 py-2 text-xs text-danger">
+          {error}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1fr_400px]">
         {/* ── material ── */}
@@ -179,7 +186,7 @@ Interview: "The renewal price jumped 40% with no warning."`}
                 </span>
                 <button
                   onClick={() => setShowStyles((s) => !s)}
-                  className="text-[10px] font-semibold text-violet-600 hover:underline dark:text-violet-400"
+                  className="text-[11px] font-medium text-ink underline-offset-2 hover:underline"
                 >
                   {showStyles ? 'Hide manager' : 'Manage / add styles'}
                 </button>
@@ -229,10 +236,10 @@ Interview: "The renewal price jumped 40% with no warning."`}
                   <datalist id="known-styles">
                     {ESTABLISHED_STYLES.map((s) => <option key={s} value={s} />)}
                   </datalist>
-                  <span className="mt-1 block text-[10px] text-neutral-400">
+                  <span className="mt-1 block text-[10px] text-faint">
                     Its citation format and section conventions will be followed. Page
                     typography uses our standard layout — for exact typography, upload a
-                    sample under <span className="font-medium">Manage / add styles</span>.
+                    sample under <span className="font-medium text-muted">Manage / add styles</span>.
                   </span>
                 </>
               )}
@@ -253,10 +260,10 @@ Interview: "The renewal price jumped 40% with no warning."`}
                     key={d.id}
                     onClick={() => setDepth(d.id)}
                     className={clsx(
-                      'flex-1 rounded-lg border px-2 py-1.5 text-[11px] font-semibold transition-colors',
+                      'flex-1 rounded-lg border px-2 py-1.5 text-[11px] font-medium transition-colors',
                       depth === d.id
-                        ? 'border-violet-500/40 bg-violet-500/15 text-violet-700 dark:text-violet-300'
-                        : 'border-white/10 bg-white/5 text-neutral-500 hover:bg-white/10',
+                        ? 'border-ink bg-accent text-accent-fg'
+                        : 'border-line bg-surface text-muted hover:bg-surface-2 hover:text-ink',
                     )}
                   >
                     {d.label}
@@ -285,32 +292,32 @@ Interview: "The renewal price jumped 40% with no warning."`}
               <button
                 onClick={generate}
                 disabled={busy !== 'idle' || !rawText.trim()}
-                className="flex-1 rounded-xl bg-neutral-900 px-4 py-2.5 text-xs font-semibold text-white hover:bg-neutral-800 disabled:opacity-50 dark:bg-white dark:text-neutral-950"
+                className={`${btnPrimary} flex-1`}
               >
                 {busy === 'generating' ? 'Writing…' : spec ? 'Regenerate' : 'Generate'}
               </button>
               <button
                 onClick={download}
                 disabled={busy !== 'idle' || !rawText.trim()}
-                className="flex-1 rounded-xl border border-white/10 bg-white/10 px-4 py-2.5 text-xs font-semibold text-neutral-700 hover:bg-white/20 disabled:opacity-50 dark:bg-white/5 dark:text-neutral-200"
+                className={`${btnGhost} flex-1`}
               >
                 {busy === 'rendering' ? 'Rendering…' : 'Download DOCX'}
               </button>
             </div>
-            <div className="text-[10px] text-neutral-500">
-              Rendering as <span className="font-semibold">{styleName}</span>
-              {provider && <> · written by <span className="font-semibold">{provider}</span></>}
+            <div className="text-[10px] text-faint">
+              Rendering as <span className="font-medium text-muted">{styleName}</span>
+              {provider && <> · written by <span className="font-medium text-muted">{provider}</span></>}
             </div>
           </GlassCard>
 
           {busy === 'generating' && (
             <GlassCard className="space-y-1">
-              <motion.div animate={{ opacity: [0.4, 1, 0.4] }} transition={{ repeat: Infinity, duration: 1.4 }}
-                          className="text-xs text-neutral-500">
+              <motion.div animate={{ opacity: [0.45, 1, 0.45] }} transition={{ repeat: Infinity, duration: 1.4 }}
+                          className="text-xs text-muted">
                 Reading your material, planning sections and visualisations…
               </motion.div>
               {depth === 'detailed' && (
-                <div className="text-[10px] text-neutral-400">
+                <div className="text-[10px] text-faint">
                   Detailed documents are planned first, then written one section at a time,
                   so this takes a few minutes. Leave the tab open.
                 </div>
@@ -325,25 +332,19 @@ Interview: "The renewal price jumped 40% with no warning."`}
   )
 }
 
-const input =
-  'w-full rounded-xl border border-white/10 bg-white/10 px-3 py-2 text-sm text-neutral-900 outline-none placeholder:text-neutral-500 focus:ring-2 focus:ring-violet-400/30 dark:bg-white/5 dark:text-neutral-100'
-const area = clsx(input, 'resize-y leading-relaxed')
-
-// A <select>'s native option list is drawn by the OS, which ignores translucent
-// backgrounds — `bg-white/10` left white text on white in dark mode. Selects and
-// their options need opaque colours of their own.
-const select =
-  'w-full rounded-xl border border-white/10 bg-white px-3 py-2 text-sm text-neutral-900 outline-none focus:ring-2 focus:ring-violet-400/30 dark:border-white/10 dark:bg-neutral-900 dark:text-neutral-100'
-const option = 'bg-white text-neutral-900 dark:bg-neutral-900 dark:text-neutral-100'
+const input = uiField
+const area = uiTextarea
+const select = uiSelect
+const option = uiSelectOption
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
     <label className="block">
-      <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-neutral-500">
+      <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-muted">
         {label}
       </span>
       {children}
-      {hint && <span className="mt-1 block text-[10px] text-neutral-400">{hint}</span>}
+      {hint && <span className="mt-1 block text-[10px] text-faint">{hint}</span>}
     </label>
   )
 }
