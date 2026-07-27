@@ -31,6 +31,17 @@ const DOC_KINDS = [
 // Sentinel for the "name your own style" option.
 const OTHER = '__other__'
 
+// The built-in styles are fixed and always available, so the dropdown seeds with
+// them and never collapses to a single option if the styles request hiccups. A
+// successful fetch replaces this with the server list (which also carries the
+// user's custom styles).
+const BUILTIN_STYLES: StyleSummary[] = [
+  { id: 'ieee', name: 'IEEE Conference', columns: '2', builtin: 'true', derived_from: '', detected: '', heading_scheme: 'roman_alpha', table_borders: 'horizontal' },
+  { id: 'apa', name: 'APA 7th Edition', columns: '1', builtin: 'true', derived_from: '', detected: '', heading_scheme: 'none', table_borders: 'horizontal' },
+  { id: 'acm', name: 'ACM (sigconf)', columns: '2', builtin: 'true', derived_from: '', detected: '', heading_scheme: 'decimal', table_borders: 'horizontal' },
+  { id: 'report', name: 'Technical Report', columns: '1', builtin: 'true', derived_from: '', detected: '', heading_scheme: 'decimal', table_borders: 'grid' },
+]
+
 // Established styles we have no stylesheet for, but whose conventions the writer
 // knows. Suggestions only — any name can be typed.
 const ESTABLISHED_STYLES = [
@@ -39,7 +50,7 @@ const ESTABLISHED_STYLES = [
 ]
 
 export function ComposePaper() {
-  const [styles, setStyles] = useState<StyleSummary[]>([])
+  const [styles, setStyles] = useState<StyleSummary[]>(BUILTIN_STYLES)
   const [style, setStyle] = useState('report')
   const [isOther, setIsOther] = useState(false)
   const [otherStyle, setOtherStyle] = useState('')
@@ -60,7 +71,11 @@ export function ComposePaper() {
   const [showStyles, setShowStyles] = useState(false)
 
   const loadStyles = () => {
-    paperApi.styles().then(setStyles).catch((e) => setError(e.message))
+    // Only replace the seeded built-ins when the server actually returns styles;
+    // a failure keeps the built-ins visible rather than emptying the dropdown.
+    paperApi.styles()
+      .then((list) => { if (list.length) setStyles(list) })
+      .catch(() => {})
   }
   useEffect(loadStyles, [])
 
