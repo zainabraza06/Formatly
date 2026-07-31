@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
 import clsx from 'clsx'
 import { GlassCard } from '../components/GlassCard'
+import { DocumentPreview } from '../components/paper/DocumentPreview'
 import { GenerationStatus } from '../components/paper/GenerationStatus'
 import { StyleManager } from '../components/paper/StyleManager'
-import { SpecPreview } from '../components/paper/SpecPreview'
 import {
   downloadBlob, paperApi,
   type ComposeRequest, type Depth, type PaperSpec, type StyleSummary,
@@ -353,10 +353,32 @@ Interview: "The renewal price jumped 40% with no warning."`}
             error={error}
             onRetry={generate}
           />
-
-          {spec && busy !== 'generating' && !error && <SpecPreview spec={spec} />}
         </div>
       </div>
+
+      {/* ── finished document, rendered in full ── */}
+      {spec && busy !== 'generating' && !error && (
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-semibold text-ink">Preview</h2>
+              <p className="text-xs text-muted">
+                {styleName}{provider && <> · written by <span className="font-medium">{provider}</span></>}
+              </p>
+            </div>
+            <button
+              onClick={download}
+              disabled={busy !== 'idle'}
+              className={`${btnPrimary} px-5`}
+            >
+              {busy === 'rendering' ? 'Preparing…' : 'Download DOCX'}
+            </button>
+          </div>
+          <div className="max-h-[78vh] overflow-auto rounded-xl border border-line bg-neutral-200/60 p-4 dark:bg-neutral-800/50 sm:p-8">
+            <DocumentPreview spec={spec} />
+          </div>
+        </div>
+      )}
     </div>
   )
 }
