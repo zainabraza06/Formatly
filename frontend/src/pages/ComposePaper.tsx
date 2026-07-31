@@ -72,6 +72,11 @@ export function ComposePaper() {
   const [error, setError] = useState<string | null>(null)
   const [showStyles, setShowStyles] = useState(false)
 
+  // Exact preview: the real DOCX rendered to PDF. Falls back to the HTML view
+  // while it renders, or if LibreOffice is unavailable.
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null)
+  const [pdfState, setPdfState] = useState<'idle' | 'loading' | 'ready' | 'unavailable'>('idle')
+
   const loadStyles = () => {
     // Only replace the seeded built-ins when the server actually returns styles;
     // a failure keeps the built-ins visible rather than emptying the dropdown.
@@ -80,6 +85,26 @@ export function ComposePaper() {
       .catch(() => {})
   }
   useEffect(loadStyles, [])
+
+  // Fetch the exact PDF whenever a new spec is ready.
+  useEffect(() => {
+    if (!spec) { setPdfUrl(null); setPdfState('idle'); return }
+    let cancelled = false
+    let url: string | null = null
+    setPdfState('loading')
+    paperApi.previewPdf(spec)
+      .then((b) => {
+        if (cancelled) return
+        url = URL.createObjectURL(b)
+        setPdfUrl(url)
+        setPdfState('ready')
+      })
+      .catch(() => { if (!cancelled) setPdfState('unavailable') })
+    return () => {
+      cancelled = true
+      if (url) URL.revokeObjectURL(url)
+    }
+  }, [spec])
 
   // Everything goes in one box. The API still accepts labelled attachments —
   // the CLI uses them for files — but the UI should not make a person decide
@@ -361,7 +386,17 @@ Interview: "The renewal price jumped 40% with no warning."`}
         <div className="space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h2 className="text-sm font-semibold text-ink">Preview</h2>
+              <h2 className="flex items-center gap-2 text-sm font-semibold text-ink">
+                Preview
+                <span className={clsx(
+                  'rounded-full px-2 py-0.5 text-[10px] font-medium',
+                  pdfState === 'ready'
+                    ? 'bg-ink/10 text-ink'
+                    : 'border border-line text-muted',
+                )}>
+                  {pdfState === 'ready' ? 'Exact document' : pdfState === 'loading' ? 'Rendering exact…' : 'Reading view'}
+                </span>
+              </h2>
               <p className="text-xs text-muted">
                 {styleName}{provider && <> · written by <span className="font-medium">{provider}</span></>}
               </p>
@@ -374,9 +409,23 @@ Interview: "The renewal price jumped 40% with no warning."`}
               {busy === 'rendering' ? 'Preparing…' : 'Download DOCX'}
             </button>
           </div>
-          <div className="max-h-[78vh] overflow-auto rounded-xl border border-line bg-neutral-200/60 p-4 dark:bg-neutral-800/50 sm:p-8">
-            <DocumentPreview spec={spec} />
-          </div>
+
+          {pdfState === 'ready' && pdfUrl ? (
+            <iframe
+              title="Exact document preview"
+              src={pdfUrl}
+              className="h-[80vh] w-full rounded-xl border border-line bg-white"
+            />
+          ) : (
+            <div className="max-h-[80vh] overflow-auto rounded-xl border border-line bg-neutral-200/60 p-4 dark:bg-neutral-800/50 sm:p-8">
+              {pdfState === 'unavailable' && (
+                <div className="mb-3 text-center text-[11px] text-muted">
+                  Showing a reading view — the exact document render needs LibreOffice on the server.
+                </div>
+              )}
+              <DocumentPreview spec={spec} />
+            </div>
+          )}
         </div>
       )}
     </div>

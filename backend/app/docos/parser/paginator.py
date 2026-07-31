@@ -51,6 +51,12 @@ def libreoffice_available() -> bool:
 
 # ── conversion + extraction ─────────────────────────────────────────────────
 
+def docx_to_pdf(data: bytes) -> Optional[Path]:
+    """Public: convert DOCX bytes to a PDF file (for an exact browser preview).
+    Returns the PDF path, or None if LibreOffice is unavailable or fails."""
+    return _docx_to_pdf(data)
+
+
 def _docx_to_pdf(data: bytes) -> Optional[Path]:
     exe = _soffice()
     if not exe:

@@ -129,6 +129,15 @@ export const paperApi = {
       body: JSON.stringify(spec),
     })),
 
+  // Pixel-exact preview: the real DOCX rendered to PDF. May 503 if LibreOffice
+  // is unavailable, in which case the caller falls back to the HTML view.
+  previewPdf: async (spec: PaperSpec, style?: string): Promise<Blob> =>
+    blob(await fetch(`${API_URL}/paper/preview${style ? `?style=${encodeURIComponent(style)}` : ''}`, {
+      method: 'POST',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(spec),
+    })),
+
   compose: async (req: ComposeRequest): Promise<Blob> =>
     blob(await fetch(`${API_URL}/paper/compose`, {
       method: 'POST',

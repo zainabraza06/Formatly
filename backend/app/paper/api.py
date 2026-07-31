@@ -139,6 +139,30 @@ def render(spec: dict[str, Any] = Body(...), style: Optional[str] = None,
                         filename=f"{_safe(parsed.meta.title)}.docx")
 
 
+@router.post("/preview")
+def preview(spec: dict[str, Any] = Body(...), style: Optional[str] = None,
+            user: User = Depends(get_current_user)) -> FileResponse:
+    """Render the real DOCX and return it as a PDF, for a pixel-exact browser
+    preview — the actual document, not an HTML approximation. Needs LibreOffice."""
+    from app.docos.parser.paginator import docx_to_pdf, libreoffice_available
+
+    try:
+        parsed = resolve(PaperSpec.model_validate(spec), style, user.id)
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail=f"invalid paper spec: {exc}")
+
+    if not libreoffice_available():
+        raise HTTPException(status_code=503, detail="exact preview needs LibreOffice")
+
+    out = get_paths().documents / f"{new_id('preview')}.docx"
+    render_paper(parsed, out, owner_id=user.id)
+    pdf = docx_to_pdf(out.read_bytes())
+    if pdf is None:
+        raise HTTPException(status_code=503, detail="could not render the exact preview")
+    return FileResponse(str(pdf), media_type="application/pdf",
+                        filename=f"{_safe(parsed.meta.title)}.pdf")
+
+
 @router.post("/compose")
 def compose(req: GenerateRequest, user: User = Depends(get_current_user)) -> FileResponse:
     """Raw material → .docx in one call."""
