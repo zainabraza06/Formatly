@@ -21,6 +21,7 @@ from docx.shared import Inches, Pt, RGBColor
 
 from app.paper import stylesheet as ss
 from app.paper.figures import render_figure
+from app.paper.references import format_reference
 from app.paper.schema import (
     Code, Equation, Figure, Heading, ListBlock, Paragraph as PBlock, PaperSpec, Style, Table,
 )
@@ -230,6 +231,11 @@ def _styled_paragraph(doc: Document, text: str, style: Style,
             p.style = doc.styles[word_style]
         except KeyError:
             pass  # unusual template without the built-in styles
+    # A justified line that ends in a manual break still gets stretched to the
+    # full column width, and a line holding one unbreakable token has no gaps to
+    # absorb the slack — it ends up flush right. Left-align multi-line text.
+    if text and "\n" in text and style.alignment == "justify":
+        style = style.merged(Style(alignment="left"))
     _apply_para(p, style)
     if text:
         # code is never markdown: underscores there are identifiers, not emphasis
@@ -455,6 +461,7 @@ def _figure(doc: Document, block: Figure, number: int, assets: Path,
 def _references(doc: Document, spec: PaperSpec, sheet: StyleSheet) -> None:
     _styled_paragraph(doc, sheet.references_title, _as_heading(sheet.references_heading),
                       word_style=_WORD_HEADING[1])
-    for i, ref in enumerate(spec.references, start=1):
+    entries = [r for r in (format_reference(ref) for ref in spec.references) if r]
+    for i, ref in enumerate(entries, start=1):
         text = f"[{i}] {ref}" if sheet.number_references else ref
         _styled_paragraph(doc, text, sheet.reference)
