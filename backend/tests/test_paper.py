@@ -83,19 +83,18 @@ def test_resolver_keeps_author_overrides():
 
 def test_style_registry_and_aliases():
     ids = {s["id"] for s in list_styles()}
-    assert {"ieee", "apa", "acm", "report"} <= ids
+    assert {"ieee", "ieee_1col", "assignment"} == ids
     assert get_stylesheet("IEEE").id == "ieee"
-    assert get_stylesheet("apa 7").id == "apa"
-    assert get_stylesheet("something unknown").id == "report"  # safe default
+    assert get_stylesheet("Coursework").id == "assignment"
+    assert get_stylesheet("something unknown").id == "ieee"  # safe default
 
 
 # ── renderer ────────────────────────────────────────────────────────────────
 
 @pytest.mark.parametrize("style,cols,font", [
     ("ieee", "2", "Times New Roman"),
-    ("apa", "1", "Times New Roman"),
-    ("acm", "2", "Times New Roman"),
-    ("report", "1", "Calibri"),
+    ("ieee_1col", "1", "Times New Roman"),
+    ("assignment", "1", "Times New Roman"),
 ])
 def test_render_each_style(tmp_path, style, cols, font):
     out = tmp_path / f"{style}.docx"
@@ -132,9 +131,9 @@ def test_ieee_numbering_and_captions(tmp_path):
                for t in texts)
 
 
-def test_decimal_numbering_for_report(tmp_path):
-    out = tmp_path / "report.docx"
-    render_paper(PaperSpec.model_validate(SPEC), out, style="report")
+def test_decimal_numbering_for_the_assignment_style(tmp_path):
+    out = tmp_path / "assignment.docx"
+    render_paper(PaperSpec.model_validate(SPEC), out, style="assignment")
     texts = [p.text for p in Document(str(out)).paragraphs]
     assert any(t.startswith("1. Introduction") for t in texts)
     assert any(t.startswith("1.1 Dataset") for t in texts)
@@ -142,12 +141,20 @@ def test_decimal_numbering_for_report(tmp_path):
     assert any(t.startswith("Table 1.") for t in texts)
 
 
-def test_apa_caption_has_separator(tmp_path):
-    out = tmp_path / "apa.docx"
-    render_paper(PaperSpec.model_validate(SPEC), out, style="apa")
-    texts = [p.text for p in Document(str(out)).paragraphs]
-    cap = next(t for t in texts if t.startswith("Table 1"))
-    assert cap == "Table 1\nModel performance"   # label and title on separate lines
+def test_caption_separator_is_honoured(tmp_path):
+    """IEEE puts the table title on its own line; the assignment style runs it on
+    after the label. Both come from the sheet's caption separator."""
+    ieee = tmp_path / "ieee.docx"
+    render_paper(PaperSpec.model_validate(SPEC), ieee, style="ieee")
+    cap = next(t for t in (p.text for p in Document(str(ieee)).paragraphs)
+               if t.startswith("TABLE I"))
+    assert cap == "TABLE I\nModel performance"   # label and title on separate lines
+
+    formal = tmp_path / "assignment.docx"
+    render_paper(PaperSpec.model_validate(SPEC), formal, style="assignment")
+    cap = next(t for t in (p.text for p in Document(str(formal)).paragraphs)
+               if t.startswith("Table 1"))
+    assert cap == "Table 1. Model performance"
 
 
 # ── generator (stubbed LLM) ─────────────────────────────────────────────────

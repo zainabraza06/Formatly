@@ -283,7 +283,7 @@ def test_unknown_style_still_renders_with_a_real_stylesheet():
                              router=_StubRouter(json.dumps(SINGLE_SPEC)))
     # typography falls back to a neutral sheet so the document is still renderable
     assert spec.resolved is True
-    assert spec.meta.style == "report"
+    assert spec.meta.style == "ieee"
 
 
 def test_known_styles_do_not_get_treated_as_unknown():

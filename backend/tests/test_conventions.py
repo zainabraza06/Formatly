@@ -79,15 +79,15 @@ def test_detects_ieee_conventions(tmp_path):
     assert found["abstract_as_heading"] is False
 
 
-# ── round trip: report (decimal, single column, gridded) ────────────────────
+# ── round trip: assignment (decimal, single column, gridded) ────────────────
 
-def test_detects_report_conventions(tmp_path):
-    found = _detect(_rendered("report", tmp_path))
+def test_detects_assignment_conventions(tmp_path):
+    found = _detect(_rendered("assignment", tmp_path))
 
     assert found["columns"] == 1
     assert found["heading_scheme"] == "decimal"
     assert found["table_borders"] == "grid"
-    assert found["table_header_fill"] == "1F3864"
+    assert found["table_header_fill"] == "EDEFF2"
     assert found["table_caption_position"] == "above"
     assert found["table_number_style"] == "arabic"
     assert found["figure_caption_position"] == "below"
@@ -95,38 +95,29 @@ def test_detects_report_conventions(tmp_path):
     assert found["abstract_as_heading"] is True
 
 
-# ── round trip: ACM ─────────────────────────────────────────────────────────
+# ── round trip: IEEE in one column ──────────────────────────────────────────
 
-def test_detects_acm_conventions(tmp_path):
-    found = _detect(_rendered("acm", tmp_path))
-    assert found["columns"] == 2
-    assert found["heading_scheme"] == "decimal"
-    assert found["table_caption_prefix"] == "Table {num}: "
-    assert found["figure_caption_prefix"] == "Figure {num}: "
-    assert found["figure_caption_position"] == "below"
-
-
-# ── round trip: APA (unnumbered headings, captions above) ───────────────────
-
-def test_detects_apa_conventions(tmp_path):
-    found = _detect(_rendered("apa", tmp_path))
+def test_detects_ieee_1col_conventions(tmp_path):
+    """Same conventions as IEEE, one column — the column count must be read from
+    the sample rather than assumed from the rest of the style."""
+    found = _detect(_rendered("ieee_1col", tmp_path))
     assert found["columns"] == 1
-    assert found["heading_scheme"] == "none"
-    assert found["figure_caption_position"] == "above"
-    assert found["number_references"] is False
+    assert found["heading_scheme"] == "roman_alpha"
+    assert found["table_number_style"] == "roman"
+    assert found["figure_caption_position"] == "below"
 
 
 # ── the full derivation now carries conventions, not just fonts ─────────────
 
-def test_derived_style_recovers_ieee_from_report_base(tmp_path):
-    """Derive from an IEEE sample while basing on `report` — the conventions must
-    come from the sample, not the base."""
+def test_derived_style_recovers_ieee_from_a_different_base(tmp_path):
+    """Derive from an IEEE sample while basing on the assignment sheet — the
+    conventions must come from the sample, not the base."""
     derived = derive_stylesheet_from_docx(
         _rendered("ieee", tmp_path), name="Learned IEEE",
-        base=get_stylesheet("report"), source_filename="ieee_sample.docx",
+        base=get_stylesheet("assignment"), source_filename="ieee_sample.docx",
     )
-    report = get_stylesheet("report")
-    assert report.page.columns == 1 and report.heading_scheme == "decimal"  # base differs
+    base = get_stylesheet("assignment")
+    assert base.page.columns == 1 and base.heading_scheme == "decimal"  # base differs
 
     assert derived.page.columns == 2                    # learned, not inherited
     assert derived.heading_scheme == "roman_alpha"
@@ -141,7 +132,8 @@ def test_derived_style_recovers_ieee_from_report_base(tmp_path):
 def test_derived_ieee_style_renders_like_ieee(tmp_path):
     """A style learned from an IEEE sample should itself produce IEEE-shaped output."""
     derived = derive_stylesheet_from_docx(
-        _rendered("ieee", tmp_path), name="Learned IEEE", base=get_stylesheet("report"),
+        _rendered("ieee", tmp_path), name="Learned IEEE",
+        base=get_stylesheet("assignment"),
     )
     out = tmp_path / "again.docx"
     render_paper(PaperSpec.model_validate(SPEC), out, style=derived)
