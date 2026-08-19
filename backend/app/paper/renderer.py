@@ -20,6 +20,8 @@ from docx.oxml.ns import qn
 from docx.shared import Inches, Pt, RGBColor
 
 from app.paper import stylesheet as ss
+from app.paper.codeshot import render_code_image
+from app.paper.equations import looks_like_math, render_equation_png
 from app.paper.figures import render_figure
 from app.paper.references import format_reference
 from app.paper.schema import (
@@ -79,7 +81,7 @@ def render_paper(spec: PaperSpec, out_path: str | Path,
             _list(doc, block, sheet)
         elif isinstance(block, Equation):
             counters["equation"] += 1
-            _equation(doc, block, counters["equation"], col_w, sheet)
+            _equation(doc, block, counters["equation"], col_w, assets, sheet)
         elif isinstance(block, Table):
             counters["table"] += 1
             _table(doc, block, counters["table"], sheet)
@@ -89,7 +91,7 @@ def render_paper(spec: PaperSpec, out_path: str | Path,
                 counters["figure"] += 1
         elif isinstance(block, Code):
             counters["code"] += 1
-            _code(doc, block, counters["code"], sheet)
+            _code(doc, block, counters["code"], assets, spec, sheet)
 
     if spec.references:
         _references(doc, spec, sheet)
@@ -313,13 +315,45 @@ def _list(doc: Document, block: ListBlock, sheet: StyleSheet) -> None:
         _styled_paragraph(doc, f"{bullet}{item}", style)
 
 
-def _equation(doc: Document, block: Equation, number: int, col_w: float, sheet: StyleSheet) -> None:
+def _equation(doc: Document, block: Equation, number: int, col_w: float,
+              assets: Path, sheet: StyleSheet) -> None:
+    """Set the equation, typeset as an image where the markup calls for it.
+
+    A fraction, a radical or a summation with limits cannot be written in a run
+    of text, so those are rasterised at the body's own point size and placed
+    inline. Plain equations stay as text, which keeps them selectable."""
     style = block.style or sheet.equation
     p = doc.add_paragraph()
-    _apply_para(p, style)
+
     if block.numbered:
-        p.paragraph_format.tab_stops.add_tab_stop(Inches(col_w), WD_TAB_ALIGNMENT.RIGHT)
-    _apply_run(p.add_run(block.text), style)
+        # The conventional numbered-equation layout: a centre tab at the middle
+        # of the measure and a right tab at its edge. Centring the paragraph
+        # instead would not survive the tab before the number — the equation
+        # would sit against the left margin.
+        _apply_para(p, style.merged(Style(alignment="left")))
+        stops = p.paragraph_format.tab_stops
+        stops.add_tab_stop(Inches(col_w / 2), WD_TAB_ALIGNMENT.CENTER)
+        stops.add_tab_stop(Inches(col_w), WD_TAB_ALIGNMENT.RIGHT)
+        _apply_run(p.add_run("\t"), style)
+    else:
+        _apply_para(p, style)
+
+    picture = None
+    if block.render == "image" or (block.render == "auto" and looks_like_math(block.text)):
+        try:
+            image, width_in = render_equation_png(
+                block.text, assets / f"eq_{number}.png", size_pt=style.size_pt or 11)
+            # leave room for the equation number rather than colliding with it
+            limit = col_w - (0.6 if block.numbered else 0.2)
+            picture = (image, min(width_in, max(0.5, limit)))
+        except Exception:
+            picture = None   # unparseable markup falls back to text, below
+
+    if picture:
+        p.add_run().add_picture(str(picture[0]), width=Inches(picture[1]))
+    else:
+        _apply_run(p.add_run(block.text), style)
+
     if block.numbered:
         _apply_run(p.add_run(f"\t({number})"), style.merged(Style(italic=False)))
 
@@ -339,12 +373,29 @@ def _code_caption(doc: Document, block: Code, number: int, sheet: StyleSheet) ->
                    _caption_title_style(cap_style, sheet))
 
 
-def _code(doc: Document, block: Code, number: int, sheet: StyleSheet) -> None:
+def _code(doc: Document, block: Code, number: int, assets: Path,
+          spec: PaperSpec, sheet: StyleSheet) -> None:
     """A listing is written one paragraph per line so it never reflows, shaded so
     it reads as a block, and held together so a column break cannot split it
-    down the middle."""
+    down the middle. Asked for `render: "image"`, it becomes an editor
+    screenshot instead — falling back to text if that cannot be produced."""
     style = block.style or sheet.code
     lines = (block.text or "").splitlines() or [""]
+
+    if block.render == "image":
+        try:
+            shot = render_code_image(
+                block.text, assets / f"code_{number}.png",
+                language=block.language, filename=block.filename, theme=block.theme)
+        except Exception:
+            shot = None
+        if shot and shot.exists():
+            if sheet.code_caption_position == "above":
+                _code_caption(doc, block, number, sheet)
+            _picture(doc, shot, spec, sheet.figure_body, span="column")
+            if sheet.code_caption_position == "below":
+                _code_caption(doc, block, number, sheet)
+            return
 
     if sheet.code_caption_position == "above":
         _code_caption(doc, block, number, sheet)
@@ -494,17 +545,24 @@ def _figure(doc: Document, block: Figure, number: int, assets: Path,
     if sheet.figure_caption_position == "above":
         _figure_caption(doc, block, number, sheet)
 
-    p = doc.add_paragraph()
-    _apply_para(p, block.style or sheet.figure_body)
-    pg = spec.meta.page
-    width = _column_width_in(spec) if block.span == "column" else (
-        pg.width_in - pg.margin_left_in - pg.margin_right_in
-    )
-    p.add_run().add_picture(str(image), width=Inches(max(1.0, width - 0.1)))
+    _picture(doc, image, spec, block.style or sheet.figure_body, block.span)
 
     if sheet.figure_caption_position == "below":
         _figure_caption(doc, block, number, sheet)
     return True
+
+
+def _picture(doc: Document, image: Path, spec: PaperSpec, style: Style,
+             span: str = "column") -> None:
+    """Place an image at the width of its container, minus a hair so a rounding
+    error cannot push it into an overflow."""
+    p = doc.add_paragraph()
+    _apply_para(p, style)
+    pg = spec.meta.page
+    width = _column_width_in(spec) if span == "column" else (
+        pg.width_in - pg.margin_left_in - pg.margin_right_in
+    )
+    p.add_run().add_picture(str(image), width=Inches(max(1.0, width - 0.1)))
 
 
 # ── references ──────────────────────────────────────────────────────────────

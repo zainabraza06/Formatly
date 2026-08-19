@@ -128,8 +128,11 @@ class ListBlock(BlockBase):
 
 class Equation(BlockBase):
     type: Literal["equation"] = "equation"
-    text: str
+    text: str                  # TeX math markup, e.g. "\frac{a}{b} = c"
     numbered: bool = True
+    # "auto" typesets it as an image when the markup needs it and sets it as
+    # text otherwise; "text" and "image" force one or the other
+    render: Literal["auto", "text", "image"] = "auto"
 
 
 class Table(BlockBase):
@@ -158,6 +161,10 @@ class Code(BlockBase):
     text: str = ""
     caption: str = ""          # what the listing does; rendered as "Listing n."
     filename: str = ""         # e.g. "regime_scalars.py", shown with the caption
+    # "text" sets the code in the document's monospace font; "image" renders it
+    # as an editor screenshot, for briefs that ask to see the code in the IDE
+    render: Literal["text", "image"] = "text"
+    theme: Literal["dark", "light"] = "dark"
     caption_style: Optional[Style] = None
 
 

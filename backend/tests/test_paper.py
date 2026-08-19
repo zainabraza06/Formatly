@@ -112,7 +112,9 @@ def test_render_each_style(tmp_path, style, cols, font):
     assert paras[0].runs[0].font.name == font
 
     assert len(doc.tables) == 1
-    assert len(doc.inline_shapes) == 1          # the bar chart rendered
+    # the bar chart, plus "E = mc^2" typeset as an image — a superscript cannot
+    # be shown in a run of text, so an equation carrying one is rasterised
+    assert len(doc.inline_shapes) == 2
     assert any("References" in p.text for p in paras)
 
 
