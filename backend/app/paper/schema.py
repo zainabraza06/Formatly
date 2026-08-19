@@ -48,6 +48,9 @@ class Style(BaseModel):
 class Series(BaseModel):
     name: str = ""
     values: list[float] = Field(default_factory=list)
+    # scatter only: this series' own x coordinates, when it does not share the
+    # chart's x axis (e.g. one point cloud per group)
+    x_values: list[float] = Field(default_factory=list)
 
 
 ChartKind = Literal["bar", "line", "pie", "scatter", "grouped_bar"]
@@ -83,6 +86,7 @@ class ChartSpec(BaseModel):
     y_label: str = ""
     labels: list[str] = Field(default_factory=list)      # x categories / pie slices
     values: list[float] = Field(default_factory=list)    # single-series data
+    x_values: list[float] = Field(default_factory=list)  # scatter: numeric x for `values`
     series: list[Series] = Field(default_factory=list)   # multi-series data
     source: str = ""      # which part of the user's data this came from
     rationale: str = ""   # why this chart type suits the data
@@ -91,6 +95,12 @@ class ChartSpec(BaseModel):
     @classmethod
     def _coerce_kind(cls, v: Any) -> Any:
         return normalize_chart_kind(v)
+
+    @property
+    def has_data(self) -> bool:
+        """Is there anything to plot? A chart without values renders as empty
+        axes — a blank box under a caption — so callers skip it instead."""
+        return bool(self.values) or any(s.values for s in self.series)
 
 
 # ── blocks ──────────────────────────────────────────────────────────────────

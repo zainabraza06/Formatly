@@ -22,6 +22,11 @@ _BG, _GRID, _TEXT, _AXIS = "#ffffff", "#e5e7eb", "#111827", "#6b7280"
 
 
 def render_figure(chart: PaperChart, out_path: Path) -> Path:
+    """Render `chart` to a PNG. Raises ValueError if the spec carries no
+    plottable values — empty axes under a caption read as a broken figure, so
+    the caller drops the figure instead of publishing a blank box."""
+    if not chart.has_data:
+        raise ValueError(f"chart {chart.title!r} has no values to plot")
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -100,29 +105,34 @@ def _grouped_bar(chart: PaperChart, out: Path) -> Path:
 
 
 def _scatter(chart: PaperChart, out: Path) -> Path:
-    """x from `labels` (numeric-coerced) or index; y from `values`.
-    Additional `series` are plotted as extra point sets."""
+    """x from `x_values`, else numeric-coerced `labels`, else the point index;
+    y from `values`. Each entry in `series` is an extra point cloud, which may
+    carry its own `x_values` when the groups do not share one x axis."""
     fig, ax = _fig()
 
-    def _as_x(labels: list[str], n: int) -> list[float]:
-        try:
-            return [float(v) for v in labels][:n]
-        except (TypeError, ValueError):
-            return list(range(n))
+    label_x: list[float] = []
+    try:
+        label_x = [float(v) for v in chart.labels]
+    except (TypeError, ValueError):
+        label_x = []
+
+    def _x_for(values: list[float], own: list[float]) -> list[float]:
+        for candidate in (own, label_x):
+            if len(candidate) >= len(values):
+                return list(candidate[:len(values)])
+        return list(range(len(values)))
 
     ys = [float(v) for v in chart.values]
     if ys:
-        xs = _as_x([str(x) for x in chart.labels], len(ys)) or list(range(len(ys)))
-        if len(xs) < len(ys):
-            xs = list(range(len(ys)))
+        xs = _x_for(ys, [float(v) for v in chart.x_values])
         ax.scatter(xs, ys, s=48, color=_PALETTE[0], edgecolor="white",
                    linewidth=0.8, zorder=3, label=chart.title or None)
 
     for i, s in enumerate(chart.series, start=1):
         sv = [float(v) for v in s.values]
-        sx = _as_x([str(x) for x in chart.labels], len(sv)) or list(range(len(sv)))
-        if len(sx) < len(sv):
-            sx = list(range(len(sv)))
+        if not sv:
+            continue
+        sx = _x_for(sv, [float(v) for v in s.x_values])
         ax.scatter(sx, sv, s=48, color=_PALETTE[i % len(_PALETTE)],
                    edgecolor="white", linewidth=0.8, zorder=3,
                    label=s.name or f"Series {i}")
@@ -132,7 +142,7 @@ def _scatter(chart: PaperChart, out: Path) -> Path:
     ax.set_ylabel(chart.y_label or "", fontsize=11, color=_AXIS, labelpad=8)
     ax.grid(True, color=_GRID, linewidth=0.8, zorder=0)
     ax.set_axisbelow(True)
-    if chart.series:
+    if any(s.values for s in chart.series):
         ax.legend(fontsize=9, frameon=False)
 
     fig.tight_layout(pad=1.6)

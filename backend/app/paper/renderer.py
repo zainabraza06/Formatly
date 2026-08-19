@@ -84,8 +84,9 @@ def render_paper(spec: PaperSpec, out_path: str | Path,
             counters["table"] += 1
             _table(doc, block, counters["table"], sheet)
         elif isinstance(block, Figure):
-            counters["figure"] += 1
-            _figure(doc, block, counters["figure"], assets, spec, sheet)
+            # only claim the next figure number if there is actually a figure
+            if _figure(doc, block, counters["figure"] + 1, assets, spec, sheet):
+                counters["figure"] += 1
         elif isinstance(block, Code):
             _code(doc, block, sheet)
 
@@ -430,7 +431,11 @@ def _figure_caption(doc: Document, block: Figure, number: int, sheet: StyleSheet
 
 
 def _figure(doc: Document, block: Figure, number: int, assets: Path,
-            spec: PaperSpec, sheet: StyleSheet) -> None:
+            spec: PaperSpec, sheet: StyleSheet) -> bool:
+    """Write the figure and its caption. Returns False — writing nothing — when
+    there is no image to show: a caption reading "Fig. 2." above a blank box (or
+    above nothing at all) is worse for the reader than no figure, and it would
+    also consume a figure number the surviving figures need."""
     image: Optional[Path] = None
     if block.chart:
         try:
@@ -440,20 +445,23 @@ def _figure(doc: Document, block: Figure, number: int, assets: Path,
     elif block.image_path and Path(block.image_path).exists():
         image = Path(block.image_path)
 
+    if not (image and image.exists()):
+        return False
+
     if sheet.figure_caption_position == "above":
         _figure_caption(doc, block, number, sheet)
 
-    if image and image.exists():
-        p = doc.add_paragraph()
-        _apply_para(p, block.style or sheet.figure_body)
-        pg = spec.meta.page
-        width = _column_width_in(spec) if block.span == "column" else (
-            pg.width_in - pg.margin_left_in - pg.margin_right_in
-        )
-        p.add_run().add_picture(str(image), width=Inches(max(1.0, width - 0.1)))
+    p = doc.add_paragraph()
+    _apply_para(p, block.style or sheet.figure_body)
+    pg = spec.meta.page
+    width = _column_width_in(spec) if block.span == "column" else (
+        pg.width_in - pg.margin_left_in - pg.margin_right_in
+    )
+    p.add_run().add_picture(str(image), width=Inches(max(1.0, width - 0.1)))
 
     if sheet.figure_caption_position == "below":
         _figure_caption(doc, block, number, sheet)
+    return True
 
 
 # ── references ──────────────────────────────────────────────────────────────
