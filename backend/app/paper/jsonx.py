@@ -28,32 +28,42 @@ _MAX_BACKOFF = 600
 
 
 def extract_json(text: str) -> Optional[dict[str, Any]]:
+    """The first JSON *object* in the model's reply, repaired if need be."""
+    return _extract(text, "{", dict)
+
+
+def extract_json_array(text: str) -> Optional[list[Any]]:
+    """The first JSON *array* in the model's reply, repaired if need be."""
+    return _extract(text, "[", list)
+
+
+def _extract(text: str, opener: str, want: type) -> Optional[Any]:
     if not text:
         return None
     s = _FENCE_CLOSE.sub("", _FENCE_OPEN.sub("", text.strip()))
 
-    for attempt in _variants(_first_balanced_object(s)):
-        obj = _loads(attempt)
+    for attempt in _variants(_first_balanced(s, opener)):
+        obj = _loads(attempt, want)
         if obj is not None:
             return obj
 
     # Nothing balanced parsed — the reply was cut off, or its tail is corrupt.
-    for repaired in _repairs(s):
+    for repaired in _repairs(s, opener):
         for attempt in _variants(repaired):
-            obj = _loads(attempt)
+            obj = _loads(attempt, want)
             if obj is not None:
                 return obj
     return None
 
 
-def _loads(s: Optional[str]) -> Optional[dict[str, Any]]:
+def _loads(s: Optional[str], want: type) -> Optional[Any]:
     if not s:
         return None
     try:
         obj = json.loads(s, strict=False)
     except (json.JSONDecodeError, ValueError, RecursionError):
         return None
-    return obj if isinstance(obj, dict) else None
+    return obj if isinstance(obj, want) else None
 
 
 def _variants(s: Optional[str]) -> Iterator[str]:
@@ -108,13 +118,15 @@ def _strip_comments(s: str) -> str:
     return "".join(out)
 
 
-def _first_balanced_object(s: str) -> Optional[str]:
-    """Return the first brace-balanced {...} substring, or None if truncated.
+def _first_balanced(s: str, opener: str = "{") -> Optional[str]:
+    """Return the first balanced {...} (or [...]) substring, or None if it was
+    never closed.
 
-    Scans character by character so nested objects and braces inside strings do
-    not confuse the match — the failure mode of a greedy regex.
+    Scans character by character so nested containers and braces inside strings
+    do not confuse the match — the failure mode of a greedy regex.
     """
-    start = s.find("{")
+    closer = "}" if opener == "{" else "]"
+    start = s.find(opener)
     if start < 0:
         return None
     depth = 0
@@ -132,9 +144,9 @@ def _first_balanced_object(s: str) -> Optional[str]:
         else:
             if c == '"':
                 in_str = True
-            elif c == "{":
+            elif c == opener:
                 depth += 1
-            elif c == "}":
+            elif c == closer:
                 depth -= 1
                 if depth == 0:
                     return s[start:i + 1]
@@ -218,9 +230,9 @@ def _close(prefix: str) -> Optional[str]:
     return prefix + closing
 
 
-def _repairs(s: str) -> Iterator[str]:
+def _repairs(s: str, opener: str = "{") -> Iterator[str]:
     """Candidate repairs of truncated output, most content first."""
-    start = s.find("{")
+    start = s.find(opener)
     if start < 0:
         return
     body = s[start:]

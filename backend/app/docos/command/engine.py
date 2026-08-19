@@ -9,7 +9,6 @@ Pipeline:
 """
 from __future__ import annotations
 
-import json
 import re
 from dataclasses import dataclass, field
 from typing import Any, Optional
@@ -17,6 +16,7 @@ from typing import Any, Optional
 from app.docos.actions import ActionBatch, ActionValidationError, validate_batch
 from app.docos.command.prompt import SYSTEM, build_user_message
 from app.docos.graph import DocumentGraph
+from app.paper.jsonx import extract_json
 
 
 @dataclass
@@ -169,10 +169,5 @@ def _first_number(text: str) -> Optional[float]:
 
 
 def _extract_json(text: str) -> Optional[dict[str, Any]]:
-    m = re.search(r"\{.*\}", text, flags=re.DOTALL)
-    if not m:
-        return None
-    try:
-        return json.loads(m.group(0))
-    except json.JSONDecodeError:
-        return None
+    """First JSON object in the model's reply, fences and truncation tolerated."""
+    return extract_json(text)

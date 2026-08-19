@@ -8,10 +8,9 @@ malformed JSON.
 """
 from __future__ import annotations
 
-import json
-import re
 from typing import Any
 
+from app.paper.jsonx import extract_json_array
 from app.schemas import ChartSpec, DocumentSection
 from app.services.router import AllProvidersFailed, get_router
 
@@ -43,25 +42,9 @@ DOCUMENT SECTIONS:
 
 
 def _extract_json(text: str) -> list[dict[str, Any]]:
-    """Best-effort extraction of a JSON array from arbitrary LLM output."""
-    text = text.strip()
-    # strip markdown fences
-    text = re.sub(r"^```[a-zA-Z]*\n?", "", text)
-    text = re.sub(r"\n?```$", "", text)
-    text = text.strip()
-
-    # find first [ ... ] block
-    m = re.search(r"\[.*\]", text, re.DOTALL)
-    if m:
-        text = m.group(0)
-
-    try:
-        data = json.loads(text)
-        if isinstance(data, list):
-            return data
-    except Exception:
-        pass
-    return []
+    """The chart list from the model's reply, fences and truncation tolerated."""
+    items = extract_json_array(text) or []
+    return [x for x in items if isinstance(x, dict)]
 
 
 def _validate_spec(raw: dict[str, Any]) -> ChartSpec | None:

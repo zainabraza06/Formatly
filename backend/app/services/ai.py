@@ -4,6 +4,7 @@ import json
 import re
 from typing import Any, Optional
 
+from app.paper.jsonx import extract_json
 from app.schemas import Tone
 
 _SYSTEM_DOC = (
@@ -49,14 +50,8 @@ def _apply_tone(text: str, tone: Tone) -> str:
 
 
 def _extract_json(text: str) -> dict[str, Any] | None:
-    """Best-effort extraction of the first JSON object from model output."""
-    m = re.search(r"\{.*\}", text, flags=re.DOTALL)
-    if not m:
-        return None
-    try:
-        return json.loads(m.group(0))
-    except json.JSONDecodeError:
-        return None
+    """First JSON object in the model's reply, fences and truncation tolerated."""
+    return extract_json(text)
 
 
 # ── public API ────────────────────────────────────────────────────────────────
