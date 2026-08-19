@@ -45,6 +45,7 @@ class StyleSheet(BaseModel):
     figure_caption: Style = Field(default_factory=Style)
     figure_body: Style = Field(default_factory=Style)
     code: Style = Field(default_factory=Style)
+    code_caption: Style = Field(default_factory=Style)
     reference: Style = Field(default_factory=Style)
     references_heading: Style = Field(default_factory=Style)
 
@@ -60,6 +61,10 @@ class StyleSheet(BaseModel):
     caption_title_italic: bool = False
     table_borders: BorderStyle = "grid"
     table_header_fill: Optional[str] = None    # hex fill for header cells, e.g. "1F3864"
+    code_caption_prefix: str = "Listing {num}."
+    code_caption_position: CaptionPos = "above"
+    code_caption_separator: str = " "
+    code_background: Optional[str] = None   # hex fill behind a code listing
     references_title: str = "References"
     abstract_lead: str = ""
     abstract_as_heading: bool = False

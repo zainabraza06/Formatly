@@ -156,6 +156,9 @@ class Code(BlockBase):
     type: Literal["code"] = "code"
     language: str = ""
     text: str = ""
+    caption: str = ""          # what the listing does; rendered as "Listing n."
+    filename: str = ""         # e.g. "regime_scalars.py", shown with the caption
+    caption_style: Optional[Style] = None
 
 
 Block = Annotated[

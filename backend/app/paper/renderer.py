@@ -67,7 +67,7 @@ def render_paper(spec: PaperSpec, out_path: str | Path,
         _apply_page_to_section(body, spec)
         _set_columns(body, sheet.page.columns, sheet.page.column_spacing_in)
 
-    counters = {"h1": 0, "h2": 0, "h3": 0, "table": 0, "figure": 0, "equation": 0}
+    counters = {"h1": 0, "h2": 0, "h3": 0, "table": 0, "figure": 0, "equation": 0, "code": 0}
     col_w = _column_width_in(spec)
 
     for block in spec.blocks:
@@ -88,7 +88,8 @@ def render_paper(spec: PaperSpec, out_path: str | Path,
             if _figure(doc, block, counters["figure"] + 1, assets, spec, sheet):
                 counters["figure"] += 1
         elif isinstance(block, Code):
-            _code(doc, block, sheet)
+            counters["code"] += 1
+            _code(doc, block, counters["code"], sheet)
 
     if spec.references:
         _references(doc, spec, sheet)
@@ -323,10 +324,52 @@ def _equation(doc: Document, block: Equation, number: int, col_w: float, sheet: 
         _apply_run(p.add_run(f"\t({number})"), style.merged(Style(italic=False)))
 
 
-def _code(doc: Document, block: Code, sheet: StyleSheet) -> None:
+def _code_caption(doc: Document, block: Code, number: int, sheet: StyleSheet) -> None:
+    """"Listing 3. regime_scalars.py — constrained autocorrelation." The filename
+    matters to a reader who has to find the code again in their own project."""
+    cap_style = block.caption_style or sheet.code_caption or sheet.figure_caption
+    label = sheet.code_caption_prefix.format(num=number)
+    p = doc.add_paragraph()
+    _apply_para(p, cap_style)
+    _apply_run(p.add_run(label), cap_style)
+
+    title = " — ".join(x for x in (block.filename, block.caption) if x)
+    if title:
+        _apply_run(p.add_run(sheet.code_caption_separator + title),
+                   _caption_title_style(cap_style, sheet))
+
+
+def _code(doc: Document, block: Code, number: int, sheet: StyleSheet) -> None:
+    """A listing is written one paragraph per line so it never reflows, shaded so
+    it reads as a block, and held together so a column break cannot split it
+    down the middle."""
     style = block.style or sheet.code
-    for line in (block.text or "").splitlines() or [""]:
-        _styled_paragraph(doc, line, style, rich=False)
+    lines = (block.text or "").splitlines() or [""]
+
+    if sheet.code_caption_position == "above":
+        _code_caption(doc, block, number, sheet)
+
+    for i, line in enumerate(lines):
+        # only the last line may be followed by a break, and only the first
+        # carries the space above — the rest sit flush as one visual block
+        edges = Style(
+            space_before_pt=style.space_before_pt if i == 0 else 0,
+            space_after_pt=style.space_after_pt if i == len(lines) - 1 else 0,
+            keep_with_next=i < len(lines) - 1,
+        )
+        p = _styled_paragraph(doc, line, style.merged(edges), rich=False)
+        if sheet.code_background:
+            _shade_paragraph(p, sheet.code_background.lstrip("#"))
+
+    if sheet.code_caption_position == "below":
+        _code_caption(doc, block, number, sheet)
+
+
+def _shade_paragraph(p, hex_fill: str) -> None:
+    shd = OxmlElement("w:shd")
+    shd.set(qn("w:val"), "clear")
+    shd.set(qn("w:fill"), hex_fill)
+    p.paragraph_format.element.get_or_add_pPr().append(shd)
 
 
 # ── tables ──────────────────────────────────────────────────────────────────

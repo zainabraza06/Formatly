@@ -44,6 +44,8 @@ APA = StyleSheet(
                          space_after_pt=0, line_spacing=LS),
     figure_body=Style(alignment="center", space_before_pt=6, space_after_pt=12,
                       first_line_indent_in=0.0),
+    code_caption=Style(font=F, size_pt=10, alignment="left", space_before_pt=8, space_after_pt=2,
+                       line_spacing=1.0, first_line_indent_in=0.0, keep_with_next=True),
     code=Style(font="Courier New", size_pt=10, alignment="left", left_indent_in=0.5,
                space_before_pt=6, space_after_pt=6, line_spacing=1.0, first_line_indent_in=0.0),
     reference=Style(font=F, size_pt=12, alignment="left", left_indent_in=0.5,

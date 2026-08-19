@@ -46,6 +46,7 @@ def _resolve_block(block: Block, sheet: StyleSheet) -> Block:
         b.style = sheet.equation.merged(b.style)
     elif isinstance(b, Code):
         b.style = sheet.code.merged(b.style)
+        b.caption_style = sheet.code_caption.merged(b.caption_style)
     elif isinstance(b, Table):
         b.style = sheet.table_cell.merged(b.style)
         b.caption_style = sheet.table_caption.merged(b.caption_style)
