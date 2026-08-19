@@ -213,7 +213,7 @@ def _close(prefix: str) -> Optional[str]:
     dangling `key:` with no value, and append the missing closers."""
     stack, in_str, escaped = _scan(prefix)
     if not stack:
-        return None  # already balanced — _first_balanced_object handled it
+        return None  # already balanced — _first_balanced handled it
     if escaped:
         prefix = prefix[:-1]        # a lone trailing backslash escapes nothing
     if in_str:
