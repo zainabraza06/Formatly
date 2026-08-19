@@ -6,16 +6,14 @@ explicit IEEE formatting onto every block via the stylesheet resolver.
 """
 from __future__ import annotations
 
-import json
-import re
 from typing import Any, Optional, Sequence
 
-from pydantic import ValidationError
+from pydantic import TypeAdapter, ValidationError
 
 from app.paper.agentic import Progress, generate_sectioned
 from app.paper.jsonx import extract_json
 from app.paper.prompt import DEFAULT_DEPTH, build_user_message, system_prompt
-from app.paper.schema import Author, PaperSpec
+from app.paper.schema import Author, Block, PaperSpec
 from app.paper.styles import (
     DEFAULT_STYLE, StyleLike, is_builtin, lookup_style, resolve_style,
 )
@@ -28,6 +26,18 @@ _MULTIPASS_DEPTHS = {"detailed"}
 
 class PaperGenerationError(Exception):
     pass
+
+
+_BLOCK = TypeAdapter(Block)
+
+# Sent back to the model after a reply we could not parse. Naming the failure is
+# what makes the second attempt different from the first.
+_RETRY_NOTE = (
+    "Your previous reply could not be parsed. Reply with the JSON object ONLY: "
+    "no explanation, no markdown fence, nothing before or after it. Make sure it "
+    "is complete and every brace is closed — if you are running short of room, "
+    "write fewer blocks rather than stopping in the middle of one."
+)
 
 
 def _needs_multipass(depth: str, override: Optional[bool]) -> bool:
@@ -99,15 +109,18 @@ def generate_paper(
             reference_example=reference_example, instructions=instructions,
             title_hint=title_hint, authors=authors,
         )
-        messages = [{"role": "system", "content": system_prompt(guide_id, depth, style_note)},
-                    {"role": "user", "content": user_msg}]
+        base = [{"role": "system", "content": system_prompt(guide_id, depth, style_note)},
+                {"role": "user", "content": user_msg}]
 
-        # A model occasionally returns unparseable JSON; a second sampling usually
-        # succeeds, so one retry beats losing the whole document.
+        # A model occasionally returns unparseable JSON; re-sampling usually
+        # succeeds, and telling it *why* the last reply failed makes the second
+        # and third attempts genuinely different from the first.
         raw = None
         provider = ""
         last_error = ""
-        for _attempt in range(2):
+        for attempt in range(3):
+            messages = base if attempt == 0 else (
+                base + [{"role": "user", "content": _RETRY_NOTE}])
             try:
                 text, provider, _elapsed = router.chat(messages, max_tokens=max_tokens)
             except Exception as exc:
@@ -118,10 +131,25 @@ def generate_paper(
             last_error = (text or "").strip()[:160]
 
         if raw is None:
-            raise PaperGenerationError(
-                "the model did not return usable JSON after a retry"
-                + (f" (started with: {last_error!r})" if last_error else "")
-            )
+            # No single reply survived. Rather than lose the document, write it
+            # the way `detailed` is written: plan first, then one pass per
+            # section, each small enough to finish inside the token ceiling.
+            if on_progress:
+                on_progress("retry", "writing the document in sections instead")
+            try:
+                raw, provider = generate_sectioned(
+                    raw_text=raw_text, style_guide=guide_id, depth=depth, doc_kind=doc_kind,
+                    router=router, attachments=attachments,
+                    reference_example=reference_example, instructions=instructions,
+                    title_hint=title_hint, authors=authors, on_progress=on_progress,
+                    style_note=style_note,
+                )
+            except Exception as exc:
+                raise PaperGenerationError(
+                    "the model did not return usable JSON, and writing it in "
+                    f"sections also failed ({exc})"
+                    + (f" — the reply started with: {last_error!r}" if last_error else "")
+                ) from exc
 
     if raw is None:
         raise PaperGenerationError("model did not return valid JSON")
@@ -129,7 +157,10 @@ def generate_paper(
     try:
         spec = PaperSpec.model_validate(raw)
     except ValidationError as exc:
-        raise PaperGenerationError(f"model JSON did not match the paper schema: {exc}") from exc
+        spec = _salvage_spec(raw)
+        if spec is None:
+            raise PaperGenerationError(
+                f"model JSON did not match the paper schema: {exc}") from exc
 
     if not spec.blocks:
         raise PaperGenerationError("model returned a paper with no content blocks")
@@ -143,15 +174,32 @@ def generate_paper(
     return resolve(spec, sheet), provider
 
 
-def _extract_json(text: str) -> Optional[dict[str, Any]]:
-    """Pull the first JSON object out of the model's reply, tolerating fences."""
-    if not text:
+def _salvage_spec(raw: dict[str, Any]) -> Optional[PaperSpec]:
+    """Build a spec from the parts of `raw` that do validate.
+
+    A truncated or sloppy reply typically leaves one malformed block behind —
+    a heading with no text, a figure with a mangled chart. That one block should
+    not cost the reader the other thirty, so it is dropped and the rest kept.
+    Falls back to shedding the metadata, then the references, before giving up.
+    """
+    if not isinstance(raw, dict):
         return None
-    cleaned = re.sub(r"^\s*```(?:json)?|```\s*$", "", text.strip(), flags=re.MULTILINE)
-    match = re.search(r"\{.*\}", cleaned, flags=re.DOTALL)
-    if not match:
+
+    good: list[Any] = []
+    for block in raw.get("blocks") or []:
+        try:
+            _BLOCK.validate_python(block)
+        except ValidationError:
+            continue
+        good.append(block)
+    if not good:
         return None
-    try:
-        return json.loads(match.group(0))
-    except json.JSONDecodeError:
-        return None
+
+    candidate = {**raw, "blocks": good}
+    for ladder in (candidate, {**candidate, "references": []},
+                   {"meta": raw.get("meta") or {}, "blocks": good}, {"blocks": good}):
+        try:
+            return PaperSpec.model_validate(ladder)
+        except ValidationError:
+            continue
+    return None
