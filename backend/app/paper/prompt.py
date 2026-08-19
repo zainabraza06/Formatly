@@ -100,7 +100,13 @@ JSON shape:
               "labels":["Group A","Group B"],"values":[12.4,9.8],
               "source":"the values given in the supplied material",
               "rationale":"a bar chart compares one quantity across discrete categories"}},
-    {"type":"code","language":"python","text":"..."}
+    {"type":"figure","caption":"Relationship between the two measures",
+     "chart":{"kind":"scatter","x_label":"Measure A","y_label":"Measure B",
+              "x_values":[0.2,0.7],"values":[0.9,0.3],
+              "series":[{"name":"group two","x_values":[0.3,0.8],"values":[0.5,0.4]}],
+              "source":"...","rationale":"..."}},
+    {"type":"code","language":"python","filename":"solver.py",
+     "caption":"what this listing does","text":"line one\\nline two"}
   ],
   "references": ["<formatted per the requested style>"],
   "visualization_plan": [
@@ -110,7 +116,32 @@ JSON shape:
 
 Do NOT emit an "Abstract" or "References" heading block — use meta.abstract and references.
 Headings are numbered automatically by the renderer; do not put numbers in heading text.
-Use "code" blocks only if the material actually contains or requires code.
+
+WHEN THE MATERIAL IS A BRIEF — a task, assignment, problem set, specification or
+set of questions rather than a body of findings to write up:
+- First read out every requirement it states: numbered tasks, sub-parts, "you must" or
+  "your submission should" sentences, deliverables, and any marking criteria. Treat that list
+  as the contract for the document.
+- Answer EVERY one of them. Do not silently drop a part because it is harder or because the
+  supplied material is thin — address it explicitly, and say plainly where an assumption was
+  needed. A document that covers eight of ten requirements has failed.
+- Structure the document so a marker can find each requirement: follow the brief's own order
+  and its own names for the parts, and give each substantial requirement its own section or
+  subsection.
+- Do the work, do not describe the work. Derive the mathematics step by step rather than
+  naming the method; write the code rather than explaining what the code would do; work the
+  numbers rather than saying they could be worked. Then explain the reasoning in prose so the
+  answer can be followed and marked.
+
+CODE — when the task calls for an implementation, or the user asks for snippets:
+- Emit real, complete, runnable code in "code" blocks. Give "language", and give "caption"
+  saying what the listing does; add "filename" when the code belongs in a named file.
+- Split a long program into several listings — one per function or per step — with the prose
+  explaining each in between. One unbroken wall of code is not an explanation.
+- Honour whatever environment the user names (a plain script, a VS Code project, a Colab or
+  Jupyter notebook, a specific language, framework or version): match its conventions, its
+  cell or file structure, and any imports and setup that environment needs.
+- If no code is called for, emit no "code" blocks.
 
 VISUALISATION RULES — important:
 - Scan ALL supplied material for anything chartable, whatever the domain. Look for:
@@ -125,6 +156,9 @@ VISUALISATION RULES — important:
   axis), "pie" (composition of a whole), "scatter" (relationship between two variables),
   "grouped_bar" (several quantities across the same categories — supply
   "series": [{"name":"Q1","values":[...]}, ...]).
+- A "scatter" needs BOTH coordinates: put the y values in "values" and the matching x values
+  in "x_values". To colour points by group, give one entry in "series" per group, each with
+  its own "x_values" and "values". A scatter with no values is dropped, not drawn.
 - If the material contains no chartable values, return an empty "visualization_plan" and no
   figure blocks. Do not fabricate data to justify a chart.
 
@@ -247,6 +281,10 @@ Return ONLY strict JSON. No markdown fences, no commentary.
 Rules:
 - Write ONLY the section you are given. Start with its level-1 heading. Do not write any
   other section, and do not restate what other sections cover.
+- If this section answers part of a brief, answer it in full: derive the mathematics, write
+  the code, work the numbers — do not describe what would be done. Real code goes in
+  {"type":"code","language":"...","filename":"...","caption":"...","text":"..."} blocks,
+  split one listing per function or step with the explanation in between.
 - Headings are numbered automatically; do not put numbers in heading text.
 - Include a table or figure ONLY if this section is the one that should carry it according to
   the visualisation plan you are given, and only using values present in the material.
