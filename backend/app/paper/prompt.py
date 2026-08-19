@@ -141,7 +141,21 @@ CODE — when the task calls for an implementation, or the user asks for snippet
 - Honour whatever environment the user names (a plain script, a VS Code project, a Colab or
   Jupyter notebook, a specific language, framework or version): match its conventions, its
   cell or file structure, and any imports and setup that environment needs.
+- Set "render":"image" on a listing ONLY when the brief asks to *see* the code in an editor —
+  "attach a screenshot of your VS Code", "show the notebook cell". That draws the listing as
+  an editor window with syntax highlighting and line numbers ("theme":"dark" or "light").
+  Otherwise leave it as text, which stays selectable and copyable.
 - If no code is called for, emit no "code" blocks.
+
+MATHEMATICS — when the task involves derivations, formulae or worked numbers:
+- Put each formula in an "equation" block, written as TeX math markup: \\frac{a}{b},
+  \\sqrt{x}, x^{2}, x_{i}, \\sum_{i=1}^{n}, \\int, \\alpha, \\bar{x}, \\pm, \\leq.
+  It is typeset properly — no LaTeX installation is involved, and you do not need to avoid
+  fractions, radicals, subscripts or limits.
+- Do not write markup in "paragraph" text; prose is set as plain text and the markup would
+  show through literally. Formulae belong in "equation" blocks.
+- Show the working: state the formula, substitute the actual values, then give the result.
+  A derivation that jumps from the formula to the answer cannot be marked.
 
 VISUALISATION RULES — important:
 - Scan ALL supplied material for anything chartable, whatever the domain. Look for:
@@ -285,6 +299,8 @@ Rules:
   the code, work the numbers — do not describe what would be done. Real code goes in
   {"type":"code","language":"...","filename":"...","caption":"...","text":"..."} blocks,
   split one listing per function or step with the explanation in between.
+- Formulae go in {"type":"equation","text":"..."} as TeX math markup (\\frac, \\sqrt, ^, _,
+  \\sum); they are typeset for you. Substitute the real values and show the result.
 - Headings are numbered automatically; do not put numbers in heading text.
 - Include a table or figure ONLY if this section is the one that should carry it according to
   the visualisation plan you are given, and only using values present in the material.
