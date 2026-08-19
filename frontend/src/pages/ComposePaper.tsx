@@ -23,29 +23,22 @@ const DEPTH_OPTIONS: { id: Depth; label: string; hint: string }[] = [
 
 // Suggestions only — the field is free text, so any document kind works.
 const DOC_KINDS = [
-  'paper', 'report', 'literature review', 'case study', 'proposal',
+  'paper', 'report', 'assignment', 'literature review', 'case study', 'proposal',
   'memo', 'white paper', 'technical documentation', 'essay', 'thesis chapter',
 ]
 
-// Sentinel for the "name your own style" option.
-const OTHER = '__other__'
 // Sentinel for a document kind not in the list.
 const CUSTOM_KIND = '__custom_kind__'
 
 const BUILTIN_STYLES: StyleSummary[] = [
   { id: 'ieee', name: 'IEEE Conference (2-Column)', columns: '2', builtin: 'true', derived_from: '', detected: '', heading_scheme: 'roman_alpha', table_borders: 'horizontal' },
   { id: 'ieee_1col', name: 'IEEE Conference (1-Column)', columns: '1', builtin: 'true', derived_from: '', detected: '', heading_scheme: 'roman_alpha', table_borders: 'horizontal' },
+  { id: 'assignment', name: 'Formal Assignment', columns: '1', builtin: 'true', derived_from: '', detected: '', heading_scheme: 'decimal', table_borders: 'grid' },
 ]
-
-// Established styles we have no stylesheet for, but whose conventions the writer
-// knows. Suggestions only — any name can be typed.
-const ESTABLISHED_STYLES: string[] = []
 
 export function ComposePaper() {
   const [styles, setStyles] = useState<StyleSummary[]>(BUILTIN_STYLES)
   const [style, setStyle] = useState('ieee')
-  const [isOther, setIsOther] = useState(false)
-  const [otherStyle, setOtherStyle] = useState('')
   const [docKind, setDocKind] = useState('paper')
   const [depth, setDepth] = useState<Depth>('standard')
 
@@ -99,13 +92,9 @@ export function ComposePaper() {
   // Everything goes in one box. The API still accepts labelled attachments —
   // the CLI uses them for files — but the UI should not make a person decide
   // which bucket their notes belong in.
-  // An "other" style is sent by name: the backend has no stylesheet for it, so it
-  // instructs the writer to follow that style's conventions instead.
-  const effectiveStyle = isOther ? (otherStyle.trim() || 'report') : style
-
   const buildRequest = (): ComposeRequest => ({
     raw_text: rawText,
-    style: effectiveStyle,
+    style,
     doc_kind: docKind,
     depth,
     reference_example: referenceExample.trim() || null,
@@ -147,9 +136,7 @@ export function ComposePaper() {
     }
   }
 
-  const styleName = isOther
-    ? (otherStyle.trim() || 'standard layout')
-    : (styles.find((s) => s.id === style)?.name || style)
+  const styleName = styles.find((s) => s.id === style)?.name || style
 
   return (
     <div className="space-y-4">
@@ -219,16 +206,8 @@ Interview: "The renewal price jumped 40% with no warning."`}
               </div>
 
               <select
-                value={isOther ? OTHER : style}
-                onChange={(e) => {
-                  const v = e.target.value
-                  if (v === OTHER) {
-                    setIsOther(true)
-                  } else {
-                    setIsOther(false)
-                    setStyle(v)
-                  }
-                }}
+                value={style}
+                onChange={(e) => setStyle(e.target.value)}
                 className={select}
               >
                 <optgroup label="Built-in">
@@ -245,30 +224,7 @@ Interview: "The renewal price jumped 40% with no warning."`}
                     ))}
                   </optgroup>
                 )}
-                <optgroup label="Other">
-                  <option value={OTHER} className={option}>Another style — name it…</option>
-                </optgroup>
               </select>
-
-              {isOther && (
-                <>
-                  <input
-                    value={otherStyle}
-                    onChange={(e) => setOtherStyle(e.target.value)}
-                    list="known-styles"
-                    placeholder="e.g. Chicago, Harvard, MLA, Vancouver, AMA"
-                    className={clsx(input, 'mt-2')}
-                  />
-                  <datalist id="known-styles">
-                    {ESTABLISHED_STYLES.map((s) => <option key={s} value={s} />)}
-                  </datalist>
-                  <span className="mt-1 block text-[10px] text-faint">
-                    Its citation format and section conventions will be followed. Page
-                    typography uses our standard layout — for exact typography, upload a
-                    sample under <span className="font-medium text-muted">Manage / add styles</span>.
-                  </span>
-                </>
-              )}
             </div>
 
             <Field label="Document kind">
