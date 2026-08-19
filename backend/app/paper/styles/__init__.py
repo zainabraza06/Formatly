@@ -8,15 +8,23 @@ from __future__ import annotations
 
 from typing import Optional, Union
 
+from app.paper.styles.assignment import ASSIGNMENT
 from app.paper.styles.base import StyleSheet
 from app.paper.styles.ieee import IEEE, IEEE_1COL
 
-_REGISTRY: dict[str, StyleSheet] = {s.id: s for s in (IEEE, IEEE_1COL)}
+_REGISTRY: dict[str, StyleSheet] = {s.id: s for s in (IEEE, IEEE_1COL, ASSIGNMENT)}
 
 # common things users type, mapped onto a built-in style
 _ALIASES = {
     "ieee": "ieee", "ieee conference": "ieee", "ieeetran": "ieee",
-    "ieee_1col": "ieee_1col",
+    "ieee_1col": "ieee_1col", "ieee 1 column": "ieee_1col",
+    # Coursework, lab reports and anything with code do not belong in a
+    # conference two-column layout, so they resolve to the formal style.
+    "assignment": "assignment", "assignments": "assignment",
+    "homework": "assignment", "coursework": "assignment",
+    "lab report": "assignment", "lab": "assignment",
+    "report": "assignment", "formal": "assignment", "official": "assignment",
+    "submission": "assignment", "document": "assignment",
     "default": "ieee", "": "ieee",
 }
 

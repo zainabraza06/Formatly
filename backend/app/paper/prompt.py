@@ -41,6 +41,16 @@ _STYLE_GUIDE: dict[str, str] = {
         "vol(issue), pages.\n"
         "Use APA in-text citation style (Author, Year) in the prose where a source is referenced."
     ),
+    "assignment": (
+        "Style: formal assignment / official document.\n"
+        "Structure the document the way submitted work is structured, adapted to the task: "
+        "commonly Introduction or Problem Statement, Approach or Method, Implementation, "
+        "Results, Discussion, Conclusion. Where the brief names its own sections or "
+        "deliverables, use the brief's names and order instead of inventing your own.\n"
+        "Write formally and in full sentences. Explain the reasoning, not just the outcome — "
+        "a marker has to follow how the answer was reached.\n"
+        "References numbered in order of first mention: [1] A. Author, \"Title,\" Publisher, Year."
+    ),
     "report": (
         "Style: professional report.\n"
         "Choose the sections the subject calls for. A common shape is Executive Summary, "
