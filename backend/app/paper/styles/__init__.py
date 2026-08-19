@@ -41,8 +41,24 @@ def get_stylesheet(name: str | None) -> StyleSheet:
 
 
 def is_builtin(name: str | None) -> bool:
+    """Does this name reach a built-in sheet, by id or by alias?"""
     key = (name or "").strip().lower()
     return _ALIASES.get(key, key) in _REGISTRY
+
+
+def _is_builtin_id(name: str | None) -> bool:
+    """A built-in sheet's own id, as opposed to one of the loose names that
+    merely point at it. The distinction decides who wins against a user's custom
+    style: an id does, an alias does not."""
+    return (name or "").strip().lower() in _REGISTRY
+
+
+def _custom(key: str, owner_id: Optional[str]) -> Optional[StyleSheet]:
+    if not owner_id:
+        return None
+    from app.paper.styles.store import get_style_store
+    store = get_style_store()
+    return store.get(key, owner_id) or store.get_by_name(key, owner_id)
 
 
 def lookup_style(style: StyleLike, owner_id: Optional[str] = None) -> Optional[StyleSheet]:
@@ -58,21 +74,20 @@ def lookup_style(style: StyleLike, owner_id: Optional[str] = None) -> Optional[S
     key = (style or "").strip()
     if not key:
         return None
-    if is_builtin(key):
+    if _is_builtin_id(key):
         return get_stylesheet(key)
 
-    if owner_id:
-        from app.paper.styles.store import get_style_store
-        store = get_style_store()
-        return store.get(key, owner_id) or store.get_by_name(key, owner_id)
-    return None
+    # A user who named their own style "Report" means their own style, so the
+    # custom store is consulted before the alias table — but after the built-in
+    # ids, which are ours and cannot be claimed.
+    return _custom(key, owner_id) or (get_stylesheet(key) if is_builtin(key) else None)
 
 
 def resolve_style(style: StyleLike, owner_id: Optional[str] = None) -> StyleSheet:
     """Resolve a style from an object, a built-in id/alias, or a user's custom style.
 
-    Order: explicit StyleSheet → built-in → user's custom (by id, then by name)
-    → default.
+    Order: explicit StyleSheet → built-in id → user's custom (by id, then by
+    name) → built-in alias → default.
     """
     if isinstance(style, StyleSheet):
         return style
@@ -80,15 +95,14 @@ def resolve_style(style: StyleLike, owner_id: Optional[str] = None) -> StyleShee
     key = (style or "").strip()
     if not key:
         return _REGISTRY[DEFAULT_STYLE]
-    if is_builtin(key):
+    if _is_builtin_id(key):
         return get_stylesheet(key)
 
-    if owner_id:
-        from app.paper.styles.store import get_style_store
-        store = get_style_store()
-        found = store.get(key, owner_id) or store.get_by_name(key, owner_id)
-        if found:
-            return found
+    found = _custom(key, owner_id)
+    if found:
+        return found
+    if is_builtin(key):
+        return get_stylesheet(key)
 
     return _REGISTRY[DEFAULT_STYLE]
 

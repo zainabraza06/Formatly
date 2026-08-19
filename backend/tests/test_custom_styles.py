@@ -49,7 +49,7 @@ def test_save_and_resolve_custom_style(store, monkeypatch):
     import app.paper.styles.store as store_mod
     monkeypatch.setattr(store_mod, "get_style_store", lambda: store)
 
-    custom = get_stylesheet("report").model_copy(deep=True)
+    custom = get_stylesheet("assignment").model_copy(deep=True)
     custom.name = "House Style"
     custom.body = custom.body.merged(Style(font="Georgia", size_pt=13))
     saved = store.save("usr_1", custom)
@@ -61,22 +61,39 @@ def test_save_and_resolve_custom_style(store, monkeypatch):
     assert resolve_style(saved.id, "usr_1").body.font == "Georgia"
     assert resolve_style("House Style", "usr_1").body.size_pt == 13
     # another user cannot see it → falls back to the default style
-    assert resolve_style(saved.id, "usr_2").id == "report"
+    assert resolve_style(saved.id, "usr_2").id == "ieee"
+
+
+def test_a_custom_style_beats_a_builtin_alias(store, monkeypatch):
+    """"Report" is one of the loose names pointing at the assignment sheet. A
+    user who names their own style "Report" means their own style — an alias
+    must not shadow it. A built-in's own id still wins, since it is ours."""
+    import app.paper.styles.store as store_mod
+    monkeypatch.setattr(store_mod, "get_style_store", lambda: store)
+
+    mine = get_stylesheet("ieee").model_copy(deep=True)
+    mine.name = "Report"
+    mine.body = mine.body.merged(Style(font="Georgia"))
+    store.save("usr_1", mine)
+
+    assert resolve_style("Report", "usr_1").body.font == "Georgia"
+    assert resolve_style("Report", "usr_2").id == "assignment"   # alias, for everyone else
+    assert resolve_style("assignment", "usr_1").id == "assignment"  # an id cannot be claimed
 
 
 def test_custom_style_appears_in_listing(store, monkeypatch):
     import app.paper.styles.store as store_mod
     monkeypatch.setattr(store_mod, "get_style_store", lambda: store)
 
-    sheet = get_stylesheet("apa").model_copy(deep=True)
-    sheet.name = "My APA Variant"
+    sheet = get_stylesheet("ieee").model_copy(deep=True)
+    sheet.name = "My IEEE Variant"
     store.save("usr_1", sheet)
 
     listed = list_styles(owner_id="usr_1")
     ids = {s["name"] for s in listed}
-    assert "My APA Variant" in ids
+    assert "My IEEE Variant" in ids
     assert "IEEE Conference" in ids          # built-ins still present
-    assert len(list_styles()) == 4           # built-ins only without an owner
+    assert len(list_styles()) == 3           # built-ins only without an owner
 
 
 def test_delete_custom_style(store):
@@ -91,7 +108,7 @@ def test_delete_custom_style(store):
 # ── rendering with a custom sheet ───────────────────────────────────────────
 
 def test_render_with_custom_stylesheet_object(tmp_path):
-    custom = get_stylesheet("report").model_copy(deep=True)
+    custom = get_stylesheet("assignment").model_copy(deep=True)
     custom.id = "house"
     custom.name = "House"
     custom.builtin = False
