@@ -126,7 +126,7 @@ EQUATIONS — include any formulae the material relies on, if any.
 # How much the model should write. Left to itself a model is markedly concise —
 # it stops well short of any token ceiling — so depth has to be asked for
 # explicitly rather than bought with a bigger max_tokens.
-DEPTHS = ("brief", "standard", "detailed")
+DEPTHS = ("brief", "standard")
 DEFAULT_DEPTH = "standard"
 
 _DEPTH_GUIDE: dict[str, str] = {

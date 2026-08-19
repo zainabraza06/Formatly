@@ -25,7 +25,7 @@ def extract_json(text: str) -> Optional[dict[str, Any]]:
     candidate = _first_balanced_object(s)
     for attempt in filter(None, (candidate, _TRAILING_COMMA.sub(r"\1", candidate or ""))):
         try:
-            obj = json.loads(attempt)
+            obj = json.loads(attempt, strict=False)
             if isinstance(obj, dict):
                 return obj
         except json.JSONDecodeError:

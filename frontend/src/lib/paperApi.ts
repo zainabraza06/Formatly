@@ -72,7 +72,7 @@ export interface Attachment {
   content: string
 }
 
-export type Depth = 'brief' | 'standard' | 'detailed'
+export type Depth = 'brief' | 'standard'
 
 export interface ComposeRequest {
   raw_text: string

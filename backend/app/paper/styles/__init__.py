@@ -8,24 +8,19 @@ from __future__ import annotations
 
 from typing import Optional, Union
 
-from app.paper.styles.acm import ACM
-from app.paper.styles.apa import APA
 from app.paper.styles.base import StyleSheet
-from app.paper.styles.ieee import IEEE
-from app.paper.styles.report import REPORT
+from app.paper.styles.ieee import IEEE, IEEE_1COL
 
-_REGISTRY: dict[str, StyleSheet] = {s.id: s for s in (IEEE, APA, ACM, REPORT)}
+_REGISTRY: dict[str, StyleSheet] = {s.id: s for s in (IEEE, IEEE_1COL)}
 
 # common things users type, mapped onto a built-in style
 _ALIASES = {
     "ieee": "ieee", "ieee conference": "ieee", "ieeetran": "ieee",
-    "apa": "apa", "apa7": "apa", "apa 7": "apa", "apa 7th": "apa",
-    "acm": "acm", "sigconf": "acm",
-    "report": "report", "technical report": "report", "business report": "report",
-    "default": "report", "": "report",
+    "ieee_1col": "ieee_1col",
+    "default": "ieee", "": "ieee",
 }
 
-DEFAULT_STYLE = "report"
+DEFAULT_STYLE = "ieee"
 
 StyleLike = Union[str, StyleSheet, None]
 

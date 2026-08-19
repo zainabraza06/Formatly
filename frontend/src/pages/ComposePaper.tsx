@@ -19,7 +19,6 @@ import {
 const DEPTH_OPTIONS: { id: Depth; label: string; hint: string }[] = [
   { id: 'brief', label: 'Brief', hint: '1–2 paragraphs per section' },
   { id: 'standard', label: 'Standard', hint: '2–3 paragraphs per section' },
-  { id: 'detailed', label: 'Detailed', hint: 'in-depth, written section by section — slower' },
 ]
 
 // Suggestions only — the field is free text, so any document kind works.
@@ -33,30 +32,21 @@ const OTHER = '__other__'
 // Sentinel for a document kind not in the list.
 const CUSTOM_KIND = '__custom_kind__'
 
-// The built-in styles are fixed and always available, so the dropdown seeds with
-// them and never collapses to a single option if the styles request hiccups. A
-// successful fetch replaces this with the server list (which also carries the
-// user's custom styles).
 const BUILTIN_STYLES: StyleSummary[] = [
-  { id: 'ieee', name: 'IEEE Conference', columns: '2', builtin: 'true', derived_from: '', detected: '', heading_scheme: 'roman_alpha', table_borders: 'horizontal' },
-  { id: 'apa', name: 'APA 7th Edition', columns: '1', builtin: 'true', derived_from: '', detected: '', heading_scheme: 'none', table_borders: 'horizontal' },
-  { id: 'acm', name: 'ACM (sigconf)', columns: '2', builtin: 'true', derived_from: '', detected: '', heading_scheme: 'decimal', table_borders: 'horizontal' },
-  { id: 'report', name: 'Technical Report', columns: '1', builtin: 'true', derived_from: '', detected: '', heading_scheme: 'decimal', table_borders: 'grid' },
+  { id: 'ieee', name: 'IEEE Conference (2-Column)', columns: '2', builtin: 'true', derived_from: '', detected: '', heading_scheme: 'roman_alpha', table_borders: 'horizontal' },
+  { id: 'ieee_1col', name: 'IEEE Conference (1-Column)', columns: '1', builtin: 'true', derived_from: '', detected: '', heading_scheme: 'roman_alpha', table_borders: 'horizontal' },
 ]
 
 // Established styles we have no stylesheet for, but whose conventions the writer
 // knows. Suggestions only — any name can be typed.
-const ESTABLISHED_STYLES = [
-  'Chicago', 'Harvard', 'MLA', 'Vancouver', 'AMA', 'Turabian',
-  'Oxford', 'AAA', 'ASA', 'Nature', 'Elsevier', 'Springer',
-]
+const ESTABLISHED_STYLES: string[] = []
 
 export function ComposePaper() {
   const [styles, setStyles] = useState<StyleSummary[]>(BUILTIN_STYLES)
-  const [style, setStyle] = useState('report')
+  const [style, setStyle] = useState('ieee')
   const [isOther, setIsOther] = useState(false)
   const [otherStyle, setOtherStyle] = useState('')
-  const [docKind, setDocKind] = useState('report')
+  const [docKind, setDocKind] = useState('paper')
   const [depth, setDepth] = useState<Depth>('standard')
 
   const [rawText, setRawText] = useState('')

@@ -47,7 +47,7 @@ def generate_paper(
     authors: Optional[list[dict[str, str]]] = None,
     owner_id: Optional[str] = None,
     router: Any = None,
-    max_tokens: int = 4000,
+    max_tokens: int = 8000,
     multipass: Optional[bool] = None,   # None = decide from depth
     on_progress: Optional[Progress] = None,
 ) -> tuple[PaperSpec, str]:
