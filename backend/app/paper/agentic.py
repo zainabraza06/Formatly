@@ -91,7 +91,7 @@ def generate_sectioned(
             section_blocks = _write_section(
                 section=section, outline=outline, title=meta.get("title", ""),
                 viz=viz, written=written, raw_text=raw_text, style_guide=style_guide,
-                depth=depth, router=router, attachments=attachments,
+                depth=depth, doc_kind=doc_kind, router=router, attachments=attachments,
                 instructions=instructions, style_note=style_note, cancel=cancel,
             )
         except GenerationCancelled:
@@ -127,7 +127,7 @@ def _plan(*, raw_text: str, style_guide: str, depth: str, doc_kind: str, router:
         title_hint=title_hint, authors=authors,
     )
     text, provider, _elapsed = router.chat(
-        [{"role": "system", "content": plan_system_prompt(style_guide, depth, style_note)},
+        [{"role": "system", "content": plan_system_prompt(style_guide, depth, style_note, doc_kind)},
          {"role": "user", "content": msg}],
         max_tokens=_PLAN_TOKENS,
         cancel=cancel,
@@ -140,7 +140,8 @@ def _plan(*, raw_text: str, style_guide: str, depth: str, doc_kind: str, router:
 
 def _write_section(*, section: dict[str, Any], outline: list[dict[str, Any]], title: str,
                    viz: list[dict[str, Any]], written: list[str], raw_text: str,
-                   style_guide: str, depth: str, router: Any, attachments, instructions,
+                   style_guide: str, depth: str, doc_kind: str, router: Any,
+                   attachments, instructions,
                    style_note: Optional[str] = None,
                    cancel: Optional[threading.Event] = None) -> list[dict[str, Any]]:
     msg = build_section_message(
@@ -150,7 +151,7 @@ def _write_section(*, section: dict[str, Any], outline: list[dict[str, Any]], ti
     )
     try:
         text, _provider, _elapsed = router.chat(
-            [{"role": "system", "content": section_system_prompt(style_guide, depth, style_note)},
+            [{"role": "system", "content": section_system_prompt(style_guide, depth, style_note, doc_kind)},
              {"role": "user", "content": msg}],
             max_tokens=_SECTION_TOKENS,
             cancel=cancel,

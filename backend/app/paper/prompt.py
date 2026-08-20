@@ -263,12 +263,42 @@ def named_style_guide(name: str) -> str:
     )
 
 
+# Coursework is not a research paper, whatever stylesheet it is set in. Someone
+# choosing IEEE for an assignment wants IEEE *typography*, not an abstract and a
+# reference list nobody asked for — so this follows the document kind, and
+# applies independently of the style.
+_COURSEWORK_KINDS = (
+    "assignment", "homework", "coursework", "lab report", "lab", "practical",
+    "problem set", "problem sheet", "exercise", "submission", "worksheet",
+    "project report", "semester project",
+)
+
+_COURSEWORK_GUIDE = (
+    "THIS IS SUBMITTED COURSEWORK, NOT A RESEARCH PAPER — this overrides the style guide "
+    "above wherever they disagree.\n"
+    "Leave meta.abstract EMPTY (\"\") and meta.keywords empty unless the brief explicitly "
+    "asks for an abstract or keywords. Return an EMPTY `references` list unless the brief "
+    "asks for references or the work genuinely cites sources. Do not add either merely to "
+    "look scholarly: a marker reading an assignment does not expect them, and an abstract "
+    "nobody asked for reads as padding.\n"
+    "Answer the brief in the brief's own order, using its own names for the parts."
+)
+
+
+def doc_kind_guide(doc_kind: str) -> str:
+    """Extra instruction implied by what the document *is*, not how it is set."""
+    kind = (doc_kind or "").strip().lower()
+    if any(k in kind for k in _COURSEWORK_KINDS):
+        return _COURSEWORK_GUIDE
+    return ""
+
+
 def system_prompt(style: str, depth: str = DEFAULT_DEPTH,
-                  style_note: Optional[str] = None) -> str:
+                  style_note: Optional[str] = None, doc_kind: str = "document") -> str:
     guide = named_style_guide(style_note) if style_note else _STYLE_GUIDE.get(
         style, _STYLE_GUIDE["report"])
     depth_guide = _DEPTH_GUIDE.get(depth, _DEPTH_GUIDE[DEFAULT_DEPTH])
-    return f"{_BASE}\n{guide}\n{depth_guide}\n"
+    return f"{_BASE}\n{guide}\n{depth_guide}\n{doc_kind_guide(doc_kind)}\n"
 
 
 # ── multi-pass (agentic) prompts ────────────────────────────────────────────
@@ -371,19 +401,20 @@ the JSON envelope — never wrap the JSON itself in ``` — not about the prose 
 
 
 def plan_system_prompt(style: str, depth: str = DEFAULT_DEPTH,
-                       style_note: Optional[str] = None) -> str:
+                       style_note: Optional[str] = None, doc_kind: str = "document") -> str:
     guide = named_style_guide(style_note) if style_note else _STYLE_GUIDE.get(
         style, _STYLE_GUIDE["report"])
     depth_guide = _DEPTH_GUIDE.get(depth, _DEPTH_GUIDE[DEFAULT_DEPTH])
-    return f"{PLAN_SYSTEM}\n{guide}\n{depth_guide}\n"
+    return f"{PLAN_SYSTEM}\n{guide}\n{depth_guide}\n{doc_kind_guide(doc_kind)}\n"
 
 
 def section_system_prompt(style: str, depth: str = DEFAULT_DEPTH,
-                          style_note: Optional[str] = None) -> str:
+                          style_note: Optional[str] = None,
+                          doc_kind: str = "document") -> str:
     guide = named_style_guide(style_note) if style_note else _STYLE_GUIDE.get(
         style, _STYLE_GUIDE["report"])
     depth_guide = _DEPTH_GUIDE.get(depth, _DEPTH_GUIDE[DEFAULT_DEPTH])
-    return f"{SECTION_SYSTEM}\n{guide}\n{depth_guide}\n"
+    return f"{SECTION_SYSTEM}\n{guide}\n{depth_guide}\n{doc_kind_guide(doc_kind)}\n"
 
 
 def build_plan_message(**kwargs: Any) -> str:

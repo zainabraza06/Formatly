@@ -114,7 +114,7 @@ def generate_paper(
             reference_example=reference_example, instructions=instructions,
             title_hint=title_hint, authors=authors,
         )
-        base = [{"role": "system", "content": system_prompt(guide_id, depth, style_note)},
+        base = [{"role": "system", "content": system_prompt(guide_id, depth, style_note, doc_kind)},
                 {"role": "user", "content": user_msg}]
 
         # A model occasionally returns unparseable JSON; re-sampling usually
