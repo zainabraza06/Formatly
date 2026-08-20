@@ -1,6 +1,6 @@
 """IEEE paper generator: raw material → validated, fully-styled PaperSpec.
 
-Uses the multi-provider router (Mistral → Groq → Gemini → OpenRouter → HuggingFace).
+Uses the provider router (Mistral).
 The model returns semantic JSON; we validate it against the schema and then stamp
 explicit IEEE formatting onto every block via the stylesheet resolver.
 """

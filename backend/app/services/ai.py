@@ -67,7 +67,7 @@ def generate_structured_document(
     """
     Returns {title, outline, sections:[{heading, content}]}.
 
-    Tries the multi-provider router (Groq -> Gemini -> OpenRouter -> HuggingFace).
+    Tries the provider router (Mistral).
     Falls back to deterministic generation when all providers are unavailable.
     """
     user_content = (

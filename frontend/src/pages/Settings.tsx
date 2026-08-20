@@ -15,9 +15,14 @@ export function Settings() {
             <span className="font-mono">VITE_API_URL</span> (default: http://127.0.0.1:8000; override via env or `.env.local`)
           </div>
           <div>
-            <span className="font-semibold text-ink">Groq:</span>{' '}
-            Set <span className="font-mono">GROQ_API_KEY</span> for AI generation (free at console.groq.com).
-            Optional: <span className="font-mono">GROQ_MODEL</span> (default: <span className="font-mono">llama-3.3-70b-versatile</span>).
+            <span className="font-semibold text-ink">Mistral:</span>{' '}
+            Set <span className="font-mono">MISTRAL_API_KEY</span> for AI generation (console.mistral.ai).
+            Optional: <span className="font-mono">MISTRAL_MODEL</span> (default: <span className="font-mono">mistral-large-latest</span>).
+          </div>
+          <div>
+            <span className="font-semibold text-ink">Request timeout:</span>{' '}
+            Derived from the token budget by default — a full document gets ~230s.
+            Override with <span className="font-mono">LLM_TIMEOUT</span> (seconds).
           </div>
         </div>
       </GlassCard>

@@ -6,7 +6,7 @@ them and **streams every step** over WebSockets, and a **version engine** provid
 undo / redo / rewind / branch / diff.
 
 > DocOS lives alongside the existing Formatly generator. It reuses Formatly's
-> multi-provider LLM router (`app/services/router.py`) as its pluggable AI layer.
+> LLM router (`app/services/router.py`) as its pluggable AI layer.
 
 ## Four engines
 
@@ -69,7 +69,7 @@ user command ─▶ AI Command Engine ─▶ Action[]  (validated JSON)
 
 ## Provider layer
 
-Reuses `app/services/router.py` — Groq → Gemini → OpenRouter → HuggingFace(Mistral),
+Reuses `app/services/router.py` — Mistral,
 each with per-provider cooldown fallback. The command engine forces strict-JSON output
 and validates it, so a provider that returns prose is treated as a failure and the next
 provider is tried; deterministic heuristics are the final fallback.

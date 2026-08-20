@@ -2,7 +2,7 @@
 
 Pipeline:
   1. Detect control intents (undo / redo / rewind / restore / compare) via rules.
-  2. Otherwise ask the multi-provider router for a STRICT-JSON action batch.
+  2. Otherwise ask the provider router for a STRICT-JSON action batch.
   3. Validate against the action schema. If the model returns prose or an invalid
      batch, fall back to deterministic heuristics so common commands still work
      offline.
