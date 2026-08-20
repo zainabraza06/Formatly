@@ -7,9 +7,10 @@ references are detected heuristically from styles and XML markers.
 """
 from __future__ import annotations
 
+import base64
 import io
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from docx import Document
 from docx.document import Document as _Doc
@@ -21,6 +22,18 @@ from app.docos.graph import DocumentGraph, Node, NodeType, Style
 
 _HEADING_STYLES = ("heading", "title")
 _REFERENCE_HINTS = ("reference", "bibliography", "works cited")
+
+# VML lives outside python-docx's namespace map, so these are spelled in full.
+_V_NS = "urn:schemas-microsoft-com:vml"
+_O_NS = "urn:schemas-microsoft-com:office:office"
+_V_IMAGEDATA = f"{{{_V_NS}}}imagedata"
+_V_RECT = f"{{{_V_NS}}}rect"
+_O_HR = f"{{{_O_NS}}}hr"
+
+# Images travel inline as data URIs so the editor can show the real picture
+# without a second round trip. Past this size that stops being reasonable and
+# the node keeps its place in the document without the bytes.
+_MAX_INLINE_IMAGE_BYTES = 4 * 1024 * 1024
 
 
 def parse_docx_bytes(data: bytes, *, title: str = "") -> DocumentGraph:
@@ -109,30 +122,36 @@ def _paragraph_node(para: _Paragraph, in_references: bool) -> Optional[Node]:
     explicit, rendered = _page_break_signals(para)
     breaks_before = (1 if explicit else 0) + rendered
 
+    images = _images(para)
+
     # dedicated page-break paragraph (a break with no real content)
-    if breaks_before and not text.strip() and not _has_drawing(para):
+    if breaks_before and not text.strip() and not images:
         return Node(type=NodeType.PAGE_BREAK,
                     metadata={"style_name": style_name, "breaks": breaks_before})
 
-    # image / figure: paragraph carrying a drawing
-    if _has_drawing(para):
-        node = Node(
-            type=NodeType.IMAGE,
-            content=text.strip(),
-            style=_paragraph_style(para),
-            metadata={"style_name": style_name, "is_figure": True},
-        )
-        # a figure is an image wrapped with a caption relationship
-        fig = Node(type=NodeType.FIGURE, children=[node], metadata={"style_name": style_name})
+    # figure: a paragraph carrying one or more actual pictures
+    if images:
+        style = _paragraph_style(para)
+        children = [
+            Node(
+                type=NodeType.IMAGE,
+                content=text.strip() if len(images) == 1 else "",
+                style=style,
+                metadata={"style_name": style_name, "is_figure": True, **img},
+            )
+            for img in images
+        ]
+        fig = Node(type=NodeType.FIGURE, children=children,
+                   metadata={"style_name": style_name})
         _apply_breaks(fig.metadata, breaks_before)
         return fig
 
-    # horizontal rule: empty paragraph with a bottom border
-    if not text.strip() and _has_bottom_border(para):
+    # horizontal rule: an empty paragraph with a rule border, or Word's VML rule
+    if not text.strip() and (_has_bottom_border(para) or _is_vml_rule(para)):
         return Node(type=NodeType.HORIZONTAL_RULE, metadata={"style_name": style_name})
 
     # skip truly empty spacer paragraphs (keep them out of the graph)
-    if not text.strip() and not _has_bottom_border(para):
+    if not text.strip():
         return None
 
     node_type = _classify_paragraph(lname, in_references)
@@ -260,9 +279,70 @@ def _attach_headers_footers(doc: _Doc, root: Node) -> None:
 # ── low-level XML probes ────────────────────────────────────────────────────
 
 def _has_drawing(para: _Paragraph) -> bool:
+    """Any drawing markup at all — a picture, but also a shape or a rule."""
     return bool(para._p.findall(".//" + qn("w:drawing"))) or bool(
         para._p.findall(".//" + qn("w:pict"))
     )
+
+
+def _image_rel_ids(para: _Paragraph) -> list[str]:
+    """Relationship ids of the *pictures* in this paragraph.
+
+    A picture is markup that points at an image part: a DrawingML blip, or a VML
+    shape with imagedata. Drawing markup on its own proves nothing — Word writes
+    a horizontal rule as a VML rect inside w:pict, and treating that as a picture
+    is what turned every rule in an imported document into a figure.
+    """
+    ids: list[str] = []
+    for blip in para._p.findall(".//" + qn("a:blip")):
+        rid = blip.get(qn("r:embed")) or blip.get(qn("r:link"))
+        if rid:
+            ids.append(rid)
+    for imagedata in para._p.findall(".//" + _V_IMAGEDATA):
+        rid = imagedata.get(qn("r:id"))
+        if rid:
+            ids.append(rid)
+    return ids
+
+
+def _images(para: _Paragraph) -> list[dict[str, Any]]:
+    """The pictures in this paragraph, each with its bytes inlined as a data URI.
+
+    A picture whose part cannot be read, or that is too large to inline, still
+    yields a node — the document keeps its shape, and only the pixels are
+    missing.
+    """
+    out: list[dict[str, Any]] = []
+    for rid in _image_rel_ids(para):
+        item: dict[str, Any] = {"rel_id": rid}
+        try:
+            part = para.part.related_parts[rid]
+            blob = part.blob
+            if len(blob) <= _MAX_INLINE_IMAGE_BYTES:
+                content_type = getattr(part, "content_type", "") or "image/png"
+                item["src"] = (f"data:{content_type};base64,"
+                               + base64.b64encode(blob).decode("ascii"))
+                item["bytes"] = len(blob)
+            else:
+                item["too_large"] = len(blob)
+        except (KeyError, AttributeError, ValueError):
+            pass    # a broken or external relationship; the node still stands
+        out.append(item)
+    return out
+
+
+def _is_vml_rule(para: _Paragraph) -> bool:
+    """Word's horizontal rule: an empty VML rect flagged as a rule."""
+    for pict in para._p.findall(".//" + qn("w:pict")):
+        for rect in pict.findall(".//" + _V_RECT):
+            if rect.get(_O_HR) is not None:
+                return True
+        # a rect or line carrying no image is decoration, not a picture
+        if pict.findall(".//" + _V_IMAGEDATA):
+            continue
+        if pict.findall(".//" + _V_RECT):
+            return True
+    return False
 
 
 def _page_break_signals(para: _Paragraph) -> tuple[bool, int]:

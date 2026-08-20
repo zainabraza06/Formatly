@@ -77,18 +77,52 @@ function renderBody(node: GraphNode, css: CSSProperties) {
     case 'page_break':
       return <div className="my-3 border-t-2 border-dashed border-neutral-300 text-center text-[8pt] uppercase tracking-widest text-neutral-400">page break</div>
     case 'figure':
-    case 'image':
+      // A figure holds its pictures as children; render them, not a stand-in.
       return (
-        <div className="my-1 flex items-center gap-3 rounded border border-dashed border-neutral-300 bg-neutral-50 px-4 py-6" style={{ backgroundColor: css.backgroundColor }}>
-          <span className="text-2xl">🖼️</span>
-          <span className="text-[10pt] text-neutral-600">{node.content || 'Figure'}</span>
+        <div className="my-2 space-y-2" style={{ backgroundColor: css.backgroundColor }}>
+          {node.children.map((child) => (
+            <ImageView key={child.id} node={child} css={styleToCss(child.style)} />
+          ))}
         </div>
       )
+    case 'image':
+      return <ImageView node={node} css={css} />
     case 'table':
       return <TableView node={node} />
     default:
       return <p style={{ color: '#1a1a1a', ...css }} className="text-[11pt] leading-relaxed">{node.content}</p>
   }
+}
+
+/** The real picture when the importer could read it, and an honest placeholder
+ *  when it could not — an image too large to inline, or a broken relationship. */
+function ImageView({ node, css }: { node: GraphNode; css: React.CSSProperties }) {
+  const src = typeof node.metadata?.src === 'string' ? node.metadata.src : ''
+  const tooLarge = typeof node.metadata?.too_large === 'number'
+
+  if (src) {
+    return (
+      <figure className="my-1" style={{ textAlign: css.textAlign }}>
+        <img
+          src={src}
+          alt={node.content || 'Figure'}
+          className="inline-block h-auto max-w-full rounded"
+        />
+        {node.content && (
+          <figcaption className="mt-1 text-[9pt] text-neutral-600">{node.content}</figcaption>
+        )}
+      </figure>
+    )
+  }
+
+  return (
+    <div className="my-1 flex items-center gap-3 rounded border border-dashed border-neutral-300 bg-neutral-50 px-4 py-6">
+      <span className="text-2xl">🖼️</span>
+      <span className="text-[10pt] text-neutral-600">
+        {node.content || (tooLarge ? 'Image too large to preview' : 'Image could not be read')}
+      </span>
+    </div>
+  )
 }
 
 function TableView({ node }: { node: GraphNode }) {
