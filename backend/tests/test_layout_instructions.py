@@ -124,3 +124,75 @@ def test_a_block_style_override_reaches_the_document(override, check, tmp_path):
     out = render_paper(spec, tmp_path / "d.docx")
     para = next(p for p in Document(str(out)).paragraphs if p.text == "Styled text.")
     assert check(para)
+
+
+# ── fitting a screenshot to the page ────────────────────────────────────────
+
+def _page_images(path):
+    """(width_pt, height_pt) of every image, page by page, via a real render."""
+    import shutil
+    import pymupdf
+    from app.docos.parser.paginator import docx_to_pdf
+    pdf = docx_to_pdf(Path(path).read_bytes())
+    doc = pymupdf.open(str(pdf))
+    return [[(i["bbox"][2] - i["bbox"][0], i["bbox"][3] - i["bbox"][1])
+             for i in page.get_image_info()] for page in doc]
+
+
+def _listing(lines: int) -> str:
+    return "\n".join(f'    cout << "line {i}" << endl;' for i in range(lines))
+
+
+def test_a_short_listing_stays_one_screenshot(tmp_path):
+    spec = PaperSpec.model_validate({
+        "meta": {"title": "T", "style": "assignment"},
+        "blocks": [{"type": "code", "language": "cpp", "text": _listing(8),
+                    "render": "image", "filename": "a.cpp", "caption": "short"}],
+    })
+    out = render_paper(spec, tmp_path / "d.docx")
+    captions = [p.text for p in Document(str(out)).paragraphs if p.text.startswith("Listing")]
+    assert captions == ["Listing 1. a.cpp — short"], "no part numbering when it fits"
+
+
+def test_a_long_listing_is_split_rather_than_shrunk(tmp_path):
+    spec = PaperSpec.model_validate({
+        "meta": {"title": "T", "style": "assignment"},
+        "blocks": [{"type": "code", "language": "cpp", "text": _listing(90),
+                    "render": "image", "filename": "a.cpp", "caption": "long"}],
+    })
+    out = render_paper(spec, tmp_path / "d.docx")
+    captions = [p.text for p in Document(str(out)).paragraphs if p.text.startswith("Listing")]
+    assert len(captions) > 1, "a listing too tall for one page should be split"
+    assert all("Listing 1." in c for c in captions), "the split is still one listing"
+    assert "part 1 of" in captions[0]
+
+
+def test_no_part_of_a_long_listing_overflows_its_page(tmp_path):
+    spec = PaperSpec.model_validate({
+        "meta": {"title": "T", "style": "assignment"},
+        "blocks": [{"type": "code", "language": "cpp", "text": _listing(90),
+                    "render": "image", "filename": "a.cpp", "caption": "long"}],
+    })
+    out = render_paper(spec, tmp_path / "d.docx")
+    text_w, text_h = (8.5 - 2.0) * 72, (11 - 2.0) * 72
+    seen = 0
+    for page in _page_images(out):
+        for w, h in page:
+            seen += 1
+            assert w <= text_w + 1, f"image {w}pt wider than the {text_w}pt text area"
+            assert h <= text_h + 1, f"image {h}pt taller than the {text_h}pt text area"
+    assert seen >= 2
+
+
+def test_a_split_listing_keeps_a_usable_width(tmp_path):
+    """Shrinking one image to fit a page makes the code unreadable; splitting
+    keeps every part near the full column width."""
+    spec = PaperSpec.model_validate({
+        "meta": {"title": "T", "style": "assignment"},
+        "blocks": [{"type": "code", "language": "cpp", "text": _listing(90),
+                    "render": "image", "filename": "a.cpp", "caption": "long"}],
+    })
+    out = render_paper(spec, tmp_path / "d.docx")
+    widths = [w for page in _page_images(out) for w, _ in page]
+    text_w = (8.5 - 2.0) * 72
+    assert widths and min(widths) > text_w * 0.6, f"parts too narrow to read: {widths}"

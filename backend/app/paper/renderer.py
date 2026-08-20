@@ -7,6 +7,7 @@ Swap the stylesheet and the same JSON renders as IEEE, APA, ACM or a report.
 """
 from __future__ import annotations
 
+import math
 import re
 import tempfile
 from pathlib import Path
@@ -419,7 +420,8 @@ def _equation(doc: Document, block: Equation, number: int, col_w: float,
         _apply_run(p.add_run(f"\t({number})"), style.merged(Style(italic=False)))
 
 
-def _code_caption(doc: Document, block: Code, number: int, sheet: StyleSheet) -> None:
+def _code_caption(doc: Document, block: Code, number: int, sheet: StyleSheet,
+                  part: int = 0, total: int = 1) -> None:
     """"Listing 3. regime_scalars.py — constrained autocorrelation." The filename
     matters to a reader who has to find the code again in their own project."""
     cap_style = block.caption_style or sheet.code_caption or sheet.figure_caption
@@ -429,6 +431,10 @@ def _code_caption(doc: Document, block: Code, number: int, sheet: StyleSheet) ->
     _apply_run(p.add_run(label), cap_style)
 
     title = " — ".join(x for x in (block.filename, block.caption) if x)
+    if total > 1:
+        # A split listing still reads as one listing, so the number does not
+        # advance — the part says which piece of it this is.
+        title = f"{title} (part {part + 1} of {total})" if title else             f"(part {part + 1} of {total})"
     if title:
         _apply_run(p.add_run(sheet.code_caption_separator + title),
                    _caption_title_style(cap_style, sheet))
@@ -456,6 +462,63 @@ def _looks_like_output(caption: str) -> bool:
                                 "terminal", "session", "startup"))
 
 
+def _render_shot(block: Code, text: str, out: Path) -> Path:
+    if _is_terminal(block):
+        return render_terminal_image(text, out, title=block.filename or "Command Prompt",
+                                     theme=block.theme)
+    return render_code_image(text, out, language=block.language,
+                             filename=block.filename, theme=block.theme)
+
+
+def _code_screenshots(block: Code, number: int, assets: Path,
+                      spec: PaperSpec) -> list[Path]:
+    """Render the listing as one screenshot, or several if one will not fit.
+
+    A long program scaled down to a single page-height image is unreadable —
+    the glyphs end up a couple of points tall. Splitting it instead keeps every
+    part at the full column width, which is the width that makes it legible,
+    and each part lands on a page of its own.
+    """
+    try:
+        whole = _render_shot(block, block.text, assets / f"code_{number}.png")
+    except Exception:
+        return []
+    if not whole.exists():
+        return []
+
+    pg = spec.meta.page
+    width = max(1.0, _column_width_in(spec) - 0.1)
+    available_h = (pg.height_in - pg.margin_top_in - pg.margin_bottom_in
+                   - _CAPTION_ALLOWANCE_IN)
+    try:
+        from PIL import Image as _Image
+        with _Image.open(str(whole)) as img:
+            natural_w, natural_h = img.size
+    except Exception:
+        return [whole]
+
+    if not (natural_w and natural_h and available_h > 0):
+        return [whole]
+
+    parts_needed = math.ceil((width * (natural_h / natural_w)) / available_h)
+    lines = block.text.splitlines()
+    if parts_needed <= 1 or len(lines) < 2 * parts_needed:
+        return [whole]   # already fits, or too few lines to split usefully
+
+    per_part = math.ceil(len(lines) / parts_needed)
+    shots: list[Path] = []
+    for i in range(0, len(lines), per_part):
+        chunk = "\n".join(lines[i:i + per_part])
+        if not chunk.strip():
+            continue
+        try:
+            shots.append(_render_shot(block, chunk,
+                                      assets / f"code_{number}_{len(shots)}.png"))
+        except Exception:
+            return [whole]   # a failed chunk is worse than one small picture
+    return shots or [whole]
+
+
 def _code(doc: Document, block: Code, number: int, assets: Path,
           spec: PaperSpec, sheet: StyleSheet) -> bool:
     """A listing is written one paragraph per line so it never reflows, shaded so
@@ -469,23 +532,14 @@ def _code(doc: Document, block: Code, number: int, assets: Path,
     lines = block.text.splitlines()
 
     if block.render == "image":
-        try:
-            if _is_terminal(block):
-                shot = render_terminal_image(
-                    block.text, assets / f"code_{number}.png",
-                    title=block.filename or "Command Prompt", theme=block.theme)
-            else:
-                shot = render_code_image(
-                    block.text, assets / f"code_{number}.png",
-                    language=block.language, filename=block.filename, theme=block.theme)
-        except Exception:
-            shot = None
-        if shot and shot.exists():
-            if sheet.code_caption_position == "above":
-                _code_caption(doc, block, number, sheet)
-            _picture(doc, shot, spec, sheet.figure_body, span="column")
-            if sheet.code_caption_position == "below":
-                _code_caption(doc, block, number, sheet)
+        shots = _code_screenshots(block, number, assets, spec)
+        if shots:
+            for i, shot in enumerate(shots):
+                if sheet.code_caption_position == "above":
+                    _code_caption(doc, block, number, sheet, part=i, total=len(shots))
+                _picture(doc, shot, spec, sheet.figure_body, span="column")
+                if sheet.code_caption_position == "below":
+                    _code_caption(doc, block, number, sheet, part=i, total=len(shots))
             return True
 
     if sheet.code_caption_position == "above":
@@ -644,17 +698,46 @@ def _figure(doc: Document, block: Figure, number: int, assets: Path,
     return True
 
 
+# Room left for the caption above or below a picture, plus enough slack that a
+# full-height image is not the last straw that pushes the page over.
+_CAPTION_ALLOWANCE_IN = 1.0
+
+
 def _picture(doc: Document, image: Path, spec: PaperSpec, style: Style,
              span: str = "column") -> None:
-    """Place an image at the width of its container, minus a hair so a rounding
-    error cannot push it into an overflow."""
+    """Place an image so that it fits the page, not merely the column.
+
+    Scaling to the container width alone is what leaves a blank page: a tall
+    listing becomes taller than the text area, Word cannot fit it where it
+    stands, and pushes the whole picture to the next page. So the height is
+    capped too, and whichever constraint binds first decides the size.
+    """
     p = doc.add_paragraph()
     _apply_para(p, style)
     pg = spec.meta.page
+
     width = _column_width_in(spec) if span == "column" else (
         pg.width_in - pg.margin_left_in - pg.margin_right_in
     )
-    p.add_run().add_picture(str(image), width=Inches(max(1.0, width - 0.1)))
+    width = max(1.0, width - 0.1)   # a hair under, so rounding cannot overflow
+
+    available_h = (pg.height_in - pg.margin_top_in - pg.margin_bottom_in
+                   - _CAPTION_ALLOWANCE_IN)
+    run = p.add_run()
+    try:
+        from PIL import Image as _Image
+        with _Image.open(str(image)) as img:
+            natural_w, natural_h = img.size
+        if natural_w and natural_h and available_h > 0:
+            if width * (natural_h / natural_w) > available_h:
+                # Height binds: scale by it and let the width follow, so the
+                # picture lands on the page it was written on.
+                run.add_picture(str(image), height=Inches(available_h))
+                return
+    except Exception:
+        pass    # unreadable dimensions — fall back to fitting the width
+
+    run.add_picture(str(image), width=Inches(width))
 
 
 # ── references ──────────────────────────────────────────────────────────────
