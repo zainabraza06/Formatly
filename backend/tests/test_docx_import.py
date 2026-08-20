@@ -245,3 +245,48 @@ def test_an_embedded_picture_is_still_inlined():
     image = _first_image(_render(doc))
     assert image.metadata["src"].startswith("data:image/")
     assert "external" not in image.metadata
+
+
+# ── the rule Word draws as a picture ────────────────────────────────────────
+
+_NS = ('xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" '
+       'xmlns:v="urn:schemas-microsoft-com:vml" '
+       'xmlns:o="urn:schemas-microsoft-com:office:office" '
+       'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"')
+
+# Word's Horizontal Line gallery inserts a *picture of a line*: a VML shape that
+# references an image and is flagged o:hr. It is a rule, not a figure.
+_GALLERY_RULE = (
+    f'<w:r {_NS}><w:pict>'
+    '<v:shape id="_x0000_i1026" type="#_x0000_t75" style="width:451pt;height:1.5pt"'
+    '         o:hr="t" o:hrstd="t" o:hralign="center">'
+    '<v:imagedata r:id="rIdMissing" o:title="line"/>'
+    '</v:shape></w:pict></w:r>'
+)
+
+
+def test_a_rule_drawn_as_a_picture_is_a_rule():
+    doc = Document()
+    doc.add_paragraph("before")
+    doc.add_paragraph()._p.append(parse_xml(_GALLERY_RULE))
+    doc.add_paragraph("after")
+
+    types = _types(_render(doc))
+    assert types == [NodeType.BODY.value, NodeType.HORIZONTAL_RULE.value, NodeType.BODY.value]
+
+
+def test_such_a_rule_never_shows_as_a_broken_figure():
+    """It references an image that is not there — but it is decoration, and a
+    false "could not be read" in the middle of the text is worse than useless."""
+    doc = Document()
+    doc.add_paragraph()._p.append(parse_xml(_GALLERY_RULE))
+
+    nodes = _render(doc)
+    assert not any(n.type == NodeType.IMAGE for node in nodes for n in node.walk())
+    assert not any(n.metadata.get("unreadable") for node in nodes for n in node.walk())
+
+
+def test_a_real_picture_is_not_swept_up_by_the_rule_check():
+    doc = Document()
+    doc.add_picture(_png(), width=Inches(1))
+    assert NodeType.FIGURE.value in _types(_render(doc))

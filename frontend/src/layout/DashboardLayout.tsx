@@ -73,9 +73,10 @@ export function DashboardLayout({
   onToggleTheme: () => void
 }) {
   // Open by default on desktop (a real column), closed on mobile (a drawer).
-  const [navOpen, setNavOpen] = useState(
-    () => (typeof window !== 'undefined' ? window.innerWidth >= 1024 : true),
-  )
+  // Closed by default at every size. The menu floats over the content, so
+  // leaving it open would cover the left of the document rather than sit beside
+  // it — and the content area is the reason the page exists.
+  const [navOpen, setNavOpen] = useState(false)
   const { user, logout } = useAuth()
 
   return (
@@ -88,19 +89,19 @@ export function DashboardLayout({
           <button
             aria-label="Close menu"
             onClick={() => setNavOpen(false)}
-            className="fixed inset-0 z-40 cursor-default bg-ink/30 lg:hidden"
+            className="fixed inset-0 z-40 cursor-default bg-ink/20"
           />
         )}
 
-        {/* ── Sidebar: a real column on desktop, a solid drawer on mobile ── */}
+        {/* ── Sidebar: a drawer that floats over the content at every size ──
+            It used to become a static column on desktop, which took its width
+            out of the page — opening the menu squeezed the document canvas and
+            reflowed everything in it. Floating leaves the content exactly where
+            it was, so opening and closing the menu never re-lays out the page. */}
         <aside
           className={clsx(
-            'fixed inset-y-0 left-0 z-50 flex w-64 shrink-0 flex-col border-r border-line bg-surface px-3 py-4 transition-transform duration-200',
-            // Open: overlay drawer on mobile, static column on desktop.
-            // Closed: off-screen on mobile, removed from the layout on desktop.
-            navOpen
-              ? 'translate-x-0 lg:static lg:z-auto lg:flex lg:translate-x-0'
-              : '-translate-x-full lg:hidden',
+            'fixed inset-y-0 left-0 z-50 flex w-64 shrink-0 flex-col border-r border-line bg-surface px-3 py-4 shadow-xl transition-transform duration-200',
+            navOpen ? 'translate-x-0' : '-translate-x-full',
           )}
         >
           {/* Brand + close (close is drawer-only, hidden on desktop) */}

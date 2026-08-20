@@ -129,6 +129,12 @@ def _paragraph_node(para: _Paragraph, in_references: bool) -> Optional[Node]:
         return Node(type=NodeType.PAGE_BREAK,
                     metadata={"style_name": style_name, "breaks": breaks_before})
 
+    # A rule drawn as a picture, or decoration whose image will not resolve:
+    # an empty paragraph with nothing readable in it is not a figure, and
+    # showing it as a broken one puts a false alarm in the middle of the text.
+    if not text.strip() and (_has_bottom_border(para) or _is_vml_rule(para)):
+        return Node(type=NodeType.HORIZONTAL_RULE, metadata={"style_name": style_name})
+
     # figure: a paragraph carrying one or more actual pictures
     if images:
         style = _paragraph_style(para)
@@ -362,15 +368,20 @@ def _resolve_image(part: Any, rid: str) -> dict[str, Any]:
 
 
 def _is_vml_rule(para: _Paragraph) -> bool:
-    """Word's horizontal rule: an empty VML rect flagged as a rule."""
+    """Is this paragraph one of Word's horizontal rules?
+
+    Word writes a rule two ways, and both are drawing markup. The plain one is a
+    VML rect. The one from the Horizontal Line gallery is a *picture of a line* —
+    a VML shape carrying imagedata — so "it references an image" cannot be the
+    test. What both share is the o:hr flag, which says outright that the shape is
+    a rule, wherever it sits in the markup.
+    """
     for pict in para._p.findall(".//" + qn("w:pict")):
-        for rect in pict.findall(".//" + _V_RECT):
-            if rect.get(_O_HR) is not None:
+        for element in pict.iter():
+            if element.get(_O_HR) is not None:
                 return True
-        # a rect or line carrying no image is decoration, not a picture
-        if pict.findall(".//" + _V_IMAGEDATA):
-            continue
-        if pict.findall(".//" + _V_RECT):
+        # a rect with no image behind it is decoration, not a picture
+        if not pict.findall(".//" + _V_IMAGEDATA) and pict.findall(".//" + _V_RECT):
             return True
     return False
 
