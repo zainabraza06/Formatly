@@ -1,11 +1,9 @@
 import type {
   AnalyzeChartsResponse,
   ChartSpec,
-  Draft,
   GenerateRequest,
   GenerateResponse,
   RecentDocument,
-  Tone,
 } from '../types/api'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000'
@@ -39,26 +37,7 @@ export const api = {
       body: JSON.stringify(payload),
     }),
 
-  recentDocuments: () => http<RecentDocument[]>('/documents/recent'),
-
-  getDraft: (documentId: string) => http<Draft>(`/documents/${documentId}/draft`),
-
-  saveDraft: (documentId: string, draft: Draft) =>
-    http<{ status: string }>(`/documents/${documentId}/draft`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(draft),
-    }),
-
-  rewriteSection: (documentId: string, sectionId: string, tone: Tone) =>
-    http<{ status: string; section: { id: string; heading: string; content: string } }>(
-      `/documents/${documentId}/sections/${sectionId}/rewrite`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(tone),
-      },
-    ),
+  recentDocuments: () => http<RecentDocument[]>('/paper/recent'),
 
   // ── Chart endpoints ──────────────────────────────────────────────────────
   analyzeCharts: (documentId: string) =>
@@ -80,7 +59,7 @@ export const api = {
     `${API_URL}/documents/${documentId}/charts/${index}/image`,
 
   // ── Export URLs ──────────────────────────────────────────────────────────
-  exportDocxUrl:  (documentId: string) => `${API_URL}/documents/${documentId}/export/docx`,
-  exportPdfUrl:   (documentId: string) => `${API_URL}/documents/${documentId}/export/pdf`,
+  exportDocxUrl:  (documentId: string) => `${API_URL}/paper/${documentId}/export/docx`,
+  exportPdfUrl:   (documentId: string) => `${API_URL}/paper/${documentId}/export/pdf`,
   exportExcelUrl: (documentId: string) => `${API_URL}/documents/${documentId}/export/excel`
 }

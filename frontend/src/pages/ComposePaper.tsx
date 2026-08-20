@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import clsx from 'clsx'
 import { GlassCard } from '../components/GlassCard'
+import { docosApi } from '../lib/docosApi'
 import { DocumentPreview } from '../components/paper/DocumentPreview'
 import { GenerationStatus } from '../components/paper/GenerationStatus'
 import { InstructionRefiner, RefineButton } from '../components/paper/InstructionRefiner'
@@ -45,6 +47,8 @@ export function ComposePaper() {
   const [rawText, setRawText] = useState('')
   const [instructions, setInstructions] = useState('')
   const [refining, setRefining] = useState(false)
+  const [handingOff, setHandingOff] = useState(false)
+  const navigate = useNavigate()
   const [titleHint, setTitleHint] = useState('')
   const [authorName, setAuthorName] = useState('')
   const [authorAffil, setAuthorAffil] = useState('')
@@ -153,6 +157,25 @@ export function ComposePaper() {
         runRef.current = null
         setBusy('idle')
       }
+    }
+  }
+
+  // Compose finishes at a .docx; Document OS starts from one. Rendering the
+  // spec and importing it here saves the user downloading a file only to upload
+  // it again, and lands them on the same document they were just looking at.
+  const openInDocumentOS = async () => {
+    if (!spec) return
+    setHandingOff(true)
+    setError(null)
+    try {
+      const blob = await paperApi.renderSpec(spec)
+      const name = `${(spec.meta.title || 'document').slice(0, 60)}.docx`
+      const res = await docosApi.importDocx(new File([blob], name, { type: blob.type }))
+      navigate(`/app/editor?doc=${encodeURIComponent(res.document_id)}`)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not open in Document OS')
+    } finally {
+      setHandingOff(false)
     }
   }
 
@@ -385,13 +408,25 @@ Write in the first person plural.`}
                 {styleName}{provider && <> · written by <span className="font-medium">{provider}</span></>}
               </p>
             </div>
-            <button
-              onClick={download}
-              disabled={busy !== 'idle'}
-              className={`${btnPrimary} px-5`}
-            >
-              {busy === 'rendering' ? 'Preparing…' : 'Download DOCX'}
-            </button>
+            <div className="flex shrink-0 gap-2">
+              {/* The document is finished but not necessarily final — this is
+                  the point where someone wants to change something by hand. */}
+              <button
+                onClick={openInDocumentOS}
+                disabled={busy !== 'idle' || handingOff}
+                className={btnGhost}
+                title="Open this document in the editor to change it by hand"
+              >
+                {handingOff ? 'Opening…' : 'Edit in Document OS'}
+              </button>
+              <button
+                onClick={download}
+                disabled={busy !== 'idle' || handingOff}
+                className={`${btnPrimary} px-5`}
+              >
+                {busy === 'rendering' ? 'Preparing…' : 'Download DOCX'}
+              </button>
+            </div>
           </div>
 
           {pdfState === 'ready' && pdfUrl ? (

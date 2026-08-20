@@ -177,8 +177,14 @@ async def generate(req: GenerateRequest, request: Request,
         raise HTTPException(status_code=_CLIENT_CLOSED, detail="cancelled by the client")
     except PaperGenerationError as exc:
         raise HTTPException(status_code=502, detail=str(exc))
-    return {"provider": provider, "spec": spec.to_dict()}
 
+    doc_id = new_id('paper')
+    spec_dict = spec.to_dict()
+    
+    from app.services.storage import write_json, get_paths
+    write_json(get_paths().documents / f"{doc_id}.spec.json", spec_dict)
+    
+    return {"provider": provider, "spec": spec_dict, "document_id": doc_id}
 
 
 def _parse_spec(spec: Any, style: Optional[str], owner_id: str) -> PaperSpec:
@@ -264,7 +270,11 @@ async def compose(req: GenerateRequest, request: Request,
     except PaperGenerationError as exc:
         raise HTTPException(status_code=502, detail=str(exc))
 
-    out = get_paths().documents / f"{new_id('paper')}.docx"
+    doc_id = new_id('paper')
+    from app.services.storage import write_json, get_paths
+    write_json(get_paths().documents / f"{doc_id}.spec.json", spec.to_dict())
+
+    out = get_paths().documents / f"{doc_id}.docx"
     render_paper(spec, out, owner_id=user.id)
     return FileResponse(str(out), media_type=_DOCX_MIME,
                         filename=f"{_safe(spec.meta.title)}.docx")
@@ -297,3 +307,67 @@ async def refine(req: RefineInstructionsRequest, request: Request,
     except InstructionRefinementError as exc:
         raise HTTPException(status_code=502, detail=str(exc))
     return {"provider": provider, **refined.model_dump()}
+
+
+@router.get("/recent")
+def recent_papers(user: User = Depends(get_current_user)) -> list[dict[str, Any]]:
+    """List recently generated paper specs."""
+    from app.services.storage import get_paths, read_json
+    paths = get_paths()
+    specs = sorted(
+        paths.documents.glob("*.spec.json"),
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )
+    out = []
+    for p in specs[:20]:
+        d = read_json(p) or {}
+        meta = d.get("meta", {})
+        out.append({
+            "document_id": p.name.replace(".spec.json", ""),
+            "title": meta.get("title", "Untitled Document"),
+            "style_preset": meta.get("style", "ieee"),
+        })
+    return out
+
+
+@router.get("/{document_id}/export/docx")
+def export_paper_docx(document_id: str, user: User = Depends(get_current_user)) -> FileResponse:
+    from app.services.storage import get_paths, read_json
+    paths = get_paths()
+    spec = read_json(paths.documents / f"{document_id}.spec.json")
+    if not spec:
+        raise HTTPException(status_code=404, detail="Paper not found")
+    
+    parsed = _parse_spec(spec, None, user.id)
+    out = paths.documents / f"{document_id}.docx"
+    render_paper(parsed, out, owner_id=user.id)
+    
+    return FileResponse(str(out), media_type=_DOCX_MIME,
+                        filename=f"{_safe(parsed.meta.title)}.docx")
+
+
+@router.get("/{document_id}/export/pdf")
+def export_paper_pdf(document_id: str, user: User = Depends(get_current_user)) -> FileResponse:
+    from app.services.storage import get_paths, read_json
+    from app.docos.parser.paginator import docx_to_pdf, libreoffice_available
+    
+    paths = get_paths()
+    spec = read_json(paths.documents / f"{document_id}.spec.json")
+    if not spec:
+        raise HTTPException(status_code=404, detail="Paper not found")
+        
+    if not libreoffice_available():
+        raise HTTPException(status_code=503, detail="PDF export needs LibreOffice")
+        
+    parsed = _parse_spec(spec, None, user.id)
+    out = paths.documents / f"{document_id}.docx"
+    render_paper(parsed, out, owner_id=user.id)
+    
+    pdf = docx_to_pdf(out.read_bytes())
+    if pdf is None:
+        raise HTTPException(status_code=503, detail="Could not render PDF")
+        
+    return FileResponse(str(pdf), media_type="application/pdf",
+                        filename=f"{_safe(parsed.meta.title)}.pdf")
+

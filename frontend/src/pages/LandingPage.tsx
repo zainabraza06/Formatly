@@ -24,8 +24,8 @@ const features = [
  ),
  title: 'Formatting Automation',
  desc: 'Describe fonts, margins, spacing in plain English. The engine parses and applies rules to every section.',
- accent: 'from-sky-500/20 to-blue-500/10',
- border: 'border-sky-500/20',
+ accent: 'bg-surface-2',
+ border: 'border-line',
  },
  {
  icon: (
@@ -35,8 +35,8 @@ const features = [
  ),
  title: 'Embedded Charts',
  desc: 'Generate bar, line, and pie charts from manual data or AI suggestions — embedded directly in exports.',
- accent: 'from-emerald-500/20 to-teal-500/10',
- border: 'border-emerald-500/20',
+ accent: 'bg-surface-2',
+ border: 'border-line',
  },
  {
  icon: (
@@ -46,8 +46,8 @@ const features = [
  ),
  title: 'One-Click Export',
  desc: 'Download polished DOCX and PDF outputs with all formatting, charts, and structure fully preserved.',
- accent: 'from-orange-500/20 to-amber-500/10',
- border: 'border-orange-500/20',
+ accent: 'bg-surface-2',
+ border: 'border-line',
  },
  {
  icon: (
@@ -57,8 +57,8 @@ const features = [
  ),
  title: 'Style Presets',
  desc: 'Academic, Business, Research, Technical, Resume, Presentation — each preset wires the right typography and layout.',
- accent: 'from-rose-500/20 to-pink-500/10',
- border: 'border-rose-500/20',
+ accent: 'bg-surface-2',
+ border: 'border-line',
  },
  {
  icon: (
@@ -68,18 +68,18 @@ const features = [
  ),
  title: 'AI Chat Assistant',
  desc: 'Refine sections, change tone, or regenerate content with an integrated AI assistant.',
- accent: 'from-cyan-500/20 to-indigo-500/10',
- border: 'border-cyan-500/20',
+ accent: 'bg-surface-2',
+ border: 'border-line',
  },
 ]
 
 const pipeline = [
  { label: 'User Prompt', desc: 'Natural language input', color: 'bg-ink' },
  { label: 'Intent Extraction', desc: 'AI reads requirements', color: 'bg-ink' },
- { label: 'Document Planning', desc: 'Outline & structure built', color: 'bg-blue-500' },
- { label: 'Content Generation', desc: 'Sections written by AI', color: 'bg-sky-500' },
- { label: 'Formatting Engine', desc: 'Rules applied precisely', color: 'bg-emerald-500' },
- { label: 'Export Engine', desc: 'DOCX & PDF rendered', color: 'bg-orange-500' },
+ { label: 'Document Planning', desc: 'Outline & structure built', color: 'bg-ink' },
+ { label: 'Content Generation', desc: 'Sections written by AI', color: 'bg-ink' },
+ { label: 'Formatting Engine', desc: 'Rules applied precisely', color: 'bg-ink' },
+ { label: 'Export Engine', desc: 'DOCX & PDF rendered', color: 'bg-ink' },
 ]
 
 const testimonials = [
@@ -110,11 +110,7 @@ export function LandingPage() {
  return (
  <div className="min-h-screen bg-canvas selection:bg-ink/20">
 
- {/* ── Ambient glow ── */}
- <div className="pointer-events-none fixed inset-0 overflow-hidden">
- <div className="absolute -top-40 left-1/4 h-[600px] w-[600px] -translate-x-1/2 rounded-full bg-surface-2 blur-[120px] dark:bg-surface-2" />
- <div className="absolute -bottom-20 right-1/4 h-[400px] w-[400px] translate-x-1/2 rounded-full bg-sky-500/10 blur-[100px] dark:bg-sky-500/8" />
- </div>
+ {/* ── Ambient glow removed for minimalist style ── */}
 
  <div className="relative mx-auto max-w-6xl px-4 pb-20">
 
@@ -221,9 +217,9 @@ export function LandingPage() {
  viewport={{ once: true }}
  transition={{ duration: 0.35, delay: i * 0.05 }}
  whileHover={{ y: -3 }}
- className={`group rounded-2xl border ${f.border} bg-gradient-to-br ${f.accent} p-5 transition-shadow hover:shadow-lg dark:border-opacity-30`}
+ className={`group rounded-2xl border ${f.border} ${f.accent} p-5 transition-shadow hover:shadow-lg`}
  >
- <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-surface text-ink shadow-sm ring-1 ring-neutral-200/60 dark:ring-white/10">
+ <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-surface text-ink shadow-sm border border-line">
  {f.icon}
  </div>
  <div className="mt-4 text-sm font-semibold text-ink">{f.title}</div>
@@ -281,7 +277,7 @@ export function LandingPage() {
  {/* Demo 1 */}
  <div className="rounded-2xl border border-line bg-surface p-5 ">
  <div className="flex items-center gap-2">
- <span className="rounded-lg bg-surface-2 px-2 py-0.5 text-[11px] font-semibold text-ink">
+ <span className="rounded-lg bg-surface-2 px-2 py-0.5 text-[11px] font-semibold text-ink border border-line">
  Demo A
  </span>
  <div className="text-sm font-semibold text-ink">CV from Template</div>
@@ -289,7 +285,7 @@ export function LandingPage() {
  <ol className="mt-3 space-y-2 text-xs text-muted">
  {['Upload a CV template (DOCX)', 'Paste personal information', 'AI generates matching CV', 'Export PDF'].map((step, i) => (
  <li key={i} className="flex items-center gap-2">
- <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-surface-2 text-[10px] font-bold text-ink">
+ <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-surface-2 text-[10px] font-bold text-ink border border-line">
  {i + 1}
  </span>
  {step}
@@ -301,7 +297,7 @@ export function LandingPage() {
  {/* Demo 2 */}
  <div className="rounded-2xl border border-line bg-surface p-5 ">
  <div className="flex items-center gap-2">
- <span className="rounded-lg bg-sky-500/15 px-2 py-0.5 text-[11px] font-semibold text-sky-600 dark:text-sky-400">
+ <span className="rounded-lg bg-surface-2 px-2 py-0.5 text-[11px] font-semibold text-ink border border-line">
  Demo B
  </span>
  <div className="text-sm font-semibold text-ink">Academic Report</div>
@@ -309,7 +305,7 @@ export function LandingPage() {
  <ol className="mt-3 space-y-2 text-xs text-muted">
  {['Enter topic + formatting rules', 'AI plans & structures report', 'Sections + charts generated', 'Export DOCX or PDF'].map((step, i) => (
  <li key={i} className="flex items-center gap-2">
- <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-sky-500/15 text-[10px] font-bold text-sky-600 dark:text-sky-400">
+ <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-surface-2 text-[10px] font-bold text-ink border border-line">
  {i + 1}
  </span>
  {step}
@@ -318,7 +314,7 @@ export function LandingPage() {
  </ol>
  <Link
  to="/app/compose"
- className="mt-4 inline-flex items-center gap-1 text-xs font-semibold text-sky-600 hover:text-sky-500 dark:text-sky-400"
+ className="mt-4 inline-flex items-center gap-1 text-xs font-semibold text-ink hover:text-muted"
  >
  Try it → New Document
  </Link>
