@@ -21,6 +21,7 @@ destroying the document.
 """
 from __future__ import annotations
 
+import threading
 from typing import Any, Callable, Optional, Sequence
 
 from app.paper.jsonx import extract_json
@@ -28,6 +29,7 @@ from app.paper.prompt import (
     build_plan_message, build_section_message, plan_system_prompt, section_system_prompt,
 )
 from app.paper.schema import Block, PaperSpec
+from app.services.router import GenerationCancelled
 
 # Budgets per pass. Each is generous for its job yet far below any ceiling,
 # which is the entire point of splitting the work up.
@@ -56,13 +58,14 @@ def generate_sectioned(
     authors: Optional[list[dict[str, str]]] = None,
     on_progress: Optional[Progress] = None,
     style_note: Optional[str] = None,
+    cancel: Optional[threading.Event] = None,
 ) -> tuple[dict[str, Any], str]:
     """Returns (raw_spec_dict, provider_used). Raises if the plan pass fails."""
     plan, provider = _plan(
         raw_text=raw_text, style_guide=style_guide, depth=depth, doc_kind=doc_kind,
         router=router, attachments=attachments, reference_example=reference_example,
         instructions=instructions, title_hint=title_hint, authors=authors,
-        style_note=style_note,
+        style_note=style_note, cancel=cancel,
     )
 
     outline: list[dict[str, Any]] = [s for s in plan.get("outline", []) if s.get("heading")]
@@ -77,6 +80,10 @@ def generate_sectioned(
     total = len(outline)
 
     for i, section in enumerate(outline, start=1):
+        # Checked between passes as well as inside them: a multi-pass document
+        # is many calls, and the cheapest one to cancel is the one not yet made.
+        if cancel is not None and cancel.is_set():
+            raise GenerationCancelled()
         heading = section.get("heading", "")
         if on_progress:
             on_progress(heading, i, total)
@@ -85,8 +92,10 @@ def generate_sectioned(
                 section=section, outline=outline, title=meta.get("title", ""),
                 viz=viz, written=written, raw_text=raw_text, style_guide=style_guide,
                 depth=depth, router=router, attachments=attachments,
-                instructions=instructions, style_note=style_note,
+                instructions=instructions, style_note=style_note, cancel=cancel,
             )
+        except GenerationCancelled:
+            raise
         except SectionFailure:
             # Keep the section present with its heading rather than silently
             # dropping it — a visible gap beats a document that quietly lies
@@ -110,7 +119,8 @@ def generate_sectioned(
 
 def _plan(*, raw_text: str, style_guide: str, depth: str, doc_kind: str, router: Any,
           attachments, reference_example, instructions, title_hint, authors,
-          style_note: Optional[str] = None) -> tuple[dict[str, Any], str]:
+          style_note: Optional[str] = None,
+          cancel: Optional[threading.Event] = None) -> tuple[dict[str, Any], str]:
     msg = build_plan_message(
         raw_text=raw_text, style=style_guide, doc_kind=doc_kind, attachments=attachments,
         reference_example=reference_example, instructions=instructions,
@@ -120,6 +130,7 @@ def _plan(*, raw_text: str, style_guide: str, depth: str, doc_kind: str, router:
         [{"role": "system", "content": plan_system_prompt(style_guide, depth, style_note)},
          {"role": "user", "content": msg}],
         max_tokens=_PLAN_TOKENS,
+        cancel=cancel,
     )
     plan = extract_json(text)
     if plan is None:
@@ -130,7 +141,8 @@ def _plan(*, raw_text: str, style_guide: str, depth: str, doc_kind: str, router:
 def _write_section(*, section: dict[str, Any], outline: list[dict[str, Any]], title: str,
                    viz: list[dict[str, Any]], written: list[str], raw_text: str,
                    style_guide: str, depth: str, router: Any, attachments, instructions,
-                   style_note: Optional[str] = None) -> list[dict[str, Any]]:
+                   style_note: Optional[str] = None,
+                   cancel: Optional[threading.Event] = None) -> list[dict[str, Any]]:
     msg = build_section_message(
         section=section, outline=outline, title=title, visualization_plan=viz,
         written_so_far=written, raw_text=raw_text, attachments=attachments,
@@ -141,7 +153,10 @@ def _write_section(*, section: dict[str, Any], outline: list[dict[str, Any]], ti
             [{"role": "system", "content": section_system_prompt(style_guide, depth, style_note)},
              {"role": "user", "content": msg}],
             max_tokens=_SECTION_TOKENS,
+            cancel=cancel,
         )
+    except GenerationCancelled:
+        raise    # must unwind; a cancelled run is not a failed section
     except Exception as exc:
         raise SectionFailure(str(exc)) from exc
 

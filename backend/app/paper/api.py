@@ -7,9 +7,12 @@
 """
 from __future__ import annotations
 
-from typing import Any, Optional
+import anyio
+import anyio.to_thread
+import threading
+from typing import Any, Callable, Optional, TypeVar
 
-from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field, ValidationError
 
@@ -24,6 +27,7 @@ from app.paper.styles.base import StyleSheet
 from app.paper.styles.extract import derive_stylesheet_from_docx
 from app.paper.styles.store import get_style_store
 from app.paper.stylesheet import resolve
+from app.services.router import GenerationCancelled
 from app.services.storage import get_paths, new_id
 
 router = APIRouter(prefix="/paper", tags=["paper"])
@@ -108,17 +112,78 @@ def delete_style(style_id: str, user: User = Depends(get_current_user)) -> dict[
     return {"deleted": True}
 
 
+
+_T = TypeVar("_T")
+
+# 499 is nginx's "client closed request". There is no standard code for it, and
+# it matters that this is not logged as a 5xx: nothing went wrong.
+_CLIENT_CLOSED = 499
+
+# How often to ask whether the caller is still there. Frequent enough that a
+# cancelled run stops promptly, cheap enough to ignore.
+_DISCONNECT_POLL_SECONDS = 0.5
+
+
+async def _run_cancellable(request: Request, work: Callable[[threading.Event], _T]) -> _T:
+    """Run blocking `work` in a worker thread, abandoning it if the caller goes.
+
+    Generation costs money for as long as it runs, so a browser that has given
+    up — Stop pressed, tab closed, navigation — should not leave a request
+    burning tokens for another two minutes. `work` receives an Event that is set
+    the moment the client disconnects; the router closes its transport on it.
+    """
+    cancel = threading.Event()
+    outcome: dict[str, Any] = {}
+
+    def runner() -> None:
+        # The result is carried out by hand rather than raised through the task
+        # group: anyio wraps anything that escapes one in an ExceptionGroup, and
+        # the endpoint wants to catch GenerationCancelled itself.
+        try:
+            outcome["value"] = work(cancel)
+        except BaseException as exc:       # noqa: BLE001 — re-raised verbatim below
+            outcome["error"] = exc
+
+    async def watch() -> None:
+        try:
+            while not cancel.is_set():
+                if await request.is_disconnected():
+                    cancel.set()
+                    return
+                await anyio.sleep(_DISCONNECT_POLL_SECONDS)
+        except Exception:
+            pass    # never let the watcher be the reason a request fails
+
+    async with anyio.create_task_group() as tg:
+        tg.start_soon(watch)
+        try:
+            await anyio.to_thread.run_sync(runner)
+        finally:
+            cancel.set()      # stop the watcher whichever way the work ended
+            tg.cancel_scope.cancel()
+
+    if "error" in outcome:
+        raise outcome["error"]
+    return outcome["value"]
+
+
 @router.post("/generate")
-def generate(req: GenerateRequest, user: User = Depends(get_current_user)) -> dict[str, Any]:
+async def generate(req: GenerateRequest, request: Request,
+                   user: User = Depends(get_current_user)) -> dict[str, Any]:
     """Raw material → fully-styled spec JSON (every block carries explicit formatting)."""
-    try:
-        spec, provider = generate_paper(
+    def work(cancel: threading.Event):
+        return generate_paper(
             raw_text=req.raw_text, style=req.style, doc_kind=req.doc_kind,
             depth=req.depth, attachments=req.attachment_dicts(),
             reference_example=req.reference_example, instructions=req.instructions,
             title_hint=req.title_hint, authors=req.authors or None,
-            owner_id=user.id,
+            owner_id=user.id, cancel=cancel,
         )
+
+    try:
+        spec, provider = await _run_cancellable(request, work)
+    except GenerationCancelled:
+        raise HTTPException(status_code=_CLIENT_CLOSED, detail="cancelled by the client")
     except PaperGenerationError as exc:
         raise HTTPException(status_code=502, detail=str(exc))
     return {"provider": provider, "spec": spec.to_dict()}
@@ -189,16 +254,22 @@ def preview(spec: dict[str, Any] = Body(...), style: Optional[str] = None,
 
 
 @router.post("/compose")
-def compose(req: GenerateRequest, user: User = Depends(get_current_user)) -> FileResponse:
+async def compose(req: GenerateRequest, request: Request,
+                  user: User = Depends(get_current_user)) -> FileResponse:
     """Raw material → .docx in one call."""
-    try:
-        spec, _provider = generate_paper(
+    def work(cancel: threading.Event):
+        return generate_paper(
             raw_text=req.raw_text, style=req.style, doc_kind=req.doc_kind,
             depth=req.depth, attachments=req.attachment_dicts(),
             reference_example=req.reference_example, instructions=req.instructions,
             title_hint=req.title_hint, authors=req.authors or None,
-            owner_id=user.id,
+            owner_id=user.id, cancel=cancel,
         )
+
+    try:
+        spec, _provider = await _run_cancellable(request, work)
+    except GenerationCancelled:
+        raise HTTPException(status_code=_CLIENT_CLOSED, detail="cancelled by the client")
     except PaperGenerationError as exc:
         raise HTTPException(status_code=502, detail=str(exc))
 

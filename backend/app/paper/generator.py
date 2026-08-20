@@ -6,6 +6,7 @@ explicit IEEE formatting onto every block via the stylesheet resolver.
 """
 from __future__ import annotations
 
+import threading
 from typing import Any, Optional, Sequence
 
 from pydantic import TypeAdapter, ValidationError
@@ -18,6 +19,7 @@ from app.paper.styles import (
     DEFAULT_STYLE, StyleLike, is_builtin, lookup_style, resolve_style,
 )
 from app.paper.stylesheet import resolve
+from app.services.router import GenerationCancelled
 
 # Depths a single call cannot hold: measured, `detailed` overruns the ceiling and
 # truncates its JSON, so it is always written in passes.
@@ -60,6 +62,7 @@ def generate_paper(
     max_tokens: int = 8000,
     multipass: Optional[bool] = None,   # None = decide from depth
     on_progress: Optional[Progress] = None,
+    cancel: Optional[threading.Event] = None,
 ) -> tuple[PaperSpec, str]:
     """Turn raw material into a fully-styled PaperSpec.
 
@@ -99,8 +102,10 @@ def generate_paper(
                 raw_text=raw_text, style_guide=guide_id, depth=depth, doc_kind=doc_kind,
                 router=router, attachments=attachments, reference_example=reference_example,
                 instructions=instructions, title_hint=title_hint, authors=authors,
-                on_progress=on_progress, style_note=style_note,
+                on_progress=on_progress, style_note=style_note, cancel=cancel,
             )
+        except GenerationCancelled:
+            raise
         except Exception as exc:
             raise PaperGenerationError(f"multi-pass generation failed: {exc}") from exc
     else:
@@ -122,7 +127,10 @@ def generate_paper(
             messages = base if attempt == 0 else (
                 base + [{"role": "user", "content": _RETRY_NOTE}])
             try:
-                text, provider, _elapsed = router.chat(messages, max_tokens=max_tokens)
+                text, provider, _elapsed = router.chat(
+                    messages, max_tokens=max_tokens, cancel=cancel)
+            except GenerationCancelled:
+                raise
             except Exception as exc:
                 raise PaperGenerationError(f"all AI providers failed: {exc}") from exc
             raw = extract_json(text)
@@ -142,8 +150,10 @@ def generate_paper(
                     router=router, attachments=attachments,
                     reference_example=reference_example, instructions=instructions,
                     title_hint=title_hint, authors=authors, on_progress=on_progress,
-                    style_note=style_note,
+                    style_note=style_note, cancel=cancel,
                 )
+            except GenerationCancelled:
+                raise
             except Exception as exc:
                 raise PaperGenerationError(
                     "the model did not return usable JSON, and writing it in "

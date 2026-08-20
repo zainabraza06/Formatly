@@ -16,8 +16,9 @@ is shared across all requests within a server process.
 from __future__ import annotations
 
 import os
+import threading
 import time
-from typing import Any
+from typing import Any, Optional
 
 # ── Provider IDs ──────────────────────────────────────────────────────────────
 MISTRAL = "mistral"
@@ -65,6 +66,14 @@ class ProviderTimeout(Exception):
         self.provider = provider
 
 
+class GenerationCancelled(Exception):
+    """The caller went away. Raised so the work unwinds instead of finishing a
+    document nobody is waiting for — and so it is never mistaken for a failure."""
+
+    def __init__(self) -> None:
+        super().__init__("cancelled by the caller")
+
+
 class AllProvidersFailed(Exception):
     def __init__(self, errors: dict[str, str]):
         details = " | ".join(f"{k}: {v}" for k, v in errors.items()) or "no provider configured"
@@ -82,6 +91,41 @@ def _is_placeholder(key: str) -> bool:
     return (low.startswith(("your_", "<", "changeme", "replace_"))
             or low.endswith(("_here", "_key_here"))
             or low in {"none", "null", "todo"})
+
+
+class _CancelWatcher:
+    """Runs `on_cancel` if `event` is set while the block is running.
+
+    A plain `event.wait()` in a daemon thread would outlive short requests and
+    pile up, so the watcher is always woken on exit.
+    """
+
+    def __init__(self, event: Optional[threading.Event], on_cancel: Any) -> None:
+        self._event = event
+        self._on_cancel = on_cancel
+        self._done = threading.Event()
+        self._thread: Optional[threading.Thread] = None
+
+    def __enter__(self) -> "_CancelWatcher":
+        if self._event is None:
+            return self
+        self._thread = threading.Thread(target=self._watch, daemon=True)
+        self._thread.start()
+        return self
+
+    def _watch(self) -> None:
+        while not self._done.wait(0.25):
+            if self._event is not None and self._event.is_set():
+                try:
+                    self._on_cancel()
+                except Exception:
+                    pass    # the request is being abandoned either way
+                return
+
+    def __exit__(self, *_exc: Any) -> None:
+        self._done.set()
+        if self._thread is not None:
+            self._thread.join(timeout=1)
 
 
 # ── Router ────────────────────────────────────────────────────────────────────
@@ -107,26 +151,43 @@ class ProviderRouter:
         self._cooldowns[provider] = time.time() + secs
 
     # ── per-provider callers ──────────────────────────────────────────────────
-    def _call_mistral(self, messages: list[dict[str, str]], max_tokens: int) -> str:
+    def _call_mistral(self, messages: list[dict[str, str]], max_tokens: int,
+                      cancel: Optional[threading.Event] = None) -> str:
         import httpx
 
+        # The request is synchronous and most of its life is spent waiting for
+        # the first byte, so there is no loop to check a flag in. Closing the
+        # client from a watcher thread tears down the connection underneath it,
+        # which is what actually stops the wait.
+        client = httpx.Client(timeout=_timeout_for(max_tokens))
+        watcher = _CancelWatcher(cancel, client.close)
         try:
-            resp = httpx.post(
-                "https://api.mistral.ai/v1/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {self._key(MISTRAL)}",
-                    "Content-Type":  "application/json",
-                    "Accept":        "application/json",
-                },
-                json={
-                    "model":      self._model(MISTRAL),
-                    "messages":   messages,
-                    "max_tokens": max_tokens,
-                },
-                timeout=_timeout_for(max_tokens),
-            )
+            with watcher:
+                resp = client.post(
+                    "https://api.mistral.ai/v1/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {self._key(MISTRAL)}",
+                        "Content-Type":  "application/json",
+                        "Accept":        "application/json",
+                    },
+                    json={
+                        "model":      self._model(MISTRAL),
+                        "messages":   messages,
+                        "max_tokens": max_tokens,
+                    },
+                )
         except httpx.TimeoutException as exc:
+            if cancel is not None and cancel.is_set():
+                raise GenerationCancelled() from exc
             raise ProviderTimeout(MISTRAL) from exc
+        except Exception as exc:
+            # A closed transport surfaces as a transport error, not a signal, so
+            # the flag is what distinguishes "cancelled" from "genuinely broke".
+            if cancel is not None and cancel.is_set():
+                raise GenerationCancelled() from exc
+            raise
+        finally:
+            client.close()
 
         if resp.status_code == 429:
             raise RateLimitExceeded(MISTRAL)
@@ -140,9 +201,13 @@ class ProviderRouter:
         *,
         max_tokens: int = 1500,
         order: list[str] | None = None,
+        cancel: Optional[threading.Event] = None,
     ) -> tuple[str, str, float]:
         """
         Send `messages` to the configured provider.
+
+        `cancel`, once set, abandons an in-flight request and raises
+        GenerationCancelled — so a caller who has gone away stops costing tokens.
 
         Returns
         -------
@@ -151,11 +216,14 @@ class ProviderRouter:
         Raises
         ------
         AllProvidersFailed — when every configured provider fails.
+        GenerationCancelled — when `cancel` was set.
         """
         _callers = {MISTRAL: self._call_mistral}
         errors: dict[str, str] = {}
 
         for provider in (order or DEFAULT_ORDER):
+            if cancel is not None and cancel.is_set():
+                raise GenerationCancelled()
             if not self._key(provider):
                 continue
 
@@ -166,8 +234,11 @@ class ProviderRouter:
 
             try:
                 t0 = time.time()
-                text = _callers[provider](messages, max_tokens)
+                text = _callers[provider](messages, max_tokens, cancel)
                 return text, provider, round(time.time() - t0, 3)
+
+            except GenerationCancelled:
+                raise    # the caller left; not a provider fault, so no cooldown
 
             except RateLimitExceeded:
                 self._cool(provider, _COOLDOWN_RATE_LIMIT)
