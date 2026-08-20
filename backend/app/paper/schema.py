@@ -162,8 +162,12 @@ class Code(BlockBase):
     caption: str = ""          # what the listing does; rendered as "Listing n."
     filename: str = ""         # e.g. "regime_scalars.py", shown with the caption
     # "text" sets the code in the document's monospace font; "image" renders it
-    # as an editor screenshot, for briefs that ask to see the code in the IDE
+    # as a screenshot, for briefs that ask to see the code in the IDE or the
+    # program running. Which window is drawn depends on `window`.
     render: Literal["text", "image"] = "text"
+    # "editor" draws an IDE window with a gutter and syntax colours; "terminal"
+    # draws a console, for a program's output rather than its source.
+    window: Literal["editor", "terminal"] = "editor"
     theme: Literal["dark", "light"] = "dark"
     caption_style: Optional[Style] = None
 

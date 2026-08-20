@@ -155,16 +155,21 @@ CODE — when the task calls for an implementation, or the user asks for snippet
   placeholder text: an empty listing is dropped, leaving your caption promising something
   that is not there.
 
-WHAT CAN AND CANNOT BE PICTURED — a brief often asks for several screenshots. You can produce
-exactly one kind: a listing drawn as an editor window ("render":"image"). You CANNOT produce
-a screenshot of a program running, of console output, of a terminal, an installer, a website
-or a GUI, because nothing is executed while this document is written. So:
-- Where the brief wants output shown, reproduce the console session as a "code" block with
-  "language":"text" and a caption saying it is sample output. That is honest and readable.
-- NEVER write a heading, caption or sentence announcing a screenshot you are not emitting.
-  A section reading "Screenshot 2 — Program Starting" with nothing under it is worse than no
-  section: it tells the reader something is missing. Show it as sample output, or leave the
-  section out.
+SCREENSHOTS — a brief often asks for several. Two kinds can be drawn, both from text you
+write yourself, and both go in a "code" block with "render":"image":
+- Source code, as an editor window: "window":"editor" with the real "language" and a
+  "filename". Syntax colours and line numbers are added for you.
+- A program's output, as a console window: "window":"terminal", "language":"text", and the
+  session written out exactly as it would appear — prompts, the user's typed input, the
+  program's replies. Put the window's title in "filename" (e.g. "Command Prompt") if it
+  matters.
+Nothing is executed while this document is written, so write the session you know the
+program produces, and keep it faithful to the code you wrote: the same wording, the same
+prompts, plausible inputs. Do NOT claim it is a capture of a real run.
+You CANNOT picture anything else — no installer, website, GUI, IDE debugger or file
+explorer. NEVER write a heading, caption or sentence announcing a screenshot you are not
+emitting: a section reading "Screenshot 2 — Program Starting" with nothing under it is worse
+than no section, because it tells the reader something is missing.
 
 MATHEMATICS — when the task involves derivations, formulae or worked numbers:
 - Put each formula in an "equation" block, written as TeX math markup: \\frac{a}{b},

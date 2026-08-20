@@ -20,7 +20,7 @@ from docx.oxml.ns import qn
 from docx.shared import Inches, Pt, RGBColor
 
 from app.paper import stylesheet as ss
-from app.paper.codeshot import render_code_image
+from app.paper.codeshot import render_code_image, render_terminal_image
 from app.paper.equations import looks_like_math, render_equation_png
 from app.paper.figures import render_figure
 from app.paper.references import format_reference
@@ -373,12 +373,35 @@ def _code_caption(doc: Document, block: Code, number: int, sheet: StyleSheet) ->
                    _caption_title_style(cap_style, sheet))
 
 
+# Languages a model reaches for when the listing is a console session rather
+# than source. Honoured so an output listing does not come back syntax-coloured
+# as if it were code.
+_CONSOLE_LANGUAGES = {"text", "console", "output", "shell", "sh", "bash",
+                      "terminal", "cmd", "powershell", "plaintext", ""}
+
+
+def _is_terminal(block: Code) -> bool:
+    """Terminal when asked for, or when the listing is plainly console output."""
+    if block.window == "terminal":
+        return True
+    return (block.window == "editor"
+            and block.language.strip().lower() in _CONSOLE_LANGUAGES
+            and _looks_like_output(block.caption))
+
+
+def _looks_like_output(caption: str) -> bool:
+    c = caption.lower()
+    return any(w in c for w in ("output", "run", "execution", "console",
+                                "terminal", "session", "startup"))
+
+
 def _code(doc: Document, block: Code, number: int, assets: Path,
           spec: PaperSpec, sheet: StyleSheet) -> bool:
     """A listing is written one paragraph per line so it never reflows, shaded so
     it reads as a block, and held together so a column break cannot split it
-    down the middle. Asked for `render: "image"`, it becomes an editor
-    screenshot instead — falling back to text if that cannot be produced."""
+    down the middle. Asked for `render: "image"`, it becomes a screenshot
+    instead — an editor window for source, a console for a program's output —
+    falling back to text if that cannot be produced."""
     style = block.style or sheet.code
     if not (block.text or "").strip():
         return False    # a "Listing 2." standing over nothing is worse than no listing
@@ -386,9 +409,14 @@ def _code(doc: Document, block: Code, number: int, assets: Path,
 
     if block.render == "image":
         try:
-            shot = render_code_image(
-                block.text, assets / f"code_{number}.png",
-                language=block.language, filename=block.filename, theme=block.theme)
+            if _is_terminal(block):
+                shot = render_terminal_image(
+                    block.text, assets / f"code_{number}.png",
+                    title=block.filename or "Command Prompt", theme=block.theme)
+            else:
+                shot = render_code_image(
+                    block.text, assets / f"code_{number}.png",
+                    language=block.language, filename=block.filename, theme=block.theme)
         except Exception:
             shot = None
         if shot and shot.exists():

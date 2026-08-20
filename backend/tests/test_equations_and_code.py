@@ -131,3 +131,56 @@ def test_listing_caption_carries_the_filename(tmp_path):
     out = render_paper(spec, tmp_path / "d.docx")
     caption = next(t for t in _texts(out) if t.startswith("Listing"))
     assert "regime.py" in caption and "the scalars" in caption
+
+
+# ── terminal (program output) screenshots ───────────────────────────────────
+
+from app.paper.codeshot import TERMINAL_THEMES, render_terminal_image  # noqa: E402
+from app.paper.renderer import _is_terminal  # noqa: E402
+from app.paper.schema import Code  # noqa: E402
+
+_SESSION = "Enter your guess: 50\nToo high!\nEnter your guess: 37\nCorrect!\n"
+
+
+@pytest.mark.parametrize("theme", sorted(TERMINAL_THEMES))
+def test_renders_a_console_window(theme, tmp_path):
+    out = render_terminal_image(_SESSION, tmp_path / f"{theme}.png",
+                                title="Command Prompt", theme=theme)
+    assert out.exists() and out.stat().st_size > 500
+
+
+def test_empty_output_is_refused(tmp_path):
+    with pytest.raises(ValueError):
+        render_terminal_image("   ", tmp_path / "t.png")
+
+
+def test_terminal_is_chosen_when_asked_for():
+    assert _is_terminal(Code(text="x", window="terminal", language="cpp"))
+
+
+def test_source_listings_stay_in_the_editor():
+    assert not _is_terminal(Code(text="x", language="cpp", caption="the game loop"))
+    assert not _is_terminal(Code(text="x", language="python", caption="sample output"))
+
+
+def test_a_plain_text_output_listing_is_inferred_as_a_console():
+    """Models label output as language "text"; a caption saying so is enough."""
+    assert _is_terminal(Code(text="x", language="text", caption="Sample output: startup"))
+    assert _is_terminal(Code(text="x", language="", caption="Program execution"))
+    assert not _is_terminal(Code(text="x", language="text", caption="Pseudocode"))
+
+
+def test_both_screenshot_kinds_render_into_one_document(tmp_path):
+    spec = PaperSpec.model_validate({
+        "meta": {"title": "T", "style": "assignment"},
+        "blocks": [
+            {"type": "code", "language": "cpp", "text": "int main(){}",
+             "render": "image", "window": "editor", "filename": "g.cpp"},
+            {"type": "code", "language": "text", "text": _SESSION,
+             "render": "image", "window": "terminal", "filename": "Command Prompt"},
+        ],
+    })
+    out = render_paper(spec, tmp_path / "d.docx")
+    assert _images(out) == 2
+    # neither listing should also appear as selectable text
+    assert not any("Enter your guess" in t for t in _texts(out))

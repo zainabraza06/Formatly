@@ -47,6 +47,29 @@ THEMES: dict[str, dict[str, str]] = {
 }
 DEFAULT_THEME = "dark"
 
+# A console is not an editor: no gutter, no syntax colours (output is not code),
+# and the near-black of a real terminal rather than an editor's grey.
+TERMINAL_THEMES: dict[str, dict[str, str]] = {
+    "dark": {
+        "style": "bw",
+        "background": "#0C0C0C",   # the Windows Terminal / PowerShell default
+        "chrome": "#1F1F1F",
+        "tab": "#2D2D2D",
+        "text": "#CCCCCC",
+        "output": "#CCCCCC",
+        "border": "#000000",
+    },
+    "light": {
+        "style": "bw",
+        "background": "#FFFFFF",
+        "chrome": "#F3F3F3",
+        "tab": "#FFFFFF",
+        "text": "#333333",
+        "output": "#1A1A1A",
+        "border": "#D0D0D0",
+    },
+}
+
 _FONT = "Consolas"
 _FONT_SIZE = 20          # rendered large, then placed small — keeps it crisp in print
 _CHROME_H = 34
@@ -69,6 +92,56 @@ def render_code_image(text: str, out_path: Path, *, language: str = "",
     image = _frame(body, label, palette)
     image.save(str(out_path))
     return out_path
+
+
+def render_terminal_image(text: str, out_path: Path, *, title: str = "Command Prompt",
+                          theme: str = DEFAULT_THEME) -> Path:
+    """Render a console session as a terminal window.
+
+    Program output is not code: it gets no line numbers and no syntax colours,
+    which would invent meaning that is not there. Nothing is executed to produce
+    it — the text is whatever the caller supplies.
+    """
+    if not (text or "").strip():
+        raise ValueError("no output to render")
+
+    palette = TERMINAL_THEMES.get(theme, TERMINAL_THEMES[DEFAULT_THEME])
+    out_path = Path(out_path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+
+    body = _plain(text, palette)
+    image = _frame(body, title, palette, dots=False)
+    image.save(str(out_path))
+    return out_path
+
+
+def _plain(text: str, palette: dict[str, str]) -> Image.Image:
+    """Monospace text on the terminal ground, no gutter, no highlighting."""
+    formatter = ImageFormatter(
+        style=palette["style"],
+        font_name=_FONT,
+        font_size=_FONT_SIZE,
+        line_numbers=False,
+        line_pad=4,
+        image_pad=_PAD,
+        image_bg=palette["background"],
+    )
+    png = highlight(text, get_lexer_by_name("text"), formatter)
+
+    import io
+    img = Image.open(io.BytesIO(png)).convert("RGB")
+    return _recolour(img, palette)
+
+
+def _recolour(img: Image.Image, palette: dict[str, str]) -> Image.Image:
+    """Pygments' "bw" style writes black on white; map that onto the terminal's
+    own ground and foreground so the window reads as one piece."""
+    bg = Image.new("RGB", img.size, palette["background"])
+    fg = Image.new("RGB", img.size, palette["output"])
+    # dark pixels are glyphs, light pixels are ground
+    mask = img.convert("L").point(lambda v: 255 if v < 128 else 0)
+    bg.paste(fg, (0, 0), mask)
+    return bg
 
 
 def _highlight(text: str, language: str, palette: dict[str, str]) -> Image.Image:
@@ -104,7 +177,8 @@ def _lexer(text: str, language: str):
         return get_lexer_by_name("text")
 
 
-def _frame(body: Image.Image, label: str, palette: dict[str, str]) -> Image.Image:
+def _frame(body: Image.Image, label: str, palette: dict[str, str],
+           dots: bool = True) -> Image.Image:
     """Put the highlighted code inside an editor window: title bar, window dots,
     and a tab carrying the filename."""
     # Pygments pads the left of the longest line but not the right, which leaves
@@ -115,12 +189,13 @@ def _frame(body: Image.Image, label: str, palette: dict[str, str]) -> Image.Imag
     draw.rectangle((0, _CHROME_H, width, canvas.height), fill=palette["background"])
 
     r, y = 5, _CHROME_H // 2
-    for i, colour in enumerate(_DOTS):
-        cx = _PAD + i * (r * 2 + 8)
-        draw.ellipse((cx - r, y - r, cx + r, y + r), fill=colour)
+    if dots:
+        for i, colour in enumerate(_DOTS):
+            cx = _PAD + i * (r * 2 + 8)
+            draw.ellipse((cx - r, y - r, cx + r, y + r), fill=colour)
 
     font = _ui_font()
-    tab_x = _PAD + len(_DOTS) * (r * 2 + 8) + 10
+    tab_x = _PAD + (len(_DOTS) * (r * 2 + 8) + 10 if dots else 0)
     tab_w = int(draw.textlength(label, font=font)) + 28
     draw.rectangle((tab_x, 0, tab_x + tab_w, _CHROME_H), fill=palette["tab"])
     draw.text((tab_x + 14, y), label, fill=palette["text"], font=font, anchor="lm")
