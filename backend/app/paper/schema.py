@@ -214,6 +214,9 @@ class PaperMeta(BaseModel):
     # Extra centred lines for that cover sheet, in the order given — course
     # code, student id, submission date, supervisor, whatever the brief names.
     title_page_lines: list[str] = Field(default_factory=list)
+    # A running header repeated on every page — an institution, a campus, a
+    # course code. Left empty, pages carry no header at all.
+    page_header: str = ""
     # any registered stylesheet id: "ieee" | "apa" | "acm" | "report" | …
     style: str = "report"
     page: PageSetup = Field(default_factory=PageSetup)

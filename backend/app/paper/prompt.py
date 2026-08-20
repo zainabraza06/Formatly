@@ -233,6 +233,9 @@ instruction with prose about it; express it.
   the title, the authors, and exactly those lines, and the document starts on the next page.
   If they say it should contain only certain things, put only those things there.
   Without "title_page": true there is no separate cover sheet, which is right for a paper.
+- A RUNNING HEADER, when asked for one: put the line in meta.page_header (e.g. an institution
+  and campus, "NUST, H-12, Islamabad, Pakistan"). It repeats at the top of every page, and is
+  kept off the cover sheet automatically. Leave it empty and pages carry no header.
 
 TABLES — use them for quantitative or comparative content where they help the reader.
 EQUATIONS — include any formulae the material relies on, if any.

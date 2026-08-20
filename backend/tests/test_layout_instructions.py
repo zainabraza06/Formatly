@@ -196,3 +196,58 @@ def test_a_split_listing_keeps_a_usable_width(tmp_path):
     widths = [w for page in _page_images(out) for w, _ in page]
     text_w = (8.5 - 2.0) * 72
     assert widths and min(widths) > text_w * 0.6, f"parts too narrow to read: {widths}"
+
+
+# ── running page header ─────────────────────────────────────────────────────
+
+def _header_texts(path) -> list[str]:
+    doc = Document(str(path))
+    return [p.text.strip() for s in doc.sections for p in s.header.paragraphs if p.text.strip()]
+
+
+def test_no_header_unless_asked(tmp_path):
+    spec = PaperSpec.model_validate({
+        "meta": {"title": "T", "style": "assignment"}, "blocks": _BODY})
+    out = render_paper(spec, tmp_path / "d.docx")
+    assert _header_texts(out) == []
+
+
+def test_a_running_header_is_written(tmp_path):
+    spec = PaperSpec.model_validate({
+        "meta": {"title": "T", "style": "assignment",
+                 "page_header": "NUST, H-12, Islamabad, Pakistan"},
+        "blocks": _BODY,
+    })
+    out = render_paper(spec, tmp_path / "d.docx")
+    assert "NUST, H-12, Islamabad, Pakistan" in _header_texts(out)
+
+
+def test_the_header_is_kept_off_a_cover_sheet(tmp_path):
+    """A running header printed across a title page makes it an ordinary page."""
+    spec = PaperSpec.model_validate({
+        "meta": {"title": "T", "style": "assignment", "title_page": True,
+                 "page_header": "NUST, H-12, Islamabad, Pakistan"},
+        "blocks": _BODY,
+    })
+    out = render_paper(spec, tmp_path / "d.docx")
+    doc = Document(str(out))
+    assert all(s.different_first_page_header_footer for s in doc.sections)
+
+
+def test_without_a_cover_the_header_starts_on_page_one(tmp_path):
+    spec = PaperSpec.model_validate({
+        "meta": {"title": "T", "style": "assignment", "page_header": "Institution"},
+        "blocks": _BODY,
+    })
+    out = render_paper(spec, tmp_path / "d.docx")
+    doc = Document(str(out))
+    assert not any(s.different_first_page_header_footer for s in doc.sections)
+
+
+def test_a_whitespace_header_is_treated_as_absent(tmp_path):
+    spec = PaperSpec.model_validate({
+        "meta": {"title": "T", "style": "assignment", "page_header": "   "},
+        "blocks": _BODY,
+    })
+    out = render_paper(spec, tmp_path / "d.docx")
+    assert _header_texts(out) == []

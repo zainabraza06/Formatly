@@ -62,6 +62,7 @@ def render_paper(spec: PaperSpec, out_path: str | Path,
     doc = Document()
     _setup_page(doc, spec)
     _set_normal(doc, sheet)
+    _running_header(doc, spec, sheet)
 
     # Title block spans the full width; the body then flows in N columns.
     _title_block(doc, spec, sheet)
@@ -139,6 +140,30 @@ def _column_width_in(spec: PaperSpec) -> float:
     if p.columns <= 1:
         return usable
     return (usable - p.column_spacing_in * (p.columns - 1)) / p.columns
+
+
+def _running_header(doc: Document, spec: PaperSpec, sheet: StyleSheet) -> None:
+    """Repeat a line at the top of every page — an institution, a campus.
+
+    A cover sheet is the exception: a running header printed across it turns a
+    title page into an ordinary one, so the first page is given its own (empty)
+    header when there is a cover.
+    """
+    text = (spec.meta.page_header or "").strip()
+    if not text:
+        return
+
+    style = sheet.affiliation.merged(Style(
+        alignment="center", italic=False, first_line_indent_in=0.0,
+        space_before_pt=0, space_after_pt=0))
+
+    for section in doc.sections:
+        section.different_first_page_header_footer = spec.meta.title_page
+        paragraph = section.header.paragraphs[0]
+        _apply_para(paragraph, style)
+        for run in list(paragraph.runs):
+            run._element.getparent().remove(run._element)
+        _apply_run(paragraph.add_run(text), style)
 
 
 def _set_normal(doc: Document, sheet: StyleSheet) -> None:
