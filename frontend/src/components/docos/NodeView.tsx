@@ -135,6 +135,10 @@ function TableView({ node }: { node: GraphNode }) {
               {row.children.map((cell) => (
                 <td key={cell.id} className="border border-neutral-400 px-3 py-1.5 align-top text-neutral-900">
                   {cell.content}
+                  {/* a screenshot laid out in a table is still a picture */}
+                  {cell.children.map((pic) => (
+                    <ImageView key={pic.id} node={pic} css={styleToCss(pic.style)} />
+                  ))}
                 </td>
               ))}
             </tr>

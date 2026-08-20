@@ -148,3 +148,32 @@ def test_text_next_to_a_picture_becomes_its_caption(text):
 
     figures = [n for n in _render(doc) if n.type == NodeType.FIGURE]
     assert figures[0].children[0].content == text
+
+
+# ── pictures laid out in a table ────────────────────────────────────────────
+
+def test_a_picture_in_a_table_cell_is_not_dropped():
+    """Putting screenshots in a table is a common layout; the cell text alone
+    was all that survived, so the pictures vanished."""
+    doc = Document()
+    table = doc.add_table(rows=1, cols=2)
+    table.rows[0].cells[0].text = "Screenshot 1"
+    table.rows[0].cells[1].paragraphs[0].add_run().add_picture(_png(), width=Inches(1))
+
+    graph_nodes = _render(doc)
+    images = [n for node in graph_nodes for n in node.walk() if n.type == NodeType.IMAGE]
+    assert len(images) == 1
+    assert images[0].metadata.get("src", "").startswith("data:image/")
+
+
+def test_cell_text_still_survives_alongside_its_picture():
+    doc = Document()
+    table = doc.add_table(rows=1, cols=1)
+    cell = table.rows[0].cells[0]
+    cell.text = "Figure 1"
+    cell.paragraphs[0].add_run().add_picture(_png(), width=Inches(1))
+
+    table_node = next(n for n in _render(doc) if n.type == NodeType.TABLE)
+    cell_node = table_node.children[0].children[0]
+    assert "Figure 1" in cell_node.content
+    assert len(cell_node.children) == 1

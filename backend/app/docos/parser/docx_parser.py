@@ -248,10 +248,18 @@ def _table_node(table: _Table, doc: _Doc) -> Node:
     for r in table.rows:
         cells: list[Node] = []
         for c in r.cells:
+            # A cell's pictures come with it. Reading only c.text dropped any
+            # screenshot placed in a table — a common way to lay out figures.
+            pictures: list[Node] = []
+            for para in c.paragraphs:
+                for img in _images(para):
+                    pictures.append(Node(type=NodeType.IMAGE,
+                                         metadata={"is_figure": True, **img}))
             cells.append(
                 Node(
                     type=NodeType.TABLE_CELL,
                     content=c.text,
+                    children=pictures,
                     metadata={},
                 )
             )
