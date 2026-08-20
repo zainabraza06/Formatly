@@ -12,7 +12,7 @@ import anyio.to_thread
 import threading
 from typing import Any, Callable, Optional, TypeVar
 
-from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Body, Depends, HTTPException, Request
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field, ValidationError
 
@@ -20,9 +20,10 @@ from app.docos.auth import get_current_user
 from app.docos.auth.store import User
 from app.paper.generator import PaperGenerationError, generate_paper
 from app.paper.prompt import DEFAULT_DEPTH, DEPTHS
+from app.paper.refine import InstructionRefinementError, refine_instructions
 from app.paper.renderer import render_paper
 from app.paper.schema import PaperSpec
-from app.paper.styles import DEFAULT_STYLE, get_stylesheet, list_styles, resolve_style
+from app.paper.styles import DEFAULT_STYLE, list_styles, resolve_style
 from app.paper.styles.base import StyleSheet
 from app.paper.styles.store import get_style_store
 from app.paper.stylesheet import resolve
@@ -39,6 +40,18 @@ class Attachment(BaseModel):
     measurements, survey responses, a transcript, source code, citations…"""
     label: str = ""
     content: str = ""
+
+
+class RefineInstructionsRequest(BaseModel):
+    """What the user typed, plus enough context to refine it usefully."""
+    instructions: str = Field(min_length=1)
+    raw_text: str = ""
+    doc_kind: str = "document"
+    style: str = DEFAULT_STYLE
+    # A previous attempt and what was wrong with it, so a retry is a correction
+    # rather than another roll of the dice.
+    previous: Optional[str] = None
+    feedback: Optional[str] = None
 
 
 class GenerateRequest(BaseModel):
@@ -260,3 +273,27 @@ async def compose(req: GenerateRequest, request: Request,
 def _safe(name: str) -> str:
     keep = "".join(c if c.isalnum() or c in " -_" else "" for c in (name or "document"))
     return (keep.strip() or "document")[:60]
+
+
+@router.post("/instructions/refine")
+async def refine(req: RefineInstructionsRequest, request: Request,
+                 user: User = Depends(get_current_user)) -> dict[str, Any]:
+    """Turn a loose instruction into one the writer can actually act on.
+
+    Nothing is generated here and nothing is saved — the caller decides whether
+    to keep the result, send feedback and try again, or ignore it entirely.
+    """
+    def work(cancel: threading.Event):
+        return refine_instructions(
+            instructions=req.instructions, raw_text=req.raw_text,
+            doc_kind=req.doc_kind, style=req.style,
+            previous=req.previous, feedback=req.feedback, cancel=cancel,
+        )
+
+    try:
+        refined, provider = await _run_cancellable(request, work)
+    except GenerationCancelled:
+        raise HTTPException(status_code=_CLIENT_CLOSED, detail="cancelled by the client")
+    except InstructionRefinementError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+    return {"provider": provider, **refined.model_dump()}

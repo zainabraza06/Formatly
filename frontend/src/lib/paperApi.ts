@@ -84,7 +84,34 @@ export interface ComposeRequest {
   authors?: { name: string; affiliation?: string; email?: string }[]
 }
 
+export interface RefinedInstructions {
+  provider: string
+  improved: string
+  changes: string[]
+  questions: string[]
+}
+
 export const paperApi = {
+  /** Refine a loose instruction into one the writer can act on. `previous` and
+   *  `feedback` make a retry a correction rather than another roll of the dice. */
+  refineInstructions: async (
+    body: {
+      instructions: string
+      raw_text?: string
+      doc_kind?: string
+      style?: string
+      previous?: string | null
+      feedback?: string | null
+    },
+    signal?: AbortSignal,
+  ): Promise<RefinedInstructions> =>
+    json(await fetch(`${API_URL}/paper/instructions/refine`, {
+      method: 'POST',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(body),
+      signal,
+    })),
+
   styles: async (): Promise<StyleSummary[]> =>
     json(await fetch(`${API_URL}/paper/styles`, { headers: authHeaders() })),
 

@@ -3,6 +3,7 @@ import clsx from 'clsx'
 import { GlassCard } from '../components/GlassCard'
 import { DocumentPreview } from '../components/paper/DocumentPreview'
 import { GenerationStatus } from '../components/paper/GenerationStatus'
+import { InstructionRefiner, RefineButton } from '../components/paper/InstructionRefiner'
 import {
   downloadBlob, isAbort, paperApi,
   type ComposeRequest, type Depth, type PaperSpec, type StyleSummary,
@@ -43,6 +44,7 @@ export function ComposePaper() {
 
   const [rawText, setRawText] = useState('')
   const [instructions, setInstructions] = useState('')
+  const [refining, setRefining] = useState(false)
   const [titleHint, setTitleHint] = useState('')
   const [authorName, setAuthorName] = useState('')
   const [authorAffil, setAuthorAffil] = useState('')
@@ -188,17 +190,41 @@ Interview: "The renewal price jumped 40% with no warning."`}
             />
           </Field>
 
-          <Field
-            label="Extra instructions"
-            hint="Followed as written, and they override the defaults. One per line is fine."
-          >
+          <div>
+            <div className="mb-1 flex items-center justify-between gap-3">
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-muted">
+                Extra instructions
+              </span>
+              <RefineButton
+                disabled={!instructions.trim()}
+                active={refining}
+                onClick={() => setRefining((r) => !r)}
+              />
+            </div>
             <textarea value={instructions} onChange={(e) => setInstructions(e.target.value)}
                       rows={3}
                       placeholder={`e.g. Bold the important keywords and technical terms.
 Keep it under 4 pages.
 Write in the first person plural.`}
                       className={area} />
-          </Field>
+            <span className="mt-1 block text-[10px] text-faint">
+              Followed as written, and they override the defaults. One per line is fine.
+            </span>
+
+            {refining && instructions.trim() && (
+              <InstructionRefiner
+                instructions={instructions}
+                rawText={rawText}
+                docKind={docKind}
+                style={style}
+                onAccept={(improved) => {
+                  setInstructions(improved)
+                  setRefining(false)
+                }}
+                onClose={() => setRefining(false)}
+              />
+            )}
+          </div>
         </GlassCard>
 
         {/* ── settings + actions ── */}

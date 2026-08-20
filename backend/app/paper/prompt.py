@@ -546,3 +546,72 @@ def _material_message(
         payload["authors"] = authors
 
     return f"{lead}\n" + json.dumps(payload, indent=2, ensure_ascii=False)
+
+
+# ── instruction refinement ──────────────────────────────────────────────────
+#
+# Special instructions are the part users get least help with. They write
+# "make it look professional", the writer has nothing actionable to do with
+# that, and the result disappoints without anybody being able to say why. This
+# pass turns intent into instructions the writer can act on, and — importantly —
+# asks rather than guesses when the intent is genuinely unclear.
+
+IMPROVE_SYSTEM = """You refine a person's instructions for a document that is about to be
+written. You do NOT write the document.
+
+Return ONLY strict JSON. No markdown fences, no commentary.
+
+{
+  "improved": "<the rewritten instructions, ready to hand to the writer>",
+  "changes": ["<what you made explicit, one short line each>"],
+  "questions": ["<anything you could not settle without them; empty if none>"]
+}
+
+Rules:
+- Preserve their intent exactly. You are making it precise, not making it yours. Never add a
+  requirement they did not ask for, drop one they did, or change what they asked for because
+  you would have done it differently.
+- Turn a vague wish into something checkable. "Make it look professional" becomes the
+  specific things they plausibly mean for this document; "add screenshots" becomes which
+  screenshots, of what, and how many.
+- Where the brief or material already names a number — five screenshots, three test cases,
+  under four pages — carry that number into the instructions rather than leaving "several".
+- Keep it in their voice, in plain imperative sentences, one instruction per line. No
+  headings, no numbering, no preamble.
+- Do not restate the whole task. These are the EXTRA instructions that sit alongside the
+  material, not a rewrite of the brief.
+- If something is genuinely ambiguous and the answer would change the document, put it in
+  "questions" instead of choosing for them. Ask at most three, and only about things that
+  matter.
+- If their instructions are already clear and specific, say so: return them nearly unchanged
+  with an empty or near-empty "changes".
+"""
+
+
+def build_improve_message(
+    *,
+    instructions: str,
+    raw_text: str = "",
+    doc_kind: str = "document",
+    style: str = "report",
+    feedback: Optional[str] = None,
+    previous: Optional[str] = None,
+) -> str:
+    """The refinement request, including any earlier attempt and what the user
+    said was wrong with it — which is what makes a second round better than a
+    re-roll of the first."""
+    payload: dict[str, Any] = {
+        "task": "Refine the extra instructions for the document described below.",
+        "their_instructions": instructions,
+        "document_kind": doc_kind,
+        "style": style,
+    }
+    if previous:
+        payload["your_previous_attempt"] = previous
+    if feedback:
+        payload["their_feedback_on_it"] = feedback
+    if raw_text.strip():
+        # Trimmed: the refiner needs to know what the document is about, not to
+        # re-read every word of it.
+        payload["material_excerpt"] = raw_text.strip()[:4000]
+    return "Refine these instructions.\n" + json.dumps(payload, indent=2, ensure_ascii=False)
