@@ -176,6 +176,18 @@ VISUALISATION RULES — important:
 - If the material contains no chartable values, return an empty "visualization_plan" and no
   figure blocks. Do not fabricate data to justify a chart.
 
+EXTRA INSTRUCTIONS — these are the user's own words and they OVERRIDE the defaults
+above. If `extra_instructions` is present in the payload, follow every part of it. It is
+not a hint or a preference: a request to bold key terms, keep sections short, use a
+particular voice, include or omit something, is binding. Where it conflicts with a default
+in this prompt, the user wins. Re-read it before you finish and check you did each thing
+it asked.
+
+EMPHASIS — inside any "text" field you may mark emphasis with **bold** and *italic*, and
+the renderer turns those into real bold and italic runs. Use them where the user asks for
+emphasis, and where a key term genuinely earns it. ("No markdown fences" above is about
+the JSON envelope — never wrap the JSON itself in ``` — not about the prose inside it.)
+
 TABLES — use them for quantitative or comparative content where they help the reader.
 EQUATIONS — include any formulae the material relies on, if any.
 """
@@ -274,6 +286,17 @@ Rules:
 - Assign each chartable set of values in the material to "visualization_plan", stating what
   the data is, the chart kind, and why. If there are no chartable values, return an empty list.
 - Never invent facts, citations or numbers that are absent from the material.
+EXTRA INSTRUCTIONS — these are the user's own words and they OVERRIDE the defaults
+above. If `extra_instructions` is present in the payload, follow every part of it. It is
+not a hint or a preference: a request to bold key terms, keep sections short, use a
+particular voice, include or omit something, is binding. Where it conflicts with a default
+in this prompt, the user wins. Re-read it before you finish and check you did each thing
+it asked.
+
+EMPHASIS — inside any "text" field you may mark emphasis with **bold** and *italic*, and
+the renderer turns those into real bold and italic runs. Use them where the user asks for
+emphasis, and where a key term genuinely earns it. ("No markdown fences" above is about
+the JSON envelope — never wrap the JSON itself in ``` — not about the prose inside it.)
 """
 
 SECTION_SYSTEM = """You are writing ONE section of a document that is already planned.
@@ -305,6 +328,17 @@ Rules:
 - Include a table or figure ONLY if this section is the one that should carry it according to
   the visualisation plan you are given, and only using values present in the material.
 - Never invent facts, citations or numbers that are absent from the material.
+EXTRA INSTRUCTIONS — these are the user's own words and they OVERRIDE the defaults
+above. If `extra_instructions` is present in the payload, follow every part of it. It is
+not a hint or a preference: a request to bold key terms, keep sections short, use a
+particular voice, include or omit something, is binding. Where it conflicts with a default
+in this prompt, the user wins. Re-read it before you finish and check you did each thing
+it asked.
+
+EMPHASIS — inside any "text" field you may mark emphasis with **bold** and *italic*, and
+the renderer turns those into real bold and italic runs. Use them where the user asks for
+emphasis, and where a key term genuinely earns it. ("No markdown fences" above is about
+the JSON envelope — never wrap the JSON itself in ``` — not about the prose inside it.)
 """
 
 
@@ -344,18 +378,23 @@ def build_section_message(
 ) -> str:
     payload: dict[str, Any] = {
         "task": f"Write the section '{section.get('heading', '')}' of the document.",
+    }
+    # The user's own instructions go FIRST. Buried under the outline and a few
+    # thousand words of source material they read as an afterthought, and every
+    # section of a multi-pass document inherits the same neglect.
+    if instructions:
+        payload["extra_instructions"] = instructions
+    payload.update({
         "document_title": title,
         "this_section": section,
         "full_outline": [s.get("heading", "") for s in outline],
         "sections_already_written": list(written_so_far),
         "visualization_plan": list(visualization_plan),
         "source_material": raw_text,
-    }
+    })
     extras = _clean_attachments(attachments)
     if extras:
         payload["additional_material"] = extras
-    if instructions:
-        payload["extra_instructions"] = instructions
     return ("Produce the JSON for this section only.\n"
             + json.dumps(payload, indent=2, ensure_ascii=False))
 
@@ -402,8 +441,12 @@ def _material_message(
 ) -> str:
     payload: dict[str, Any] = {
         "task": f"Write a complete {doc_kind} in {style.upper()} style from the material below.",
-        "source_material": raw_text,
     }
+    # The user's own instructions go FIRST. Buried under a few thousand words of
+    # source material they read as an afterthought and get treated as one.
+    if instructions:
+        payload["extra_instructions"] = instructions
+    payload["source_material"] = raw_text
 
     # Arbitrary user-labelled material: data, results, code, transcripts, notes,
     # citations — whatever this particular job involves.
@@ -413,8 +456,6 @@ def _material_message(
 
     if reference_example:
         payload["reference_example_to_follow"] = reference_example
-    if instructions:
-        payload["extra_instructions"] = instructions
     if title_hint:
         payload["title_hint"] = title_hint
     if authors:
