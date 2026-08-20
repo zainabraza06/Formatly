@@ -87,6 +87,11 @@ class DocOSService:
                 "version": info.to_dict(), "graph": graph.to_dict(),
                 "exact_pages": None}
 
+    def current_graph(self, doc_id: str, owner_id: Optional[str] = None):
+        """The document's current graph, if it belongs to this user."""
+        self._require_owner(doc_id, owner_id)
+        return self.versions.current_graph(doc_id)
+
     def get_document(self, doc_id: str, owner_id: Optional[str] = None) -> dict[str, Any]:
         doc = self._require_owner(doc_id, owner_id)
         graph = self.versions.current_graph(doc_id)

@@ -62,6 +62,19 @@ export const docosApi = {
       body: JSON.stringify({ spec, title }),
     })),
 
+  /** The document as LibreOffice lays it out, built from the *current* graph
+   *  so it reflects edits rather than the file as it arrived. */
+  exactPdf: async (id: string, signal?: AbortSignal): Promise<Blob> => {
+    const res = await fetch(`${API_URL}/docos/${id}/exact.pdf`, {
+      headers: authHeaders(), signal,
+    })
+    if (!res.ok) {
+      const detail = await res.text().catch(() => '')
+      throw new Error(detail || `Request failed: ${res.status}`)
+    }
+    return res.blob()
+  },
+
   getDocument: async (id: string): Promise<GetDocumentResponse> =>
     json(await fetch(`${API_URL}/docos/${id}`, { headers: authHeaders() })),
 

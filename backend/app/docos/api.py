@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from fastapi.responses import FileResponse
 from fastapi import (
     APIRouter, Body, Depends, File, HTTPException, UploadFile, WebSocket, WebSocketDisconnect,
 )
@@ -67,6 +68,35 @@ def get_document(doc_id: str, user: User = Depends(get_current_user)) -> dict[st
         raise HTTPException(status_code=404, detail="document not found")
     except PermissionError:
         raise HTTPException(status_code=403, detail="not your document")
+
+
+@router.get("/{doc_id}/exact.pdf")
+def exact_view(doc_id: str, user: User = Depends(get_current_user)) -> FileResponse:
+    """The document as a real layout engine renders it.
+
+    The editor lays out with HTML and CSS, which comes close but cannot
+    reproduce Word's line breaking or pagination. This writes the *current*
+    graph — edits included — back to DOCX and lets LibreOffice lay it out, so
+    the exact view is of the document as it stands rather than as it arrived.
+    """
+    from app.docos.export import graph_to_docx_bytes
+    from app.docos.parser.paginator import docx_to_pdf, libreoffice_available
+
+    if not libreoffice_available():
+        raise HTTPException(status_code=503, detail="the exact view needs LibreOffice")
+
+    try:
+        graph = get_service().current_graph(doc_id, owner_id=user.id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="document not found")
+    except PermissionError:
+        raise HTTPException(status_code=404, detail="document not found")
+
+    pdf = docx_to_pdf(graph_to_docx_bytes(graph))
+    if pdf is None:
+        raise HTTPException(status_code=503, detail="could not render the exact view")
+    return FileResponse(str(pdf), media_type="application/pdf",
+                        filename=f"{doc_id}.pdf")
 
 
 @router.get("/{doc_id}/history")

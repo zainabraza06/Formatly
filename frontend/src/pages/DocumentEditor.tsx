@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import clsx from 'clsx'
 import { GlassCard } from '../components/GlassCard'
 import { AIPanel } from '../components/docos/AIPanel'
+import { ExactView } from '../components/docos/ExactView'
 import { GraphCanvas } from '../components/docos/GraphCanvas'
 import { VersionTimeline } from '../components/docos/VersionTimeline'
 import { useDocOS } from '../hooks/useDocOS'
@@ -13,6 +14,7 @@ export function DocumentEditor() {
   const [searchParams] = useSearchParams()
   const fileRef = useRef<HTMLInputElement>(null)
   const [dragOver, setDragOver] = useState(false)
+  const [view, setView] = useState<'edit' | 'exact'>('edit')
   const [error, setError] = useState<string | null>(null)
 
   // open a document passed via ?doc=<id> (from My Uploads / after import)
@@ -56,7 +58,26 @@ export function DocumentEditor() {
             )}
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
+          {/* The editor lays out with HTML and CSS, which comes close but is not
+              the document. Exact hands the current graph to a real layout engine
+              and shows what it produces — accurate, and read-only for it. */}
+          {!noDoc && (
+            <div className="flex rounded-lg border border-line bg-surface p-0.5 text-xs">
+              {(['edit', 'exact'] as const).map((m) => (
+                <button
+                  key={m}
+                  onClick={() => setView(m)}
+                  className={clsx(
+                    'rounded-md px-2.5 py-1 font-medium transition-colors',
+                    view === m ? 'bg-surface-2 text-ink' : 'text-muted hover:text-ink',
+                  )}
+                >
+                  {m === 'edit' ? 'Edit' : 'Exact'}
+                </button>
+              ))}
+            </div>
+          )}
           <input
             ref={fileRef}
             type="file"
@@ -95,6 +116,8 @@ export function DocumentEditor() {
               <span className="text-4xl">📄</span>
               <div className="text-sm">Drag & drop a .docx here, or click Import</div>
             </div>
+          ) : view === 'exact' ? (
+            <ExactView docId={doc.docId} graph={doc.graph} />
           ) : (
             <GraphCanvas
               graph={doc.graph}
