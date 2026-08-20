@@ -212,6 +212,28 @@ the renderer turns those into real bold and italic runs. Use them where the user
 emphasis, and where a key term genuinely earns it. ("No markdown fences" above is about
 the JSON envelope — never wrap the JSON itself in ``` — not about the prose inside it.)
 
+LAYOUT AND FORMATTING — the stylesheet sets sensible typography, but the user may ask for
+something specific, and you have the means to give it to them. Do not answer a formatting
+instruction with prose about it; express it.
+- EVERY block accepts an optional "style" object that overrides the stylesheet for that block
+  alone. Any subset of:
+  {"font":"Arial","size_pt":12,"bold":true,"italic":true,"underline":true,"small_caps":true,
+   "all_caps":true,"color":"#000000","alignment":"left|center|right|justify",
+   "first_line_indent_in":0.5,"left_indent_in":0.5,"hanging_indent_in":0.25,
+   "space_before_pt":12,"space_after_pt":6,"line_spacing":2.0,"keep_with_next":true}
+  So "double-space it" is "line_spacing":2.0; "centre the headings" is
+  "alignment":"center"; "indent the quotation" is "left_indent_in". Use it only where asked
+  or where the content plainly needs it — do not restyle a document nobody asked you to.
+- {"type":"page_break"} starts what follows on a new page. Use it when the user asks for a
+  section to begin on its own page.
+- A COVER SHEET, when and only when the brief or the user asks for one: set
+  "title_page": true in meta, and put every extra line they name — course code and title,
+  student id, registration number, submission date, supervisor, department — in
+  "title_page_lines" as separate strings, in the order asked for. The cover sheet then holds
+  the title, the authors, and exactly those lines, and the document starts on the next page.
+  If they say it should contain only certain things, put only those things there.
+  Without "title_page": true there is no separate cover sheet, which is right for a paper.
+
 TABLES — use them for quantitative or comparative content where they help the reader.
 EQUATIONS — include any formulae the material relies on, if any.
 """

@@ -25,7 +25,8 @@ from app.paper.equations import looks_like_math, render_equation_png
 from app.paper.figures import render_figure
 from app.paper.references import format_reference
 from app.paper.schema import (
-    Code, Equation, Figure, Heading, ListBlock, Paragraph as PBlock, PaperSpec, Style, Table,
+    Code, Equation, Figure, Heading, ListBlock, PageBreak,
+    Paragraph as PBlock, PaperSpec, Style, Table,
 )
 from app.paper.styles import StyleLike, resolve_style
 from app.paper.styles.base import StyleSheet
@@ -92,6 +93,8 @@ def render_paper(spec: PaperSpec, out_path: str | Path,
         elif isinstance(block, Code):
             if _code(doc, block, counters["code"] + 1, assets, spec, sheet):
                 counters["code"] += 1
+        elif isinstance(block, PageBreak):
+            _hard_page_break(doc)
 
     if spec.references:
         _references(doc, spec, sheet)
@@ -260,6 +263,10 @@ def _as_heading(style: Style) -> Style:
 
 def _title_block(doc: Document, spec: PaperSpec, sheet: StyleSheet) -> None:
     m = spec.meta
+    if m.title_page:
+        _cover_sheet(doc, spec, sheet)
+        return
+
     _styled_paragraph(doc, m.title, sheet.title)
 
     for author in m.authors:
@@ -288,6 +295,60 @@ def _title_block(doc: Document, spec: PaperSpec, sheet: StyleSheet) -> None:
             _apply_run(p.add_run(sheet.keywords_lead),
                        sheet.keywords.merged(Style(bold=True, italic=True)))
         _apply_run(p.add_run(", ".join(m.keywords) + "."), sheet.keywords)
+
+
+def _cover_sheet(doc: Document, spec: PaperSpec, sheet: StyleSheet) -> None:
+    """A cover sheet of its own, holding only what was asked for.
+
+    Coursework is usually submitted behind one; a conference paper never is. So
+    this is written only when meta.title_page says so, and it carries exactly
+    the title, the authors and meta.title_page_lines — no abstract, no keywords,
+    nothing the brief did not name.
+    """
+    m = spec.meta
+    centred = Style(alignment="center", first_line_indent_in=0.0)
+
+    _styled_paragraph(doc, "", Style(space_after_pt=0, size_pt=11))
+    _styled_paragraph(doc, m.title, sheet.title.merged(
+        centred.merged(Style(space_before_pt=150, space_after_pt=28))))
+
+    for author in m.authors:
+        _styled_paragraph(doc, author.name, sheet.author.merged(
+            centred.merged(Style(space_after_pt=4))))
+        detail = ", ".join(x for x in (author.affiliation, author.email) if x)
+        if detail:
+            _styled_paragraph(doc, detail, sheet.affiliation.merged(
+                centred.merged(Style(space_after_pt=4))))
+
+    for line in m.title_page_lines:
+        if line.strip():
+            _styled_paragraph(doc, line, sheet.author.merged(
+                centred.merged(Style(italic=False, space_after_pt=4))))
+
+    _hard_page_break(doc)
+
+    # The abstract, where a brief asked for one, belongs after the cover sheet.
+    if m.abstract:
+        if sheet.abstract_as_heading:
+            _styled_paragraph(doc, "Abstract", _as_heading(sheet.heading1),
+                              word_style=_WORD_HEADING[1])
+            _styled_paragraph(doc, m.abstract, sheet.abstract)
+        else:
+            p = doc.add_paragraph()
+            _apply_para(p, sheet.abstract)
+            if sheet.abstract_lead:
+                _apply_run(p.add_run(sheet.abstract_lead),
+                           sheet.abstract.merged(Style(bold=True, italic=True)))
+            _apply_run(p.add_run(m.abstract), sheet.abstract)
+
+
+def _hard_page_break(doc: Document) -> None:
+    p = doc.add_paragraph()
+    _apply_para(p, Style(space_before_pt=0, space_after_pt=0, first_line_indent_in=0.0))
+    run = p.add_run()
+    br = OxmlElement("w:br")
+    br.set(qn("w:type"), "page")
+    run._element.append(br)
 
 
 # ── blocks ──────────────────────────────────────────────────────────────────

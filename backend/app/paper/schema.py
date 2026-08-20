@@ -155,6 +155,12 @@ class Figure(BlockBase):
     caption_style: Optional[Style] = None
 
 
+class PageBreak(BlockBase):
+    """Start what follows on a new page. The primitive behind a cover sheet, and
+    behind any instruction to begin a section on its own page."""
+    type: Literal["page_break"] = "page_break"
+
+
 class Code(BlockBase):
     type: Literal["code"] = "code"
     language: str = ""
@@ -173,7 +179,7 @@ class Code(BlockBase):
 
 
 Block = Annotated[
-    Union[Heading, Paragraph, ListBlock, Equation, Table, Figure, Code],
+    Union[Heading, Paragraph, ListBlock, Equation, Table, Figure, Code, PageBreak],
     Field(discriminator="type"),
 ]
 
@@ -202,6 +208,12 @@ class PaperMeta(BaseModel):
     authors: list[Author] = Field(default_factory=list)
     abstract: str = ""
     keywords: list[str] = Field(default_factory=list)
+    # A cover sheet of its own, the document starting on the page after it.
+    # Coursework usually wants one; a conference paper never does.
+    title_page: bool = False
+    # Extra centred lines for that cover sheet, in the order given — course
+    # code, student id, submission date, supervisor, whatever the brief names.
+    title_page_lines: list[str] = Field(default_factory=list)
     # any registered stylesheet id: "ieee" | "apa" | "acm" | "report" | …
     style: str = "report"
     page: PageSetup = Field(default_factory=PageSetup)
