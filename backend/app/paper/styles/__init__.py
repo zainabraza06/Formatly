@@ -113,9 +113,6 @@ def _summary(sheet: StyleSheet, builtin: bool) -> dict[str, str]:
         "name": sheet.name,
         "columns": str(sheet.page.columns),
         "builtin": "true" if builtin else "false",
-        "derived_from": sheet.derived_from,
-        # what was read from a reference sample rather than inherited from a base
-        "detected": ",".join(sheet.detected),
         "heading_scheme": sheet.heading_scheme,
         "table_borders": sheet.table_borders,
     }

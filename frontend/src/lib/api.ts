@@ -5,11 +5,13 @@ import type {
   GenerateRequest,
   GenerateResponse,
   RecentDocument,
-  TemplateAnalyzeResponse,
   Tone,
 } from '../types/api'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000'
+
+/** Exposed so the settings page can report where it is actually pointing. */
+export const API_BASE_URL = API_URL
 
 async function http<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, {
@@ -30,7 +32,13 @@ async function http<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
-  health: () => http<{ status: string }>('/health'),
+  health: () =>
+    http<{ status: string; version: string; exact_preview: boolean }>('/health'),
+
+  providerStatus: () =>
+    http<Record<string, { state: string; model: string; has_key: boolean }>>(
+      '/providers/status',
+    ),
 
   generate: (payload: GenerateRequest) =>
     http<GenerateResponse>('/generate', {
@@ -82,26 +90,5 @@ export const api = {
   // ── Export URLs ──────────────────────────────────────────────────────────
   exportDocxUrl:  (documentId: string) => `${API_URL}/documents/${documentId}/export/docx`,
   exportPdfUrl:   (documentId: string) => `${API_URL}/documents/${documentId}/export/pdf`,
-  exportExcelUrl: (documentId: string) => `${API_URL}/documents/${documentId}/export/excel`,
-
-  // ── Templates ────────────────────────────────────────────────────────────
-  uploadTemplate: async (file: File) => {
-    const form = new FormData()
-    form.append('file', file)
-
-    const res = await fetch(`${API_URL}/templates/upload`, {
-      method: 'POST',
-      body: form,
-    })
-
-    if (!res.ok) {
-      const text = await res.text().catch(() => '')
-      throw new Error(text || `Upload failed: ${res.status}`)
-    }
-
-    return (await res.json()) as TemplateAnalyzeResponse
-  },
-
-  analyzeTemplate: (templateId: string) =>
-    http<TemplateAnalyzeResponse>(`/templates/${templateId}/analyze`),
+  exportExcelUrl: (documentId: string) => `${API_URL}/documents/${documentId}/export/excel`
 }

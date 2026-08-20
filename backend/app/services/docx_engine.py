@@ -225,7 +225,6 @@ def build_docx(
     sections: list[DocumentSection],
     style_preset: str,
     extracted_rules: dict[str, Any],
-    template_style: Optional[dict[str, Any]] = None,
     chart_specs: Optional[list[ChartSpec]] = None,
     chart_pngs: Optional[list[Path]] = None,
     include_title_page: bool = True,
@@ -234,7 +233,7 @@ def build_docx(
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
-    ts     = template_style or {}
+    ts     = {}
     preset: StyleConfig = get_preset(style_preset)  # type: ignore[arg-type]
 
     font_name    = ts.get("font_name") or extracted_rules.get("font_name") or preset.font_name

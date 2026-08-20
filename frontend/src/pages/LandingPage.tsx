@@ -194,12 +194,6 @@ export function LandingPage() {
  >
  Start a New Document
  </Link>
- <Link
- to="/app/templates"
- className="rounded-xl border border-line/80 bg-surface px-6 py-2.5 text-sm font-semibold text-ink transition hover:bg-surface dark:hover:bg-surface-2"
- >
- Upload a Template
- </Link>
  </motion.div>
  </section>
 
@@ -302,12 +296,6 @@ export function LandingPage() {
  </li>
  ))}
  </ol>
- <Link
- to="/app/templates"
- className="mt-4 inline-flex items-center gap-1 text-xs font-semibold text-ink hover:text-ink dark:text-muted"
- >
- Try it → Templates
- </Link>
  </div>
 
  {/* Demo 2 */}

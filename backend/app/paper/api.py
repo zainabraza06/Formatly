@@ -24,7 +24,6 @@ from app.paper.renderer import render_paper
 from app.paper.schema import PaperSpec
 from app.paper.styles import DEFAULT_STYLE, get_stylesheet, list_styles, resolve_style
 from app.paper.styles.base import StyleSheet
-from app.paper.styles.extract import derive_stylesheet_from_docx
 from app.paper.styles.store import get_style_store
 from app.paper.stylesheet import resolve
 from app.services.router import GenerationCancelled
@@ -81,27 +80,6 @@ def create_style(sheet: dict[str, Any] = Body(...),
     if not parsed.name.strip():
         raise HTTPException(status_code=422, detail="stylesheet needs a name")
     saved = get_style_store().save(user.id, parsed)
-    return saved.model_dump(mode="json")
-
-
-@router.post("/styles/from-docx")
-async def style_from_docx(
-    file: UploadFile = File(...),
-    name: str = Form(...),
-    base: str = Form(DEFAULT_STYLE),
-    user: User = Depends(get_current_user),
-) -> dict[str, Any]:
-    """Learn a custom style from a reference DOCX: fonts, sizes, alignment and page
-    geometry are read from the sample; anything it doesn't reveal falls back to `base`."""
-    data = await file.read()
-    try:
-        derived = derive_stylesheet_from_docx(
-            data, name=name, base=get_stylesheet(base),
-            source_filename=file.filename or "reference.docx",
-        )
-    except Exception as exc:
-        raise HTTPException(status_code=400, detail=f"could not read reference DOCX: {exc}")
-    saved = get_style_store().save(user.id, derived)
     return saved.model_dump(mode="json")
 
 

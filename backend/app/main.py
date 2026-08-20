@@ -7,17 +7,11 @@ from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")  # backend/.env
 
-from fastapi import Body, FastAPI, File, HTTPException, UploadFile
+from fastapi import Body, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
-from app.schemas import (
-    ChartSpec,
-    GenerateRequest,
-    GenerateResponse,
-    TemplateAnalyzeResponse,
-    Tone,
-)
+from app.schemas import (ChartSpec, GenerateRequest, GenerateResponse, Tone)
 from app.services import ai
 from app.services.chart_analyzer import analyze_charts
 from app.services.charts import render_chart_png
@@ -29,7 +23,6 @@ from app.services.doc_pipeline import (
 )
 from app.services.export_engine import export_docx, export_excel, export_pdf
 from app.services.storage import get_paths
-from app.services.template_engine import analyze_template, save_template_upload
 
 app = FastAPI(title="Formatly API", version="1.0.0")
 
@@ -52,8 +45,20 @@ app.include_router(paper_router)
 
 
 @app.get("/health")
-def health() -> dict[str, str]:
-    return {"status": "ok"}
+def health() -> dict[str, Any]:
+    """Liveness plus the capabilities a client cannot detect for itself.
+
+    `exact_preview` is what decides whether the composer can show the real
+    document instead of an HTML approximation, so the settings page reports it
+    rather than leaving the user to discover it when a preview silently degrades.
+    """
+    from app.docos.parser.paginator import libreoffice_available
+
+    return {
+        "status": "ok",
+        "version": app.version,
+        "exact_preview": libreoffice_available(),
+    }
 
 
 @app.get("/providers/status")
@@ -208,31 +213,3 @@ def download_excel(document_id: str) -> FileResponse:
 # The old /chat endpoint returned canned text and never reached a model. The real
 # assistant lives in DocOS (/docos/{id}/command and the WebSocket), where a prompt
 # becomes validated actions applied to the document.
-
-
-# ── Templates ─────────────────────────────────────────────────────────────────
-
-@app.post("/templates/upload", response_model=TemplateAnalyzeResponse)
-async def upload_template(file: UploadFile = File(...)) -> Any:
-    content  = await file.read()
-    meta     = save_template_upload(
-        filename=file.filename or "template",
-        content=content,
-        content_type=file.content_type,
-    )
-    analysis = analyze_template(meta["template_id"]) or {
-        "template_id":     meta["template_id"],
-        "filename":        meta["filename"],
-        "kind":            meta["kind"],
-        "summary":         "Uploaded",
-        "extracted_style": {},
-    }
-    return analysis
-
-
-@app.get("/templates/{template_id}/analyze", response_model=TemplateAnalyzeResponse)
-def template_analyze(template_id: str) -> Any:
-    analysis = analyze_template(template_id)
-    if not analysis:
-        raise HTTPException(status_code=404, detail="Template not found")
-    return analysis

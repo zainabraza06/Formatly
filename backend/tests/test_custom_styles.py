@@ -12,7 +12,6 @@ from app.paper.renderer import render_paper
 from app.paper.schema import PaperSpec, Style
 from app.paper.styles import get_stylesheet, list_styles, resolve_style
 from app.paper.styles.base import StyleSheet
-from app.paper.styles.extract import derive_stylesheet_from_docx
 from app.paper.styles.store import StyleStore
 
 SPEC = {
@@ -127,7 +126,6 @@ def test_render_with_custom_stylesheet_object(tmp_path):
     assert any(p.text.startswith("I. Introduction") for p in paras)
 
 
-# ── derivation from a reference DOCX ────────────────────────────────────────
 
 def _reference_docx() -> bytes:
     doc = Document()
@@ -145,47 +143,3 @@ def _reference_docx() -> bytes:
     buf = io.BytesIO()
     doc.save(buf)
     return buf.getvalue()
-
-
-def test_derive_stylesheet_from_reference_docx():
-    derived = derive_stylesheet_from_docx(
-        _reference_docx(), name="From Sample",
-        base=get_stylesheet("report"), source_filename="sample.docx",
-    )
-    assert derived.name == "From Sample"
-    assert derived.builtin is False
-    assert derived.derived_from == "sample.docx"
-    # learned from the sample
-    assert derived.body.font == "Garamond"
-    assert derived.body.size_pt == 13
-    assert derived.heading1.font == "Garamond"
-    assert derived.heading1.size_pt == 20
-    # page geometry read from the sample's section
-    assert derived.page.width_in == pytest.approx(8.5, abs=0.01)
-    # not revealed by the sample → kept from the base
-    assert derived.table_borders == get_stylesheet("report").table_borders
-
-
-def test_derived_style_renders(tmp_path):
-    derived = derive_stylesheet_from_docx(
-        _reference_docx(), name="From Sample", base=get_stylesheet("report"),
-    )
-    out = tmp_path / "derived.docx"
-    render_paper(PaperSpec.model_validate(SPEC), out, style=derived)
-
-    doc = Document(str(out))
-    body = next(p for p in doc.paragraphs if p.text.startswith("Body text"))
-    assert body.runs[0].font.name == "Garamond"
-    assert body.runs[0].font.size == Pt(13)
-
-
-def test_derivation_falls_back_on_empty_document():
-    doc = Document()
-    buf = io.BytesIO()
-    doc.save(buf)
-    derived = derive_stylesheet_from_docx(
-        buf.getvalue(), name="Empty", base=get_stylesheet("ieee"),
-    )
-    # nothing to learn → base preserved, still fully renderable
-    assert derived.body.font == get_stylesheet("ieee").body.font
-    assert derived.page.columns == 2

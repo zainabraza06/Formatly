@@ -12,7 +12,6 @@ import { LandingPage } from './pages/LandingPage'
 import { Login } from './pages/Login'
 import { MyDocuments } from './pages/MyDocuments'
 import { Settings } from './pages/Settings'
-import { Templates } from './pages/Templates'
 
 export default function App() {
   const [theme, setTheme] = useState<ThemeMode>(() => getInitialTheme())
@@ -44,7 +43,6 @@ export default function App() {
           <Route path="editor" element={<DocumentEditor />} />
           {/* /app/new was the old generator — Compose supersedes it */}
           <Route path="new" element={<Navigate to="/app/compose" replace />} />
-          <Route path="templates" element={<Templates />} />
           <Route path="files" element={<GeneratedFiles />} />
           {/* The assistant is not a place you go — it lives in Document OS,
               where you prompt it while formatting a real document. */}

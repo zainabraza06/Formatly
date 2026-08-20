@@ -9,7 +9,6 @@ from app.services.chart_analyzer import analyze_charts
 from app.services.charts import render_chart_png
 from app.services.rules import extract_rules
 from app.services.storage import get_paths, new_id, read_json, write_json
-from app.services.template_engine import get_template_style
 
 
 PIPELINE = [
@@ -28,7 +27,6 @@ def create_document(req: GenerateRequest) -> dict[str, Any]:
     document_id = new_id("doc")
 
     extracted_rules = extract_rules(req.formatting_instructions)
-    template_style  = get_template_style(req.template_id) if req.template_id else None
 
     pipeline = [
         {"name": PIPELINE[0], "status": "done",    "detail": "Prompt received"},
@@ -45,7 +43,6 @@ def create_document(req: GenerateRequest) -> dict[str, Any]:
         formatting_rules=extracted_rules,
         style_preset=req.style_preset,
         tone=req.tone,
-        template_style=template_style,
     )
 
     title   = doc_struct.get("title") or "Untitled Document"
@@ -96,8 +93,6 @@ def create_document(req: GenerateRequest) -> dict[str, Any]:
         "extracted_rules": extracted_rules,
         "style_preset":    req.style_preset,
         "tone":            req.tone,
-        "template_id":     req.template_id,
-        "template_style":  template_style or {},
         "include_title_page": req.include_title_page,
         "include_toc":        req.include_toc,
         "chart_pngs":         chart_pngs,

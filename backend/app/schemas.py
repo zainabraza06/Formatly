@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Literal, Optional
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -36,7 +36,6 @@ class GenerateRequest(BaseModel):
     include_title_page: bool = True
     include_charts: bool = False
     charts: list[ChartSpec] = Field(default_factory=list)
-    template_id: Optional[str] = None
 
 
 class DocumentSection(BaseModel):
@@ -61,9 +60,3 @@ class GenerateResponse(BaseModel):
     suggested_charts: list[ChartSpec] = Field(default_factory=list)
 
 
-class TemplateAnalyzeResponse(BaseModel):
-    template_id: str
-    filename: str
-    kind: Literal["docx", "pdf", "image", "unknown"]
-    summary: str
-    extracted_style: dict[str, Any] = Field(default_factory=dict)

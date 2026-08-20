@@ -38,8 +38,6 @@ export interface StyleSummary {
   name: string
   columns: string
   builtin: string          // "true" | "false" (server sends strings)
-  derived_from: string
-  detected: string         // comma-separated conventions read from the sample
   heading_scheme: string
   table_borders: string
 }
@@ -100,15 +98,6 @@ export const paperApi = {
       body: JSON.stringify(sheet),
     })),
 
-  styleFromDocx: async (file: File, name: string, base: string): Promise<Record<string, any>> => {
-    const form = new FormData()
-    form.append('file', file)
-    form.append('name', name)
-    form.append('base', base)
-    return json(await fetch(`${API_URL}/paper/styles/from-docx`, {
-      method: 'POST', body: form, headers: authHeaders(),
-    }))
-  },
 
   deleteStyle: async (id: string): Promise<{ deleted: boolean }> =>
     json(await fetch(`${API_URL}/paper/styles/${id}`, {

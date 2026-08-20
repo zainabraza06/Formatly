@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Any, Optional
+from typing import Any
 
 from app.paper.jsonx import extract_json
 from app.schemas import Tone
@@ -62,7 +62,6 @@ def generate_structured_document(
     formatting_rules: dict[str, Any],
     style_preset: str,
     tone: Tone,
-    template_style: Optional[dict[str, Any]] = None,
 ) -> dict[str, Any]:
     """
     Returns {title, outline, sections:[{heading, content}]}.
@@ -78,7 +77,6 @@ def generate_structured_document(
                 "style_preset": style_preset,
                 "tone": tone,
                 "formatting_rules": formatting_rules,
-                "template_style": template_style or {},
                 "requirements": {
                     "include_title_page": True,
                     "include_toc": True,

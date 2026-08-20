@@ -20,19 +20,6 @@ const quickActions = [
  ),
  },
  {
- to: '/app/templates',
- label: 'Templates',
- desc: 'Clone a document style',
- color: 'bg-surface',
- border: 'border-line',
- textColor: 'text-ink',
- icon: (
- <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
- <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clipRule="evenodd" />
- </svg>
- ),
- },
- {
  to: '/app/editor',
  label: 'AI Assistant',
  desc: 'Refine & rewrite',
@@ -178,13 +165,7 @@ export function DashboardHome() {
  ))}
  </ol>
 
- <div className="mt-5 grid grid-cols-2 gap-2">
- <Link
- to="/app/templates"
- className="rounded-xl border border-line bg-surface-2 px-3 py-2 text-center text-xs font-semibold text-ink transition hover:bg-surface "
- >
- Templates
- </Link>
+ <div className="mt-5">
  <Link
  to="/app/compose"
  className="rounded-xl bg-accent px-3 py-2 text-center text-xs font-medium text-accent-fg transition hover:opacity-90"

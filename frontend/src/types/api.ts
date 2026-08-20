@@ -41,7 +41,6 @@ export type GenerateRequest = {
   include_title_page: boolean
   include_charts: boolean
   charts: ChartSpec[]
-  template_id?: string | null
 }
 
 export type GenerateResponse = {
@@ -54,13 +53,6 @@ export type GenerateResponse = {
   suggested_charts: ChartSpec[]
 }
 
-export type TemplateAnalyzeResponse = {
-  template_id: string
-  filename: string
-  kind: 'docx' | 'pdf' | 'image' | 'unknown'
-  summary: string
-  extracted_style: Record<string, unknown>
-}
 
 export type Draft = {
   document_id: string
@@ -70,8 +62,6 @@ export type Draft = {
   extracted_rules: Record<string, unknown>
   style_preset: StylePreset
   tone: Tone
-  template_id?: string | null
-  template_style?: Record<string, unknown>
   include_title_page: boolean
   include_toc: boolean
   chart_pngs?: string[]

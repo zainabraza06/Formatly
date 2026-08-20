@@ -3,7 +3,6 @@ import clsx from 'clsx'
 import { GlassCard } from '../components/GlassCard'
 import { DocumentPreview } from '../components/paper/DocumentPreview'
 import { GenerationStatus } from '../components/paper/GenerationStatus'
-import { StyleManager } from '../components/paper/StyleManager'
 import {
   downloadBlob, isAbort, paperApi,
   type ComposeRequest, type Depth, type PaperSpec, type StyleSummary,
@@ -31,9 +30,9 @@ const DOC_KINDS = [
 const CUSTOM_KIND = '__custom_kind__'
 
 const BUILTIN_STYLES: StyleSummary[] = [
-  { id: 'ieee', name: 'IEEE Conference (2-Column)', columns: '2', builtin: 'true', derived_from: '', detected: '', heading_scheme: 'roman_alpha', table_borders: 'horizontal' },
-  { id: 'ieee_1col', name: 'IEEE Conference (1-Column)', columns: '1', builtin: 'true', derived_from: '', detected: '', heading_scheme: 'roman_alpha', table_borders: 'horizontal' },
-  { id: 'assignment', name: 'Formal Assignment', columns: '1', builtin: 'true', derived_from: '', detected: '', heading_scheme: 'decimal', table_borders: 'grid' },
+  { id: 'ieee', name: 'IEEE Conference (2-Column)', columns: '2', builtin: 'true', heading_scheme: 'roman_alpha', table_borders: 'horizontal' },
+  { id: 'ieee_1col', name: 'IEEE Conference (1-Column)', columns: '1', builtin: 'true', heading_scheme: 'roman_alpha', table_borders: 'horizontal' },
+  { id: 'assignment', name: 'Formal Assignment', columns: '1', builtin: 'true', heading_scheme: 'decimal', table_borders: 'grid' },
 ]
 
 export function ComposePaper() {
@@ -52,7 +51,6 @@ export function ComposePaper() {
   const [provider, setProvider] = useState('')
   const [busy, setBusy] = useState<'idle' | 'generating' | 'rendering'>('idle')
   const [error, setError] = useState<string | null>(null)
-  const [showStyles, setShowStyles] = useState(false)
 
   // Held for as long as a run is in flight, so Stop has something to abort.
   const runRef = useRef<AbortController | null>(null)
@@ -168,12 +166,6 @@ export function ComposePaper() {
         </p>
       </div>
 
-      {showStyles && (
-        <GlassCard>
-          <StyleManager styles={styles} onChanged={loadStyles} />
-        </GlassCard>
-      )}
-
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_400px]">
         {/* ── material ── */}
         <GlassCard className="space-y-3">
@@ -213,17 +205,9 @@ Write in the first person plural.`}
         <div className="space-y-4">
           <GlassCard className="space-y-3">
             <div>
-              <div className="mb-1 flex items-center justify-between">
-                <span className="text-[11px] font-semibold uppercase tracking-wide text-neutral-500">
-                  Style
-                </span>
-                <button
-                  onClick={() => setShowStyles((s) => !s)}
-                  className="text-[11px] font-medium text-ink underline-offset-2 hover:underline"
-                >
-                  {showStyles ? 'Hide manager' : 'Manage / add styles'}
-                </button>
-              </div>
+              <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-neutral-500">
+                Style
+              </span>
 
               <select
                 value={style}
