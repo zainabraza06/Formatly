@@ -1,10 +1,14 @@
 """
-Multi-provider AI router for Formatly.
+AI provider client for Formatly.
 
-Priority order: Mistral -> Groq -> Gemini -> OpenRouter -> HuggingFace
-On rate-limit  -> cool down that provider for 60 s, try next
-On timeout     -> cool down for 30 s, try next
-On other error -> cool down for 10 s, try next
+Mistral is the only provider. The router shape is kept — a provider list, a
+cooldown table, `status()` — because the rest of the app talks to it that way
+and because a second provider may return; but there is exactly one rung now,
+so a failure is a failure rather than a silent downgrade to a weaker model.
+
+On rate-limit  -> cool down for 60 s
+On timeout     -> cool down for 30 s
+On other error -> cool down for 10 s
 
 The module exposes a singleton `get_router()` so cooldown state
 is shared across all requests within a server process.
@@ -16,21 +20,13 @@ import time
 from typing import Any
 
 # ── Provider IDs ──────────────────────────────────────────────────────────────
-MISTRAL     = "mistral"
-GROQ        = "groq"
-GEMINI      = "gemini"
-OPENROUTER  = "openrouter"
-HUGGINGFACE = "huggingface"
+MISTRAL = "mistral"
 
-DEFAULT_ORDER: list[str] = [MISTRAL, GROQ, GEMINI, OPENROUTER, HUGGINGFACE]
+DEFAULT_ORDER: list[str] = [MISTRAL]
 
 # ── Default models ────────────────────────────────────────────────────────────
 _DEFAULT_MODELS: dict[str, str] = {
-    MISTRAL:     "mistral-large-latest",
-    GROQ:        "llama-3.3-70b-versatile",
-    GEMINI:      "gemini-1.5-flash",
-    OPENROUTER:  "meta-llama/llama-3.3-70b-instruct:free",
-    HUGGINGFACE: "mistralai/Mistral-7B-Instruct-v0.3",
+    MISTRAL: "mistral-large-latest",
 }
 
 # ── Cooldown durations (seconds) ─────────────────────────────────────────────
@@ -39,10 +35,21 @@ _COOLDOWN_TIMEOUT    = 30
 _COOLDOWN_ERROR      = 10
 
 # ── Request timeout ───────────────────────────────────────────────────────────
-# Writing a whole document is a long generation: a large model emitting a few
-# thousand tokens routinely runs past a minute. Too short a timeout burns the
-# provider and cools it down for no reason. Override with LLM_TIMEOUT.
-_TIMEOUT = float(os.environ.get("LLM_TIMEOUT", "120"))
+# A fixed deadline cannot be right for both a 500-token edit and an 8000-token
+# document: measured throughput is ~60 tok/s, so a full-length reply needs over
+# two minutes and a flat 120 s aborted the request while the model was still
+# writing. Derive the deadline from what we asked for instead, at a throughput
+# floor well under what the API actually delivers. LLM_TIMEOUT overrides.
+_TOKENS_PER_SEC_FLOOR = 40.0
+_HANDSHAKE_SECONDS    = 30.0
+_TIMEOUT_OVERRIDE     = float(os.environ.get("LLM_TIMEOUT", "0")) or None
+
+
+def _timeout_for(max_tokens: int) -> float:
+    """Seconds to allow for a request budgeted at `max_tokens` of output."""
+    if _TIMEOUT_OVERRIDE:
+        return _TIMEOUT_OVERRIDE
+    return _HANDSHAKE_SECONDS + max(0, max_tokens) / _TOKENS_PER_SEC_FLOOR
 
 
 # ── Custom exceptions ─────────────────────────────────────────────────────────
@@ -60,15 +67,15 @@ class ProviderTimeout(Exception):
 
 class AllProvidersFailed(Exception):
     def __init__(self, errors: dict[str, str]):
-        details = " | ".join(f"{k}: {v}" for k, v in errors.items())
+        details = " | ".join(f"{k}: {v}" for k, v in errors.items()) or "no provider configured"
         super().__init__(f"All providers failed — {details}")
         self.errors = errors
 
 
 def _is_placeholder(key: str) -> bool:
-    """`.env.example` ships values like `your_gemini_api_key_here`. Those are
+    """`.env.example` ships values like `your_mistral_api_key_here`. Those are
     truthy, so without this the router would 'try' the provider, fail on a bad
-    key and waste a fallback rung — and `/providers/status` would claim ready."""
+    key — and `/providers/status` would claim ready."""
     if not key:
         return True
     low = key.lower()
@@ -84,29 +91,12 @@ class ProviderRouter:
 
     # ── config helpers ────────────────────────────────────────────────────────
     def _key(self, provider: str) -> str:
-        raw = os.environ.get(
-            {
-                MISTRAL:     "MISTRAL_API_KEY",
-                GROQ:        "GROQ_API_KEY",
-                GEMINI:      "GEMINI_API_KEY",
-                OPENROUTER:  "OPENROUTER_API_KEY",
-                HUGGINGFACE: "HUGGINGFACE_API_KEY",
-            }[provider],
-            "",
-        ).strip()
+        raw = os.environ.get({MISTRAL: "MISTRAL_API_KEY"}[provider], "").strip()
         return "" if _is_placeholder(raw) else raw
 
     def _model(self, provider: str) -> str:
-        return os.environ.get(
-            {
-                MISTRAL:     "MISTRAL_MODEL",
-                GROQ:        "GROQ_MODEL",
-                GEMINI:      "GEMINI_MODEL",
-                OPENROUTER:  "OPENROUTER_MODEL",
-                HUGGINGFACE: "HUGGINGFACE_MODEL",
-            }[provider],
-            _DEFAULT_MODELS[provider],
-        )
+        return os.environ.get({MISTRAL: "MISTRAL_MODEL"}[provider],
+                              _DEFAULT_MODELS[provider])
 
     def _in_cooldown(self, provider: str) -> tuple[bool, int]:
         exp = self._cooldowns.get(provider, 0)
@@ -133,121 +123,13 @@ class ProviderRouter:
                     "messages":   messages,
                     "max_tokens": max_tokens,
                 },
-                timeout=_TIMEOUT,
+                timeout=_timeout_for(max_tokens),
             )
         except httpx.TimeoutException as exc:
             raise ProviderTimeout(MISTRAL) from exc
 
         if resp.status_code == 429:
             raise RateLimitExceeded(MISTRAL)
-        resp.raise_for_status()
-        return resp.json()["choices"][0]["message"]["content"]
-
-    def _call_groq(self, messages: list[dict[str, str]], max_tokens: int) -> str:
-        from groq import Groq
-
-        try:
-            from groq import RateLimitError as _GroqRL
-        except ImportError:
-            _GroqRL = None  # type: ignore[assignment]
-
-        try:
-            client = Groq(api_key=self._key(GROQ))
-            resp = client.chat.completions.create(
-                model=self._model(GROQ),
-                messages=messages,  # type: ignore[arg-type]
-                max_tokens=max_tokens,
-                timeout=_TIMEOUT,
-            )
-            return resp.choices[0].message.content or ""
-        except Exception as exc:
-            if _GroqRL and isinstance(exc, _GroqRL):
-                raise RateLimitExceeded(GROQ) from exc
-            if "429" in str(exc) or "rate" in str(exc).lower():
-                raise RateLimitExceeded(GROQ) from exc
-            raise
-
-    def _call_gemini(self, messages: list[dict[str, str]], max_tokens: int) -> str:
-        from google import genai  # type: ignore[import]
-        from google.genai import types  # type: ignore[import]
-
-        client = genai.Client(api_key=self._key(GEMINI))
-
-        system_msg = next(
-            (m["content"] for m in messages if m["role"] == "system"), None
-        )
-        user_msg = next(
-            (m["content"] for m in reversed(messages) if m["role"] == "user"), ""
-        )
-
-        try:
-            resp = client.models.generate_content(
-                model=self._model(GEMINI),
-                contents=user_msg,
-                config=types.GenerateContentConfig(
-                    system_instruction=system_msg,
-                    max_output_tokens=max_tokens,
-                ),
-            )
-            return resp.text or ""
-        except Exception as exc:
-            s = str(exc).lower()
-            if "quota" in s or "429" in s or "resource exhausted" in s or "rate" in s:
-                raise RateLimitExceeded(GEMINI) from exc
-            raise
-
-    def _call_openrouter(self, messages: list[dict[str, str]], max_tokens: int) -> str:
-        import httpx
-
-        try:
-            resp = httpx.post(
-                "https://openrouter.ai/api/v1/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {self._key(OPENROUTER)}",
-                    "Content-Type":  "application/json",
-                    "HTTP-Referer":  "https://formatly.app",
-                    "X-Title":       "Formatly",
-                },
-                json={
-                    "model":      self._model(OPENROUTER),
-                    "messages":   messages,
-                    "max_tokens": max_tokens,
-                },
-                timeout=_TIMEOUT,
-            )
-        except httpx.TimeoutException as exc:
-            raise ProviderTimeout(OPENROUTER) from exc
-
-        if resp.status_code == 429:
-            raise RateLimitExceeded(OPENROUTER)
-        resp.raise_for_status()
-        return resp.json()["choices"][0]["message"]["content"]
-
-    def _call_huggingface(self, messages: list[dict[str, str]], max_tokens: int) -> str:
-        import httpx
-
-        model = self._model(HUGGINGFACE)
-        try:
-            resp = httpx.post(
-                "https://router.huggingface.co/hf-inference/v1/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {self._key(HUGGINGFACE)}",
-                    "Content-Type":  "application/json",
-                },
-                json={
-                    "model":      model,
-                    "messages":   messages,
-                    "max_tokens": max_tokens,
-                },
-                timeout=_TIMEOUT,
-            )
-        except httpx.TimeoutException as exc:
-            raise ProviderTimeout(HUGGINGFACE) from exc
-
-        if resp.status_code == 429:
-            raise RateLimitExceeded(HUGGINGFACE)
-        if resp.status_code == 503:
-            raise ProviderTimeout(HUGGINGFACE)
         resp.raise_for_status()
         return resp.json()["choices"][0]["message"]["content"]
 
@@ -260,7 +142,7 @@ class ProviderRouter:
         order: list[str] | None = None,
     ) -> tuple[str, str, float]:
         """
-        Try providers in priority order until one succeeds.
+        Send `messages` to the configured provider.
 
         Returns
         -------
@@ -270,13 +152,7 @@ class ProviderRouter:
         ------
         AllProvidersFailed — when every configured provider fails.
         """
-        _callers = {
-            MISTRAL:     self._call_mistral,
-            GROQ:        self._call_groq,
-            GEMINI:      self._call_gemini,
-            OPENROUTER:  self._call_openrouter,
-            HUGGINGFACE: self._call_huggingface,
-        }
+        _callers = {MISTRAL: self._call_mistral}
         errors: dict[str, str] = {}
 
         for provider in (order or DEFAULT_ORDER):
@@ -299,7 +175,10 @@ class ProviderRouter:
 
             except ProviderTimeout:
                 self._cool(provider, _COOLDOWN_TIMEOUT)
-                errors[provider] = "timeout (30s cooldown)"
+                errors[provider] = (
+                    f"timed out after {_timeout_for(max_tokens):.0f}s "
+                    "(30s cooldown)"
+                )
 
             except Exception as exc:
                 self._cool(provider, _COOLDOWN_ERROR)
