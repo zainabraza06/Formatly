@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
-import type { Depth } from '../../lib/paperApi'
 
 // Cycled while the model works, so the wait reads as progress rather than a hang.
 const STEPS = [
@@ -14,12 +13,10 @@ const STEPS = [
 
 export function GenerationStatus({
   state,
-  depth,
   error,
   onRetry,
 }: {
   state: 'generating' | 'error' | null
-  depth: Depth
   error?: string | null
   onRetry?: () => void
 }) {
@@ -109,12 +106,6 @@ export function GenerationStatus({
         />
       </div>
 
-      {depth === 'detailed' && (
-        <p className="mt-3 text-[11px] leading-relaxed text-faint">
-          Detailed documents are planned first, then written one section at a time,
-          so this can take a few minutes. You can leave this tab open.
-        </p>
-      )}
     </motion.div>
   )
 }

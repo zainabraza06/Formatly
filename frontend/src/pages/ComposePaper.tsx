@@ -43,7 +43,6 @@ export function ComposePaper() {
   const [depth, setDepth] = useState<Depth>('standard')
 
   const [rawText, setRawText] = useState('')
-  const [referenceExample, setReferenceExample] = useState('')
   const [instructions, setInstructions] = useState('')
   const [titleHint, setTitleHint] = useState('')
   const [authorName, setAuthorName] = useState('')
@@ -97,7 +96,6 @@ export function ComposePaper() {
     style,
     doc_kind: docKind,
     depth,
-    reference_example: referenceExample.trim() || null,
     instructions: instructions.trim() || null,
     title_hint: titleHint.trim() || null,
     authors: authorName.trim()
@@ -174,12 +172,6 @@ Churn by month: July 4.2%, August 5.1%, September 6.8%.
 Interview: "The renewal price jumped 40% with no warning."`}
               className={area}
             />
-          </Field>
-
-          <Field label="Reference example" hint="A sample whose writing style should be followed.">
-            <textarea value={referenceExample} onChange={(e) => setReferenceExample(e.target.value)}
-                      rows={3} placeholder="Paste an example document or section to imitate…"
-                      className={area} />
           </Field>
 
           <Field label="Extra instructions">
@@ -320,7 +312,6 @@ Interview: "The renewal price jumped 40% with no warning."`}
                   ? 'error'
                   : null
             }
-            depth={depth}
             error={error}
             onRetry={generate}
           />
