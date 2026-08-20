@@ -54,4 +54,22 @@ export const authApi = {
         headers: { Authorization: `Bearer ${token}` },
       }),
     ),
+
+  updateName: (token: string, name: string) =>
+    json<AuthUser>(
+      fetch(`${API_URL}/auth/me`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ name }),
+      }),
+    ),
+
+  changePassword: (token: string, current_password: string, new_password: string) =>
+    json<{ updated: boolean }>(
+      fetch(`${API_URL}/auth/password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ current_password, new_password }),
+      }),
+    ),
 }

@@ -7,6 +7,8 @@ interface AuthState {
   login: (email: string, password: string) => Promise<void>
   signup: (email: string, password: string, name: string) => Promise<void>
   logout: () => void
+  /** Replace the cached user after the account is edited elsewhere. */
+  refreshUser: (next: AuthUser) => void
 }
 
 const AuthContext = createContext<AuthState | null>(null)
@@ -47,7 +49,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, signup, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, signup, logout, refreshUser: setUser }}>
       {children}
     </AuthContext.Provider>
   )

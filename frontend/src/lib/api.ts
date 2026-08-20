@@ -10,9 +10,6 @@ import type {
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000'
 
-/** Exposed so the settings page can report where it is actually pointing. */
-export const API_BASE_URL = API_URL
-
 async function http<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, {
     ...init,
@@ -34,11 +31,6 @@ async function http<T>(path: string, init?: RequestInit): Promise<T> {
 export const api = {
   health: () =>
     http<{ status: string; version: string; exact_preview: boolean }>('/health'),
-
-  providerStatus: () =>
-    http<Record<string, { state: string; model: string; has_key: boolean }>>(
-      '/providers/status',
-    ),
 
   generate: (payload: GenerateRequest) =>
     http<GenerateResponse>('/generate', {

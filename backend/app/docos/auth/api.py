@@ -1,4 +1,4 @@
-"""Auth API: signup / login / me, plus the current-user dependency."""
+"""Auth API: signup / login / me / profile, plus the current-user dependency."""
 from __future__ import annotations
 
 import re
@@ -24,6 +24,17 @@ class SignupRequest(BaseModel):
 class LoginRequest(BaseModel):
     email: str
     password: str
+
+
+class UpdateProfileRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+
+
+class ChangePasswordRequest(BaseModel):
+    # The current password is required even though the caller is authenticated:
+    # a borrowed session should not be enough to lock the owner out.
+    current_password: str
+    new_password: str = Field(min_length=6)
 
 
 def _issue(user: User) -> dict[str, Any]:
@@ -75,3 +86,27 @@ def get_current_user(authorization: Optional[str] = Header(default=None)) -> Use
 @router.get("/me")
 def me(user: User = Depends(get_current_user)) -> dict[str, Any]:
     return user.public()
+
+
+@router.patch("/me")
+def update_profile(req: UpdateProfileRequest,
+                   user: User = Depends(get_current_user)) -> dict[str, Any]:
+    """Change the display name. Email is the account's identity, so it stays."""
+    updated = get_user_store().update_name(user.id, req.name)
+    if updated is None:
+        raise HTTPException(status_code=404, detail="account not found")
+    return updated.public()
+
+
+@router.post("/password")
+def change_password(req: ChangePasswordRequest,
+                    user: User = Depends(get_current_user)) -> dict[str, Any]:
+    """Change the password, proving ownership with the current one first."""
+    if not verify_password(req.current_password, user.password_hash):
+        raise HTTPException(status_code=400, detail="current password is incorrect")
+    if req.new_password == req.current_password:
+        raise HTTPException(status_code=400,
+                            detail="the new password must differ from the current one")
+    if get_user_store().update_password(user.id, hash_password(req.new_password)) is None:
+        raise HTTPException(status_code=404, detail="account not found")
+    return {"updated": True}

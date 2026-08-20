@@ -73,6 +73,17 @@ class UserStore:
             row = c.execute("SELECT * FROM users WHERE id=?", (user_id,)).fetchone()
             return self._to_user(row) if row else None
 
+    def update_name(self, user_id: str, name: str) -> Optional[User]:
+        with self._lock, self._conn() as c:
+            c.execute("UPDATE users SET name=? WHERE id=?", (name.strip(), user_id))
+        return self.get_by_id(user_id)
+
+    def update_password(self, user_id: str, password_hash: str) -> Optional[User]:
+        with self._lock, self._conn() as c:
+            c.execute("UPDATE users SET password_hash=? WHERE id=?",
+                      (password_hash, user_id))
+        return self.get_by_id(user_id)
+
     @staticmethod
     def _to_user(row: sqlite3.Row) -> User:
         return User(id=row["id"], email=row["email"], name=row["name"],

@@ -1,279 +1,272 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { GlassCard } from '../components/GlassCard'
-import { API_BASE_URL, api } from '../lib/api'
+import { useAuth } from '../context/AuthContext'
 import { authApi, getToken, type AuthUser } from '../lib/auth'
-import { paperApi, type StyleSummary } from '../lib/paperApi'
+import { btnPrimary, field as uiField } from '../lib/ui'
 
-type Health = { status: string; version: string; exact_preview: boolean }
-type Providers = Record<string, { state: string; model: string; has_key: boolean }>
-
-/** Settings reports what the system is actually doing, so nothing has to be
- *  inferred from a failure later: which backend is answering, whether the model
- *  is reachable, and which optional capabilities are present on this machine. */
+/** Account settings: the things that belong to the person using this, not to
+ *  the machine it runs on. Email is the account's identity, so it is shown but
+ *  not editable. */
 export function Settings() {
-  const [health, setHealth] = useState<Health | null>(null)
-  const [providers, setProviders] = useState<Providers | null>(null)
-  const [styles, setStyles] = useState<StyleSummary[]>([])
-  const [user, setUser] = useState<AuthUser | null>(null)
-  const [checkedAt, setCheckedAt] = useState<Date | null>(null)
-  const [busy, setBusy] = useState(false)
-
-  const refresh = () => {
-    setBusy(true)
-    const token = getToken()
-    Promise.allSettled([
-      api.health(),
-      api.providerStatus(),
-      paperApi.styles(),
-      token ? authApi.me(token) : Promise.resolve(null),
-    ]).then(([h, p, s, u]) => {
-      setHealth(h.status === 'fulfilled' ? h.value : null)
-      setProviders(p.status === 'fulfilled' ? p.value : null)
-      setStyles(s.status === 'fulfilled' ? s.value : [])
-      setUser(u.status === 'fulfilled' ? (u.value as AuthUser | null) : null)
-      setCheckedAt(new Date())
-      setBusy(false)
-    })
-  }
-  useEffect(refresh, [])
-
-  const reachable = health?.status === 'ok'
+  const { user, refreshUser, logout } = useAuth()
 
   return (
     <div className="space-y-4">
-      <div className="flex items-end justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight text-ink">Settings</h1>
-          <p className="mt-0.5 text-sm text-muted">
-            Configuration and status for this installation.
-          </p>
-        </div>
-        <button
-          onClick={refresh}
-          disabled={busy}
-          className="rounded-lg border border-line bg-surface px-3 py-1.5 text-xs font-medium text-ink transition-colors hover:bg-surface-2 disabled:opacity-50"
-        >
-          {busy ? 'Checking…' : 'Re-check'}
-        </button>
+      <div>
+        <h1 className="text-xl font-semibold tracking-tight text-ink">Settings</h1>
+        <p className="mt-0.5 text-sm text-muted">Manage your account.</p>
       </div>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-        {/* ── service status ── */}
-        <GlassCard>
-          <SectionTitle>Service status</SectionTitle>
-          <dl className="mt-3 space-y-2.5">
-            <Row label="Backend">
-              <StatusDot ok={reachable} />
-              <span className="ml-1.5">
-                {reachable ? 'Reachable' : 'Not reachable'}
-                {health?.version && (
-                  <span className="text-faint"> · v{health.version}</span>
-                )}
-              </span>
-            </Row>
-            <Row label="API endpoint">
-              <Mono>{API_BASE_URL}</Mono>
-            </Row>
-            <Row label="Exact preview">
-              <StatusDot ok={!!health?.exact_preview} />
-              <span className="ml-1.5">
-                {health?.exact_preview ? 'Available' : 'Unavailable'}
-              </span>
-            </Row>
-            {checkedAt && (
-              <Row label="Last checked">
-                <span className="text-faint">{checkedAt.toLocaleTimeString()}</span>
-              </Row>
-            )}
-          </dl>
-          {health && !health.exact_preview && (
-            <Note>
-              LibreOffice was not found, so the composer falls back to a reading
-              view instead of rendering the real document. Downloads are unaffected.
-            </Note>
-          )}
-        </GlassCard>
-
-        {/* ── model ── */}
-        <GlassCard>
-          <SectionTitle>Language model</SectionTitle>
-          {providers && Object.keys(providers).length > 0 ? (
-            <dl className="mt-3 space-y-2.5">
-              {Object.entries(providers).map(([name, p]) => (
-                <div key={name} className="space-y-2.5">
-                  <Row label="Provider">
-                    <StatusDot ok={p.state === 'ready'} />
-                    <span className="ml-1.5 capitalize">{name}</span>
-                    <span className="text-faint"> · {p.state}</span>
-                  </Row>
-                  <Row label="Model">
-                    <Mono>{p.model}</Mono>
-                  </Row>
-                  <Row label="API key">
-                    <StatusDot ok={p.has_key} />
-                    <span className="ml-1.5">{p.has_key ? 'Configured' : 'Missing'}</span>
-                  </Row>
-                </div>
-              ))}
-            </dl>
-          ) : (
-            <p className="mt-3 text-xs text-muted">Provider status unavailable.</p>
-          )}
-          {providers && Object.values(providers).some((p) => !p.has_key) && (
-            <Note>
-              Set <Mono>MISTRAL_API_KEY</Mono> in the backend&apos;s{' '}
-              <Mono>.env</Mono> and restart it. Keys are issued at
-              console.mistral.ai.
-            </Note>
-          )}
-        </GlassCard>
-
-        {/* ── document styles ── */}
-        <GlassCard>
-          <SectionTitle>Document styles</SectionTitle>
-          {styles.length > 0 ? (
-            <ul className="mt-3 space-y-2">
-              {styles.map((s) => (
-                <li
-                  key={s.id}
-                  className="flex items-center justify-between gap-3 rounded-lg border border-line bg-surface-2 px-3 py-2"
-                >
-                  <span className="text-xs font-medium text-ink">{s.name}</span>
-                  <span className="shrink-0 text-[10px] text-faint">
-                    <Mono>{s.id}</Mono> · {s.columns} col ·{' '}
-                    {s.heading_scheme.replace(/_/g, ' ')}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="mt-3 text-xs text-muted">No styles returned.</p>
-          )}
-        </GlassCard>
-
-        {/* ── capabilities ── */}
-        <GlassCard>
-          <SectionTitle>Document capabilities</SectionTitle>
-          <ul className="mt-3 space-y-1.5">
-            {[
-              'Charts generated from figures in your material',
-              'Tables with style-appropriate rules and numbered captions',
-              'Equations typeset from TeX markup, no LaTeX installation needed',
-              'Code listings as text, or as an editor screenshot',
-              'Program output as a console screenshot',
-              'Cover sheet and page breaks on request',
-              'Export to .docx, with an exact PDF preview',
-            ].map((c) => (
-              <li key={c} className="flex gap-2 text-xs leading-relaxed text-muted">
-                <span className="mt-[3px] text-ink">·</span>
-                <span>{c}</span>
-              </li>
-            ))}
-          </ul>
-        </GlassCard>
-
-        {/* ── account ── */}
-        <GlassCard>
-          <SectionTitle>Account</SectionTitle>
-          {user ? (
-            <dl className="mt-3 space-y-2.5">
-              <Row label="Name">{user.name || '—'}</Row>
-              <Row label="Email">
-                <Mono>{user.email}</Mono>
-              </Row>
-              <Row label="Member since">
-                {new Date(user.created_at).toLocaleDateString()}
-              </Row>
-            </dl>
-          ) : (
-            <p className="mt-3 text-xs text-muted">Not signed in.</p>
-          )}
-        </GlassCard>
-
-        {/* ── configuration reference ── */}
-        <GlassCard>
-          <SectionTitle>Configuration</SectionTitle>
-          <p className="mt-1 text-[11px] text-muted">
-            Environment variables. Backend values live in{' '}
-            <Mono>backend/.env</Mono>; the frontend reads{' '}
-            <Mono>frontend/.env.local</Mono>. Changing either needs a restart.
-          </p>
-          <dl className="mt-3 space-y-3">
-            {[
-              {
-                name: 'MISTRAL_API_KEY',
-                detail: 'Required. Without it no document can be generated.',
-              },
-              {
-                name: 'MISTRAL_MODEL',
-                detail: 'Optional. Defaults to mistral-large-latest.',
-              },
-              {
-                name: 'LLM_TIMEOUT',
-                detail:
-                  'Optional, in seconds. Unset, the deadline is derived from the request’s token budget — a full document is allowed about 230s.',
-              },
-              {
-                name: 'VITE_API_URL',
-                detail: `Frontend only. Currently ${API_BASE_URL}.`,
-              },
-              {
-                name: 'FORMATLY_DATA_DIR',
-                detail: 'Optional. Where generated documents are written.',
-              },
-            ].map((v) => (
-              <div key={v.name}>
-                <Mono>{v.name}</Mono>
-                <p className="mt-0.5 text-[11px] leading-relaxed text-muted">
-                  {v.detail}
-                </p>
-              </div>
-            ))}
-          </dl>
-        </GlassCard>
+        <ProfileCard user={user} onSaved={refreshUser} />
+        <PasswordCard />
+        <SessionCard user={user} onSignOut={logout} />
       </div>
     </div>
   )
 }
 
-/* ── small presentational helpers ─────────────────────────────────────────── */
+/* ── profile ──────────────────────────────────────────────────────────────── */
 
-function SectionTitle({ children }: { children: React.ReactNode }) {
+function ProfileCard({
+  user,
+  onSaved,
+}: {
+  user: AuthUser | null
+  onSaved: (u: AuthUser) => void
+}) {
+  const [name, setName] = useState(user?.name || '')
+  const [state, setState] = useState<FormState>({ kind: 'idle' })
+
+  useEffect(() => setName(user?.name || ''), [user?.name])
+
+  const unchanged = name.trim() === (user?.name || '').trim()
+
+  const save = async (e: FormEvent) => {
+    e.preventDefault()
+    const token = getToken()
+    if (!token || !name.trim() || unchanged) return
+    setState({ kind: 'busy' })
+    try {
+      onSaved(await authApi.updateName(token, name.trim()))
+      setState({ kind: 'done', message: 'Name updated.' })
+    } catch (err) {
+      setState({ kind: 'error', message: message(err) })
+    }
+  }
+
+  return (
+    <GlassCard>
+      <CardTitle>Profile</CardTitle>
+      <form onSubmit={save} className="mt-3 space-y-3">
+        <Field label="Display name">
+          <input
+            value={name}
+            onChange={(e) => {
+              setName(e.target.value)
+              setState({ kind: 'idle' })
+            }}
+            placeholder="Your name"
+            className={uiField}
+          />
+        </Field>
+
+        <Field label="Email" hint="Your email identifies the account and cannot be changed here.">
+          <input value={user?.email || ''} readOnly disabled className={`${uiField} opacity-60`} />
+        </Field>
+
+        <div className="flex items-center gap-3 pt-1">
+          <button
+            type="submit"
+            disabled={state.kind === 'busy' || !name.trim() || unchanged}
+            className={btnPrimary}
+          >
+            {state.kind === 'busy' ? 'Saving…' : 'Save changes'}
+          </button>
+          <Feedback state={state} />
+        </div>
+      </form>
+    </GlassCard>
+  )
+}
+
+/* ── password ─────────────────────────────────────────────────────────────── */
+
+const MIN_PASSWORD = 6
+
+function PasswordCard() {
+  const [current, setCurrent] = useState('')
+  const [next, setNext] = useState('')
+  const [confirm, setConfirm] = useState('')
+  const [state, setState] = useState<FormState>({ kind: 'idle' })
+
+  // Checked here as well as on the server so the mistake is caught before a
+  // round trip, not because the server's check is optional.
+  const mismatch = confirm.length > 0 && next !== confirm
+  const tooShort = next.length > 0 && next.length < MIN_PASSWORD
+  const ready =
+    current.length > 0 && next.length >= MIN_PASSWORD && next === confirm && next !== current
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault()
+    const token = getToken()
+    if (!token || !ready) return
+    setState({ kind: 'busy' })
+    try {
+      await authApi.changePassword(token, current, next)
+      setCurrent('')
+      setNext('')
+      setConfirm('')
+      setState({ kind: 'done', message: 'Password changed.' })
+    } catch (err) {
+      setState({ kind: 'error', message: message(err) })
+    }
+  }
+
+  return (
+    <GlassCard>
+      <CardTitle>Password</CardTitle>
+      <form onSubmit={submit} className="mt-3 space-y-3">
+        <Field label="Current password">
+          <input
+            type="password"
+            value={current}
+            onChange={(e) => {
+              setCurrent(e.target.value)
+              setState({ kind: 'idle' })
+            }}
+            autoComplete="current-password"
+            className={uiField}
+          />
+        </Field>
+
+        <Field label="New password" hint={`At least ${MIN_PASSWORD} characters.`}>
+          <input
+            type="password"
+            value={next}
+            onChange={(e) => {
+              setNext(e.target.value)
+              setState({ kind: 'idle' })
+            }}
+            autoComplete="new-password"
+            className={uiField}
+          />
+        </Field>
+
+        <Field label="Confirm new password">
+          <input
+            type="password"
+            value={confirm}
+            onChange={(e) => {
+              setConfirm(e.target.value)
+              setState({ kind: 'idle' })
+            }}
+            autoComplete="new-password"
+            className={uiField}
+          />
+        </Field>
+
+        {tooShort && <Hint tone="warn">Use at least {MIN_PASSWORD} characters.</Hint>}
+        {mismatch && <Hint tone="warn">The two new passwords do not match.</Hint>}
+        {next.length > 0 && next === current && (
+          <Hint tone="warn">The new password must differ from the current one.</Hint>
+        )}
+
+        <div className="flex items-center gap-3 pt-1">
+          <button type="submit" disabled={state.kind === 'busy' || !ready} className={btnPrimary}>
+            {state.kind === 'busy' ? 'Updating…' : 'Change password'}
+          </button>
+          <Feedback state={state} />
+        </div>
+      </form>
+    </GlassCard>
+  )
+}
+
+/* ── session ──────────────────────────────────────────────────────────────── */
+
+function SessionCard({
+  user,
+  onSignOut,
+}: {
+  user: AuthUser | null
+  onSignOut: () => void
+}) {
+  return (
+    <GlassCard>
+      <CardTitle>Session</CardTitle>
+      <dl className="mt-3 space-y-2.5">
+        {user?.created_at && (
+          <div className="flex items-baseline justify-between gap-4">
+            <dt className="text-[11px] font-medium uppercase tracking-wide text-neutral-500">
+              Member since
+            </dt>
+            <dd className="text-xs text-ink">
+              {new Date(user.created_at).toLocaleDateString()}
+            </dd>
+          </div>
+        )}
+      </dl>
+      <button
+        onClick={onSignOut}
+        className="mt-4 rounded-lg border border-line bg-surface px-3 py-1.5 text-xs font-medium text-ink transition-colors hover:bg-surface-2"
+      >
+        Sign out
+      </button>
+    </GlassCard>
+  )
+}
+
+/* ── shared bits ──────────────────────────────────────────────────────────── */
+
+type FormState =
+  | { kind: 'idle' }
+  | { kind: 'busy' }
+  | { kind: 'done'; message: string }
+  | { kind: 'error'; message: string }
+
+function message(err: unknown): string {
+  return err instanceof Error ? err.message : 'Something went wrong.'
+}
+
+function CardTitle({ children }: { children: React.ReactNode }) {
   return <div className="text-sm font-semibold text-ink">{children}</div>
 }
 
-function Row({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({
+  label,
+  hint,
+  children,
+}: {
+  label: string
+  hint?: string
+  children: React.ReactNode
+}) {
   return (
-    <div className="flex items-baseline justify-between gap-4">
-      <dt className="shrink-0 text-[11px] font-medium uppercase tracking-wide text-neutral-500">
+    <label className="block">
+      <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-muted">
         {label}
-      </dt>
-      <dd className="flex min-w-0 items-center text-right text-xs text-ink">
-        {children}
-      </dd>
-    </div>
+      </span>
+      {children}
+      {hint && <span className="mt-1 block text-[10px] text-faint">{hint}</span>}
+    </label>
   )
 }
 
-function Mono({ children }: { children: React.ReactNode }) {
-  return <span className="font-mono text-[11px] text-ink">{children}</span>
-}
-
-function StatusDot({ ok }: { ok: boolean }) {
+function Hint({ tone, children }: { tone: 'warn'; children: React.ReactNode }) {
   return (
-    <span
-      aria-hidden
-      className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${
-        ok ? 'bg-emerald-500' : 'bg-amber-500'
-      }`}
-    />
-  )
-}
-
-function Note({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="mt-3 rounded-lg border border-line bg-surface-2 px-3 py-2 text-[11px] leading-relaxed text-muted">
+    <p className={`text-[11px] ${tone === 'warn' ? 'text-amber-600' : 'text-muted'}`}>
       {children}
     </p>
   )
+}
+
+function Feedback({ state }: { state: FormState }) {
+  if (state.kind === 'done') {
+    return <span className="text-[11px] text-emerald-600">{state.message}</span>
+  }
+  if (state.kind === 'error') {
+    return <span className="text-[11px] text-danger">{state.message}</span>
+  }
+  return null
 }
