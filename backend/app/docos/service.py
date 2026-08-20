@@ -68,6 +68,25 @@ class DocOSService:
                 "version": info.to_dict(), "graph": graph.to_dict(),
                 "exact_pages": exact_pages}
 
+    def import_spec(self, spec: Any, *, title: str = "", user: str = "user",
+                    owner_id: Optional[str] = None) -> dict[str, Any]:
+        """Import a composed document without rendering it to .docx first.
+
+        Going through a file would flatten what the spec knows — a listing into
+        loose paragraphs, an equation into whatever characters it typeset to —
+        because DOCX has no word for either. Converting directly keeps them.
+        """
+        from app.paper.to_graph import spec_to_graph
+
+        doc_id = new_id("doc")
+        graph = spec_to_graph(spec, title=title)
+        graph.title = title or graph.title or "Untitled"
+        info = self.versions.init_document(doc_id, graph.title, graph,
+                                           user=user, owner_id=owner_id)
+        return {"document_id": doc_id, "title": graph.title,
+                "version": info.to_dict(), "graph": graph.to_dict(),
+                "exact_pages": None}
+
     def get_document(self, doc_id: str, owner_id: Optional[str] = None) -> dict[str, Any]:
         doc = self._require_owner(doc_id, owner_id)
         graph = self.versions.current_graph(doc_id)

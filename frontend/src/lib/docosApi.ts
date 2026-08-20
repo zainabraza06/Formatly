@@ -53,6 +53,15 @@ export const docosApi = {
     }))
   },
 
+  /** Open a composed document straight from its spec. Going via a rendered
+   *  .docx would flatten listings, equations and figures into loose text. */
+  importSpec: async (spec: unknown, title?: string): Promise<ImportResponse> =>
+    json(await fetch(`${API_URL}/docos/import-spec`, {
+      method: 'POST',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ spec, title }),
+    })),
+
   getDocument: async (id: string): Promise<GetDocumentResponse> =>
     json(await fetch(`${API_URL}/docos/${id}`, { headers: authHeaders() })),
 

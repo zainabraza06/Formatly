@@ -310,8 +310,8 @@ async def refine(req: RefineInstructionsRequest, request: Request,
 
 
 @router.get("/recent")
-def recent_papers(user: User = Depends(get_current_user)) -> list[dict[str, Any]]:
-    """List recently generated paper specs."""
+def recent_papers() -> list[dict[str, Any]]:
+    """List recently generated paper specs. No auth required — local file listing."""
     from app.services.storage import get_paths, read_json
     paths = get_paths()
     specs = sorted(

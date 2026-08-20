@@ -34,6 +34,31 @@ async def import_document(
         raise HTTPException(status_code=400, detail=f"failed to parse DOCX: {exc}")
 
 
+@router.post("/import-spec")
+def import_spec(payload: dict[str, Any] = Body(...),
+                user: User = Depends(get_current_user)) -> dict[str, Any]:
+    """Open a composed document in the editor, straight from its spec.
+
+    The alternative is rendering it to .docx and importing that, which loses
+    every distinction the file format cannot carry.
+    """
+    from app.paper.schema import PaperSpec
+
+    raw = payload.get("spec", payload)
+    try:
+        spec = PaperSpec.model_validate(raw)
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail=f"invalid paper spec: {exc}")
+    if not spec.blocks:
+        raise HTTPException(status_code=422, detail="paper spec has no content blocks")
+
+    title = str(payload.get("title") or spec.meta.title or "Untitled")
+    try:
+        return get_service().import_spec(spec, title=title, owner_id=user.id)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"could not build the document: {exc}")
+
+
 @router.get("/{doc_id}")
 def get_document(doc_id: str, user: User = Depends(get_current_user)) -> dict[str, Any]:
     try:

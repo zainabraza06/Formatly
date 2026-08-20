@@ -160,17 +160,15 @@ export function ComposePaper() {
     }
   }
 
-  // Compose finishes at a .docx; Document OS starts from one. Rendering the
-  // spec and importing it here saves the user downloading a file only to upload
-  // it again, and lands them on the same document they were just looking at.
+  // The spec goes across directly rather than as a rendered .docx: the file
+  // format has no word for a listing, an equation or a chart, so routing through
+  // one would hand the editor loose paragraphs and anonymous pictures.
   const openInDocumentOS = async () => {
     if (!spec) return
     setHandingOff(true)
     setError(null)
     try {
-      const blob = await paperApi.renderSpec(spec)
-      const name = `${(spec.meta.title || 'document').slice(0, 60)}.docx`
-      const res = await docosApi.importDocx(new File([blob], name, { type: blob.type }))
+      const res = await docosApi.importSpec(spec, spec.meta.title || 'Document')
       navigate(`/app/editor?doc=${encodeURIComponent(res.document_id)}`)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not open in Document OS')
