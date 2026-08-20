@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { flatten } from '../../lib/graphUtils'
 import type { DocumentGraph, GraphNode } from '../../types/docos'
 import { pageGeometry } from '../../types/docos'
+import { measurePages, type Measured } from './measurePages'
 import { NodeView } from './NodeView'
 
 interface Props {
@@ -83,7 +84,45 @@ function paginate(nodes: GraphNode[], exactCount?: number): GraphNode[][] {
 export function GraphCanvas({ graph, selectedIds, activeId, removingIds }: Props) {
   const nodes = flatten(graph)
   const geo = pageGeometry(graph)
-  const pages = useMemo(() => paginate(nodes, geo.count), [nodes, geo.count])
+
+  // Word's markers describe a layout that is not the one on screen, so they are
+  // only the starting point: the content is laid out once off screen at the real
+  // text width and the measured heights decide where the pages actually break.
+  const markerPages = useMemo(() => paginate(nodes, geo.count), [nodes, geo.count])
+  const [measuredPages, setMeasuredPages] = useState<GraphNode[][] | null>(null)
+  const sheetRef = useRef<HTMLDivElement>(null)
+  const proofRef = useRef<HTMLDivElement>(null)
+
+  useLayoutEffect(() => {
+    const sheet = sheetRef.current
+    const proof = proofRef.current
+    if (!sheet || !proof || !nodes.length) return
+
+    const style = getComputedStyle(sheet)
+    const textHeight =
+      sheet.getBoundingClientRect().height
+      - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom)
+    if (!(textHeight > 0)) return
+
+    const children = Array.from(proof.children) as HTMLElement[]
+    const proofBottom = proof.getBoundingClientRect().height
+    const measured: Measured[] = []
+    nodes.forEach((node, i) => {
+      const element = children[i]
+      if (!element) return
+      // Distance to the next sibling, so the gap between nodes is counted.
+      const next = children[i + 1]
+      const height = next
+        ? next.offsetTop - element.offsetTop
+        : proofBottom - element.offsetTop
+      measured.push({ node, element, height: Math.max(0, height) })
+    })
+    setMeasuredPages(measurePages(measured, textHeight))
+    // The sheet's own height is fixed by the geometry, so it is not a dependency.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nodes, geo.width_in, geo.height_in, geo.default_font, geo.default_size_pt])
+
+  const pages = measuredPages ?? markerPages
   const [page, setPage] = useState(0)
 
   const selected = new Set(selectedIds)
@@ -106,18 +145,45 @@ export function GraphCanvas({ graph, selectedIds, activeId, removingIds }: Props
   const currentPage = pages[Math.min(page, total - 1)] ?? []
   const m = geo.margin
 
+  // Typography shared by the sheet and the measuring pass. They must be
+  // identical: a measurement taken at a different size or face describes a
+  // layout nobody will see.
+  const typography = {
+    fontFamily: geo.default_font
+      ? `"${geo.default_font}", Cambria, Georgia, serif`
+      : 'Calibri, "Segoe UI", Cambria, Georgia, serif',
+    fontSize: `${geo.default_size_pt || 11}pt`,
+    lineHeight: 1.15,
+  } as const
+
   return (
     <div className="flex flex-col items-center gap-4">
+      {/* The measuring pass: every node laid out once at the page's real text
+          width, off screen. aria-hidden because it is a ruler, not content. */}
+      <div
+        ref={proofRef}
+        aria-hidden
+        className="pointer-events-none absolute -left-[9999px] top-0 space-y-1"
+        style={{
+          width: `calc(${geo.width_in}in - ${m.left}in - ${m.right}in)`,
+          ...typography,
+        }}
+      >
+        {nodes.map((n) => (
+          <NodeView key={n.id} node={n} selected={false} active={false} removing={false} />
+        ))}
+      </div>
+
       {/* the "paper" — a fixed white sheet at the document's real page size */}
       <div
+        ref={sheetRef}
         className="relative bg-white text-neutral-900 shadow-[0_2px_16px_rgba(0,0,0,0.22)] ring-1 ring-black/10"
         style={{
           width: `${geo.width_in}in`,
-          // minHeight, not height: the browser cannot lay text out exactly as
-          // Word did, so a page assigned by Word's markers can need a little
-          // more room here. A fixed height with overflow hidden answered that
-          // by cutting the text off mid-sentence; letting the sheet grow keeps
-          // every word visible.
+          // A real page height again: the pages are now filled from measured
+          // heights, so what is on a page is what fits on it. minHeight stays
+          // as the floor so a short last page is still a full sheet.
+          height: measuredPages ? `${geo.height_in}in` : undefined,
           minHeight: `${geo.height_in}in`,
           maxWidth: '100%',
           paddingTop: `${m.top}in`,
@@ -126,11 +192,7 @@ export function GraphCanvas({ graph, selectedIds, activeId, removingIds }: Props
           paddingLeft: `${m.left}in`,
           // The document's own typeface and size, falling back only when the
           // file names neither.
-          fontFamily: geo.default_font
-            ? `"${geo.default_font}", Cambria, Georgia, serif`
-            : 'Calibri, "Segoe UI", Cambria, Georgia, serif',
-          fontSize: `${geo.default_size_pt || 11}pt`,
-          lineHeight: 1.15,
+          ...typography,
         }}
       >
         <span className="pointer-events-none absolute right-3 top-1.5 text-[9px] font-medium uppercase tracking-wide text-neutral-300">
