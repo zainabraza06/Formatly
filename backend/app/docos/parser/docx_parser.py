@@ -51,7 +51,14 @@ def _parse(doc: _Doc, *, title: str) -> DocumentGraph:
     root = Node(type=NodeType.DOCUMENT, metadata={"source": "docx"})
     graph = DocumentGraph(root=root, title=title)
 
-    root.metadata["page"] = _page_geometry(doc)
+    page = _page_geometry(doc)
+    default_font, default_size = _document_default_font(doc)
+    # Carried so the sheet is laid out in the document's own typeface. Rendering
+    # it in the viewer's default is what made an imported file look shifted, and
+    # the wrong metrics are what pushed text past the bottom of the page.
+    page["default_font"] = default_font or ""
+    page["default_size_pt"] = default_size or 11.0
+    root.metadata["page"] = page
 
     in_references = False
     body = doc.element.body
@@ -123,17 +130,25 @@ def _paragraph_node(para: _Paragraph, in_references: bool) -> Optional[Node]:
     breaks_before = (1 if explicit else 0) + rendered
 
     images = _images(para)
+    is_rule = not text.strip() and (_has_bottom_border(para) or _is_vml_rule(para))
+
+    # A rule drawn as a picture, or decoration whose image will not resolve: an
+    # empty paragraph with nothing readable in it is not a figure, and showing
+    # it as a broken one puts a false alarm in the middle of the text.
+    #
+    # This is decided before the page-break case on purpose. A rule frequently
+    # sits exactly where Word broke the page, and treating that paragraph as a
+    # bare break threw the rule away — so the line vanished from precisely the
+    # pages a reader would notice. The rule keeps the marker instead.
+    if is_rule:
+        meta: dict = {"style_name": style_name}
+        _apply_breaks(meta, breaks_before)
+        return Node(type=NodeType.HORIZONTAL_RULE, metadata=meta)
 
     # dedicated page-break paragraph (a break with no real content)
     if breaks_before and not text.strip() and not images:
         return Node(type=NodeType.PAGE_BREAK,
                     metadata={"style_name": style_name, "breaks": breaks_before})
-
-    # A rule drawn as a picture, or decoration whose image will not resolve:
-    # an empty paragraph with nothing readable in it is not a figure, and
-    # showing it as a broken one puts a false alarm in the middle of the text.
-    if not text.strip() and (_has_bottom_border(para) or _is_vml_rule(para)):
-        return Node(type=NodeType.HORIZONTAL_RULE, metadata={"style_name": style_name})
 
     # figure: a paragraph carrying one or more actual pictures
     if images:
@@ -152,16 +167,13 @@ def _paragraph_node(para: _Paragraph, in_references: bool) -> Optional[Node]:
         _apply_breaks(fig.metadata, breaks_before)
         return fig
 
-    # horizontal rule: an empty paragraph with a rule border, or Word's VML rule
-    if not text.strip() and (_has_bottom_border(para) or _is_vml_rule(para)):
-        return Node(type=NodeType.HORIZONTAL_RULE, metadata={"style_name": style_name})
-
     # skip truly empty spacer paragraphs (keep them out of the graph)
     if not text.strip():
         return None
 
     node_type = _classify_paragraph(lname, in_references)
     meta: dict = {"style_name": style_name, "level": _heading_level(lname)}
+    meta.update(_spacing(para))
     _apply_breaks(meta, breaks_before)
     return Node(
         type=node_type,
@@ -169,6 +181,30 @@ def _paragraph_node(para: _Paragraph, in_references: bool) -> Optional[Node]:
         style=_paragraph_style(para),
         metadata=meta,
     )
+
+
+def _spacing(para: _Paragraph) -> dict:
+    """Line spacing and the gaps around a paragraph, in the units CSS wants.
+
+    A document set single-spaced and rendered at 1.5 needs half again as much
+    room as it has, which is how text ended up cut off at the foot of a page.
+    """
+    out: dict = {}
+    try:
+        pf = para.paragraph_format
+        if pf.line_spacing is not None:
+            # a float is a multiple; a Length is an exact height
+            out["line_spacing"] = (float(pf.line_spacing)
+                                   if isinstance(pf.line_spacing, float)
+                                   else round(pf.line_spacing.pt, 1))
+            out["line_spacing_exact"] = not isinstance(pf.line_spacing, float)
+        if pf.space_before is not None:
+            out["space_before_pt"] = round(pf.space_before.pt, 1)
+        if pf.space_after is not None:
+            out["space_after_pt"] = round(pf.space_after.pt, 1)
+    except Exception:
+        pass
+    return out
 
 
 def _apply_breaks(meta: dict, breaks_before: int) -> None:
@@ -205,6 +241,88 @@ def _heading_level(lname: str) -> int:
     return 0
 
 
+def _style_font(style) -> tuple[Optional[str], Optional[float]]:
+    """Walk a paragraph style and the styles it inherits from for a font.
+
+    Most documents set their typeface once, on a style, and never touch a run.
+    Reading only run formatting therefore finds nothing and the document renders
+    in whatever the viewer defaults to — which is why an imported file came out
+    in the wrong face at the wrong size.
+    """
+    name = size = None
+    seen = 0
+    while style is not None and seen < 10:      # guard a cyclic base_style chain
+        font = getattr(style, "font", None)
+        if font is not None:
+            if name is None and font.name:
+                name = font.name
+            if size is None and font.size is not None:
+                try:
+                    size = float(font.size.pt)
+                except (AttributeError, TypeError):
+                    pass
+        if name and size:
+            break
+        style = getattr(style, "base_style", None)
+        seen += 1
+    return name, size
+
+
+def _document_default_font(doc: _Doc) -> tuple[Optional[str], Optional[float]]:
+    """The typeface a document falls back to: the Normal style, then docDefaults."""
+    try:
+        name, size = _style_font(doc.styles["Normal"])
+    except (KeyError, AttributeError):
+        name = size = None
+
+    if name and size:
+        return name, size
+
+    try:
+        rpr = doc.styles.element.find(qn("w:docDefaults"))
+        if rpr is not None:
+            fonts = rpr.find(".//" + qn("w:rFonts"))
+            if name is None and fonts is not None:
+                # A literal face if there is one; otherwise the document names a
+                # *theme* font, and the actual typeface lives in theme1.xml.
+                name = (fonts.get(qn("w:ascii")) or fonts.get(qn("w:hAnsi"))
+                        or _theme_font(doc, fonts.get(qn("w:asciiTheme"))
+                                       or fonts.get(qn("w:hAnsiTheme"))))
+            sz = rpr.find(".//" + qn("w:sz"))
+            if size is None and sz is not None and sz.get(qn("w:val")):
+                size = float(sz.get(qn("w:val"))) / 2   # half-points
+    except Exception:
+        pass
+    return name, size
+
+
+_A_NS = "http://schemas.openxmlformats.org/drawingml/2006/main"
+
+
+def _theme_font(doc: _Doc, theme_ref: Optional[str]) -> Optional[str]:
+    """Resolve "minorHAnsi" / "majorHAnsi" to the typeface the theme names."""
+    if not theme_ref:
+        return None
+    scheme = "majorFont" if theme_ref.startswith("major") else "minorFont"
+    try:
+        for rel in doc.part.rels.values():
+            if not rel.reltype.endswith("/theme") or rel.is_external:
+                continue
+            part = rel.target_part
+            # The theme is an opaque part in python-docx, so it usually has to
+            # be parsed from its bytes rather than read as an element tree.
+            root = getattr(part, "element", None)
+            if root is None:
+                from lxml import etree
+                root = etree.fromstring(part.blob)
+            element = root.find(f".//{{{_A_NS}}}{scheme}/{{{_A_NS}}}latin")
+            if element is not None:
+                return element.get("typeface") or None
+    except Exception:
+        pass
+    return None
+
+
 def _paragraph_style(para: _Paragraph) -> Style:
     """Aggregate run formatting to a paragraph-level style (majority wins)."""
     sizes: list[float] = []
@@ -228,6 +346,15 @@ def _paragraph_style(para: _Paragraph) -> Style:
             colors.append(f"#{str(f.color.rgb)}")
         if f.name:
             families.append(f.name)
+
+    # Runs win where they say something; otherwise the paragraph's own style,
+    # and the styles it inherits from, decide.
+    if not families or not sizes:
+        style_name, style_size = _style_font(getattr(para, "style", None))
+        if not families and style_name:
+            families.append(style_name)
+        if not sizes and style_size:
+            sizes.append(style_size)
 
     align = None
     if para.alignment is not None:

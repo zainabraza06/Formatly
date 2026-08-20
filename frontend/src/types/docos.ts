@@ -32,6 +32,10 @@ export interface PageGeometry {
   margin: { top: number; right: number; bottom: number; left: number }
   count?: number    // exact page count when repaginated via LibreOffice
   exact?: boolean
+  // The document's own typeface and size, so the sheet is laid out in the font
+  // the file actually uses rather than the viewer's default.
+  default_font?: string
+  default_size_pt?: number
 }
 
 export interface DocumentGraph {

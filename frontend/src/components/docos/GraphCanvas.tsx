@@ -110,18 +110,27 @@ export function GraphCanvas({ graph, selectedIds, activeId, removingIds }: Props
     <div className="flex flex-col items-center gap-4">
       {/* the "paper" — a fixed white sheet at the document's real page size */}
       <div
-        className="relative overflow-hidden bg-white text-neutral-900 shadow-[0_2px_16px_rgba(0,0,0,0.22)] ring-1 ring-black/10"
+        className="relative bg-white text-neutral-900 shadow-[0_2px_16px_rgba(0,0,0,0.22)] ring-1 ring-black/10"
         style={{
           width: `${geo.width_in}in`,
-          height: `${geo.height_in}in`,
+          // minHeight, not height: the browser cannot lay text out exactly as
+          // Word did, so a page assigned by Word's markers can need a little
+          // more room here. A fixed height with overflow hidden answered that
+          // by cutting the text off mid-sentence; letting the sheet grow keeps
+          // every word visible.
+          minHeight: `${geo.height_in}in`,
           maxWidth: '100%',
           paddingTop: `${m.top}in`,
           paddingRight: `${m.right}in`,
           paddingBottom: `${m.bottom}in`,
           paddingLeft: `${m.left}in`,
-          fontFamily: 'Calibri, "Segoe UI", Cambria, Georgia, serif',
-          fontSize: '11pt',
-          lineHeight: 1.5,
+          // The document's own typeface and size, falling back only when the
+          // file names neither.
+          fontFamily: geo.default_font
+            ? `"${geo.default_font}", Cambria, Georgia, serif`
+            : 'Calibri, "Segoe UI", Cambria, Georgia, serif',
+          fontSize: `${geo.default_size_pt || 11}pt`,
+          lineHeight: 1.15,
         }}
       >
         <span className="pointer-events-none absolute right-3 top-1.5 text-[9px] font-medium uppercase tracking-wide text-neutral-300">

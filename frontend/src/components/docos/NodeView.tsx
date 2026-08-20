@@ -17,6 +17,20 @@ function styleToCss(style: Style): CSSProperties {
   }
 }
 
+/** Line spacing and the gaps around a paragraph, as the document set them.
+ *  Rendering a single-spaced document at 1.5 needs half again as much room as
+ *  it has, which pushed text past the foot of the page. */
+function spacingToCss(node: GraphNode): CSSProperties {
+  const m = (node.metadata ?? {}) as Record<string, unknown>
+  const out: CSSProperties = {}
+  if (typeof m.line_spacing === 'number') {
+    out.lineHeight = m.line_spacing_exact ? `${m.line_spacing}pt` : m.line_spacing
+  }
+  if (typeof m.space_before_pt === 'number') out.marginTop = `${m.space_before_pt}pt`
+  if (typeof m.space_after_pt === 'number') out.marginBottom = `${m.space_after_pt}pt`
+  return out
+}
+
 interface Props {
   node: GraphNode
   selected: boolean
@@ -25,7 +39,7 @@ interface Props {
 }
 
 export function NodeView({ node, selected, active, removing }: Props) {
-  const css = styleToCss(node.style)
+  const css = { ...styleToCss(node.style), ...spacingToCss(node) }
 
   return (
     <motion.div
