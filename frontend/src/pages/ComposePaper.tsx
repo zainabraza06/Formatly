@@ -1,11 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import clsx from 'clsx'
 import { GlassCard } from '../components/GlassCard'
 import { DocumentPreview } from '../components/paper/DocumentPreview'
 import { GenerationStatus } from '../components/paper/GenerationStatus'
 import { StyleManager } from '../components/paper/StyleManager'
 import {
-  downloadBlob, paperApi,
+  downloadBlob, isAbort, paperApi,
   type ComposeRequest, type Depth, type PaperSpec, type StyleSummary,
 } from '../lib/paperApi'
 import {
@@ -54,6 +54,9 @@ export function ComposePaper() {
   const [error, setError] = useState<string | null>(null)
   const [showStyles, setShowStyles] = useState(false)
 
+  // Held for as long as a run is in flight, so Stop has something to abort.
+  const runRef = useRef<AbortController | null>(null)
+
   // Exact preview: the real DOCX rendered to PDF. Falls back to the HTML view
   // while it renders, or if LibreOffice is unavailable.
   const [pdfUrl, setPdfUrl] = useState<string | null>(null)
@@ -71,19 +74,21 @@ export function ComposePaper() {
   // Fetch the exact PDF whenever a new spec is ready.
   useEffect(() => {
     if (!spec) { setPdfUrl(null); setPdfState('idle'); return }
-    let cancelled = false
+    // Aborted on cleanup: a superseded preview would otherwise keep the server
+    // busy rendering a PDF nobody is waiting for any more.
+    const run = new AbortController()
     let url: string | null = null
     setPdfState('loading')
-    paperApi.previewPdf(spec)
+    paperApi.previewPdf(spec, undefined, run.signal)
       .then((b) => {
-        if (cancelled) return
+        if (run.signal.aborted) return
         url = URL.createObjectURL(b)
         setPdfUrl(url)
         setPdfState('ready')
       })
-      .catch(() => { if (!cancelled) setPdfState('unavailable') })
+      .catch((e) => { if (!isAbort(e)) setPdfState('unavailable') })
     return () => {
-      cancelled = true
+      run.abort()
       if (url) URL.revokeObjectURL(url)
     }
   }, [spec])
@@ -103,34 +108,51 @@ export function ComposePaper() {
       : [],
   })
 
+  // Abandoning a run is the user's decision, so it is not reported as a failure.
+  const stop = () => {
+    runRef.current?.abort()
+    runRef.current = null
+    setBusy('idle')
+  }
+
   const generate = async () => {
     if (!rawText.trim()) return
+    const run = new AbortController()
+    runRef.current = run
     setBusy('generating')
     setError(null)
     setSpec(null)
     try {
-      const res = await paperApi.generate(buildRequest())
+      const res = await paperApi.generate(buildRequest(), run.signal)
       setSpec(res.spec)
       setProvider(res.provider)
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Generation failed')
+      if (!isAbort(e)) setError(e instanceof Error ? e.message : 'Generation failed')
     } finally {
-      setBusy('idle')
+      if (runRef.current === run) {
+        runRef.current = null
+        setBusy('idle')
+      }
     }
   }
 
   const download = async () => {
+    const run = new AbortController()
+    runRef.current = run
     setBusy('rendering')
     setError(null)
     try {
       const b = spec
-        ? await paperApi.renderSpec(spec)
-        : await paperApi.compose(buildRequest())
+        ? await paperApi.renderSpec(spec, undefined, run.signal)
+        : await paperApi.compose(buildRequest(), run.signal)
       downloadBlob(b, `${(spec?.meta.title || titleHint || 'document').slice(0, 60)}.docx`)
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Render failed')
+      if (!isAbort(e)) setError(e instanceof Error ? e.message : 'Render failed')
     } finally {
-      setBusy('idle')
+      if (runRef.current === run) {
+        runRef.current = null
+        setBusy('idle')
+      }
     }
   }
 
@@ -287,20 +309,30 @@ Write in the first person plural.`}
             </div>
 
             <div className="flex gap-2 pt-1">
-              <button
-                onClick={generate}
-                disabled={busy !== 'idle' || !rawText.trim()}
-                className={`${btnPrimary} flex-1`}
-              >
-                {busy === 'generating' ? 'Writing…' : spec ? 'Regenerate' : 'Generate'}
-              </button>
-              <button
-                onClick={download}
-                disabled={busy !== 'idle' || !rawText.trim()}
-                className={`${btnGhost} flex-1`}
-              >
-                {busy === 'rendering' ? 'Rendering…' : 'Download DOCX'}
-              </button>
+              {/* While a run is in flight the only useful action is calling it
+                  off, so Stop replaces both buttons rather than joining them. */}
+              {busy !== 'idle' ? (
+                <button onClick={stop} className={`${btnGhost} flex-1`}>
+                  Stop {busy === 'generating' ? 'writing' : 'rendering'}
+                </button>
+              ) : (
+                <>
+                  <button
+                    onClick={generate}
+                    disabled={!rawText.trim()}
+                    className={`${btnPrimary} flex-1`}
+                  >
+                    {spec ? 'Regenerate' : 'Generate'}
+                  </button>
+                  <button
+                    onClick={download}
+                    disabled={!rawText.trim()}
+                    className={`${btnGhost} flex-1`}
+                  >
+                    Download DOCX
+                  </button>
+                </>
+              )}
             </div>
             <div className="text-[10px] text-faint">
               Rendering as <span className="font-medium text-muted">{styleName}</span>
@@ -320,6 +352,7 @@ Write in the first person plural.`}
             }
             error={error}
             onRetry={generate}
+            onStop={stop}
           />
         </div>
       </div>

@@ -115,35 +115,45 @@ export const paperApi = {
       method: 'DELETE', headers: authHeaders(),
     })),
 
-  generate: async (req: ComposeRequest): Promise<{ provider: string; spec: PaperSpec }> =>
+  // `signal` lets the caller abandon a run. Generation can take minutes, so the
+  // user needs a way out that does not mean reloading the page.
+  generate: async (req: ComposeRequest, signal?: AbortSignal): Promise<{ provider: string; spec: PaperSpec }> =>
     json(await fetch(`${API_URL}/paper/generate`, {
       method: 'POST',
       headers: authHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(req),
+      signal,
     })),
 
-  renderSpec: async (spec: PaperSpec, style?: string): Promise<Blob> =>
+  renderSpec: async (spec: PaperSpec, style?: string, signal?: AbortSignal): Promise<Blob> =>
     blob(await fetch(`${API_URL}/paper/render${style ? `?style=${encodeURIComponent(style)}` : ''}`, {
       method: 'POST',
       headers: authHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(spec),
+      signal,
     })),
 
   // Pixel-exact preview: the real DOCX rendered to PDF. May 503 if LibreOffice
   // is unavailable, in which case the caller falls back to the HTML view.
-  previewPdf: async (spec: PaperSpec, style?: string): Promise<Blob> =>
+  previewPdf: async (spec: PaperSpec, style?: string, signal?: AbortSignal): Promise<Blob> =>
     blob(await fetch(`${API_URL}/paper/preview${style ? `?style=${encodeURIComponent(style)}` : ''}`, {
       method: 'POST',
       headers: authHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(spec),
+      signal,
     })),
 
-  compose: async (req: ComposeRequest): Promise<Blob> =>
+  compose: async (req: ComposeRequest, signal?: AbortSignal): Promise<Blob> =>
     blob(await fetch(`${API_URL}/paper/compose`, {
       method: 'POST',
       headers: authHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(req),
+      signal,
     })),
+}
+
+export function isAbort(e: unknown): boolean {
+  return e instanceof DOMException && e.name === 'AbortError'
 }
 
 export function downloadBlob(b: Blob, filename: string): void {
