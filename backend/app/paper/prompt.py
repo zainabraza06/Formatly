@@ -130,6 +130,11 @@ set of questions rather than a body of findings to write up:
 - Answer EVERY one of them. Do not silently drop a part because it is harder or because the
   supplied material is thin — address it explicitly, and say plainly where an assumption was
   needed. A document that covers eight of ten requirements has failed.
+- HONOUR THE COUNTS. Where the brief names a number — five screenshots, three test cases,
+  two examples — produce that many, not "several". Where it asks for something *per task*,
+  *per feature* or *for each part*, produce one for each: a brief listing four tasks and
+  asking for a screenshot of each needs four screenshots, one sitting in each task's own
+  section. Before finishing, count what you emitted against what was asked.
 - Structure the document so a marker can find each requirement: follow the brief's own order
   and its own names for the parts, and give each substantial requirement its own section or
   subsection.
