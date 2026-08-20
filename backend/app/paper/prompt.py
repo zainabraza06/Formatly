@@ -49,7 +49,12 @@ _STYLE_GUIDE: dict[str, str] = {
         "deliverables, use the brief's names and order instead of inventing your own.\n"
         "Write formally and in full sentences. Explain the reasoning, not just the outcome — "
         "a marker has to follow how the answer was reached.\n"
-        "References numbered in order of first mention: [1] A. Author, \"Title,\" Publisher, Year."
+        "Submitted coursework is not a research paper. Leave meta.abstract EMPTY and "
+        "meta.keywords empty unless the brief explicitly asks for an abstract or keywords, "
+        "and return an empty `references` list unless the brief asks for references or the "
+        "work genuinely cites sources. Do not add either merely to look scholarly.\n"
+        "If references are called for, number them in order of first mention and write the "
+        "entry only — the [1] numbering is added for you, so never start an entry with it."
     ),
     "report": (
         "Style: professional report.\n"
@@ -108,7 +113,7 @@ JSON shape:
     {"type":"code","language":"python","filename":"solver.py",
      "caption":"what this listing does","text":"line one\\nline two"}
   ],
-  "references": ["<formatted per the requested style>"],
+  "references": ["<formatted per the requested style; the entry only — the [1] numbering is added for you>"],
   "visualization_plan": [
     {"data":"<which values in the input>","kind":"bar","rationale":"<why this chart suits them>"}
   ]
@@ -146,6 +151,20 @@ CODE — when the task calls for an implementation, or the user asks for snippet
   an editor window with syntax highlighting and line numbers ("theme":"dark" or "light").
   Otherwise leave it as text, which stays selectable and copyable.
 - If no code is called for, emit no "code" blocks.
+- A "code" block MUST carry its actual code in "text". Never emit a listing with empty or
+  placeholder text: an empty listing is dropped, leaving your caption promising something
+  that is not there.
+
+WHAT CAN AND CANNOT BE PICTURED — a brief often asks for several screenshots. You can produce
+exactly one kind: a listing drawn as an editor window ("render":"image"). You CANNOT produce
+a screenshot of a program running, of console output, of a terminal, an installer, a website
+or a GUI, because nothing is executed while this document is written. So:
+- Where the brief wants output shown, reproduce the console session as a "code" block with
+  "language":"text" and a caption saying it is sample output. That is honest and readable.
+- NEVER write a heading, caption or sentence announcing a screenshot you are not emitting.
+  A section reading "Screenshot 2 — Program Starting" with nothing under it is worse than no
+  section: it tells the reader something is missing. Show it as sample output, or leave the
+  section out.
 
 MATHEMATICS — when the task involves derivations, formulae or worked numbers:
 - Put each formula in an "equation" block, written as TeX math markup: \\frac{a}{b},
@@ -273,7 +292,7 @@ Produce the front matter and a section plan — NOT the prose itself.
      "brief": "<what this section must cover, and which of the supplied material it draws on>",
      "subsections": ["<level-2 heading>", "..."]}
   ],
-  "references": ["<formatted per the requested style>"],
+  "references": ["<formatted per the requested style; the entry only — the [1] numbering is added for you>"],
   "visualization_plan": [
     {"data":"<which values in the input>","kind":"bar","rationale":"<why this chart suits them>"}
   ]
@@ -283,6 +302,10 @@ Rules:
 - Choose the sections the material actually supports; do not pad with empty sections.
 - Do NOT include an "Abstract" or "References" section in the outline — they are handled
   separately via meta.abstract and references.
+- Do NOT plan a section for a screenshot of a program running, a terminal, a website or a
+  GUI. Nothing is executed while this document is written, so that section would come out
+  empty. Code can be shown as an editor window, and output as a sample-output listing; plan
+  those instead, inside the section they belong to.
 - Assign each chartable set of values in the material to "visualization_plan", stating what
   the data is, the chart kind, and why. If there are no chartable values, return an empty list.
 - Never invent facts, citations or numbers that are absent from the material.

@@ -17,6 +17,10 @@ from __future__ import annotations
 import re
 
 _BIBTEX_HEAD = re.compile(r"^\s*@(\w+)\s*\{\s*([^,\s]*)\s*,", re.IGNORECASE)
+
+# Numbering the model applied itself: "[1] A. Author…" or "1. A. Author…".
+# The renderer adds the number, so leaving these gives "[1] [1] A. Author".
+_OWN_NUMBERING = re.compile(r"^\s*(?:\[\s*\d+\s*\]|\(\s*\d+\s*\)|\d{1,3}[.)])\s+")
 _FIELD = re.compile(r"(\w+)\s*=\s*", re.IGNORECASE)
 
 
@@ -127,11 +131,24 @@ def _join(parts: list[str]) -> str:
     return out
 
 
+def strip_own_numbering(text: str) -> str:
+    """Drop a leading "[1] " / "1. " the model wrote itself.
+
+    Asked for numbered references a model usually numbers them, and the renderer
+    numbers them too. Repeated because a stubborn model writes "[1] [1]".
+    """
+    previous = None
+    while previous != text:
+        previous = text
+        text = _OWN_NUMBERING.sub("", text, count=1)
+    return text
+
+
 def format_reference(raw: str) -> str:
     """Normalise one reference entry to a single formatted line."""
     if not raw:
         return ""
-    text = raw.strip()
+    text = strip_own_numbering(raw.strip())
 
     m = _BIBTEX_HEAD.match(text)
     if m:

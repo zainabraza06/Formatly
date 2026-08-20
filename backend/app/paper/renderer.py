@@ -90,8 +90,8 @@ def render_paper(spec: PaperSpec, out_path: str | Path,
             if _figure(doc, block, counters["figure"] + 1, assets, spec, sheet):
                 counters["figure"] += 1
         elif isinstance(block, Code):
-            counters["code"] += 1
-            _code(doc, block, counters["code"], assets, spec, sheet)
+            if _code(doc, block, counters["code"] + 1, assets, spec, sheet):
+                counters["code"] += 1
 
     if spec.references:
         _references(doc, spec, sheet)
@@ -374,13 +374,15 @@ def _code_caption(doc: Document, block: Code, number: int, sheet: StyleSheet) ->
 
 
 def _code(doc: Document, block: Code, number: int, assets: Path,
-          spec: PaperSpec, sheet: StyleSheet) -> None:
+          spec: PaperSpec, sheet: StyleSheet) -> bool:
     """A listing is written one paragraph per line so it never reflows, shaded so
     it reads as a block, and held together so a column break cannot split it
     down the middle. Asked for `render: "image"`, it becomes an editor
     screenshot instead — falling back to text if that cannot be produced."""
     style = block.style or sheet.code
-    lines = (block.text or "").splitlines() or [""]
+    if not (block.text or "").strip():
+        return False    # a "Listing 2." standing over nothing is worse than no listing
+    lines = block.text.splitlines()
 
     if block.render == "image":
         try:
@@ -395,7 +397,7 @@ def _code(doc: Document, block: Code, number: int, assets: Path,
             _picture(doc, shot, spec, sheet.figure_body, span="column")
             if sheet.code_caption_position == "below":
                 _code_caption(doc, block, number, sheet)
-            return
+            return True
 
     if sheet.code_caption_position == "above":
         _code_caption(doc, block, number, sheet)
@@ -414,6 +416,7 @@ def _code(doc: Document, block: Code, number: int, assets: Path,
 
     if sheet.code_caption_position == "below":
         _code_caption(doc, block, number, sheet)
+    return True
 
 
 def _shade_paragraph(p, hex_fill: str) -> None:
