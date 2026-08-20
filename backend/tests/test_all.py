@@ -59,71 +59,29 @@ def section(title: str):
 
 
 # ════════════════════════════════════════════════════════════════════════════
-# 1. GROQ CONNECTIVITY
+# 1. MISTRAL CONNECTIVITY
 # ════════════════════════════════════════════════════════════════════════════
-section("1. Groq API Connectivity")
+section("1. Mistral API Connectivity")
 
-api_key = os.environ.get("GROQ_API_KEY", "")
-model   = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
+api_key = os.environ.get("MISTRAL_API_KEY", "")
+model   = os.environ.get("MISTRAL_MODEL", "mistral-large-latest")
 
-if not api_key or api_key == "your_groq_api_key_here":
-    skip("Groq ping", "GROQ_API_KEY not set")
-    skip("Groq JSON generation", "GROQ_API_KEY not set")
+if not api_key or api_key.startswith("your_"):
+    skip("Mistral ping", "MISTRAL_API_KEY not set")
 else:
     try:
-        from groq import Groq
-        client = Groq(api_key=api_key)
+        from app.services.router import ProviderRouter
         t0 = time.time()
-        resp = client.chat.completions.create(
-            model=model,
-            messages=[{"role": "user", "content": "Reply with exactly: pong"}],
-            max_tokens=10,
+        reply = ProviderRouter()._call_mistral(
+            [{"role": "user", "content": "Reply with exactly: pong"}], 10
         )
         elapsed = time.time() - t0
-        reply = (resp.choices[0].message.content or "").strip().lower()
-        if "pong" in reply:
-            ok("Groq ping", f"{elapsed:.2f}s · model={model}")
+        if "pong" in reply.strip().lower():
+            ok("Mistral ping", f"{elapsed:.2f}s · model={model}")
         else:
-            ok("Groq ping", f"responded in {elapsed:.2f}s (reply: {reply[:40]})")
+            ok("Mistral ping", f"responded in {elapsed:.2f}s (reply: {reply.strip()[:40]})")
     except Exception as e:
-        fail("Groq ping", str(e))
-
-    try:
-        t0 = time.time()
-        resp = client.chat.completions.create(
-            model=model,
-            messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "You are a document generator. Return ONLY valid JSON with keys: "
-                        "title (string), outline (array of 3 strings), sections (array of "
-                        "{heading: string, content: string} with 3 items)."
-                    ),
-                },
-                {"role": "user", "content": "Generate a short report on renewable energy."},
-            ],
-            max_tokens=800,
-        )
-        elapsed = time.time() - t0
-        raw = resp.choices[0].message.content or ""
-        import re
-        m = re.search(r"\{.*\}", raw, flags=re.DOTALL)
-        if not m:
-            fail("Groq JSON generation", f"No JSON found in response:\n{raw[:300]}")
-        else:
-            doc = json.loads(m.group(0))
-            assert "title" in doc, "missing 'title'"
-            assert isinstance(doc.get("sections"), list), "missing 'sections'"
-            assert len(doc["sections"]) > 0, "empty sections"
-            ok(
-                "Groq JSON generation",
-                f"{elapsed:.2f}s · title='{doc['title'][:50]}' · {len(doc['sections'])} sections",
-            )
-    except json.JSONDecodeError as e:
-        fail("Groq JSON generation", f"JSON parse error: {e}\nRaw: {raw[:300]}")
-    except Exception as e:
-        fail("Groq JSON generation", str(e))
+        fail("Mistral ping", str(e))
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -187,7 +145,7 @@ section("4. AI Service — Fallback Generator")
 try:
     import importlib
     # Temporarily unset key to force fallback path
-    saved_key = os.environ.pop("GROQ_API_KEY", None)
+    saved_key = os.environ.pop("MISTRAL_API_KEY", None)
 
     from app.services import ai as ai_module
     result = ai_module.generate_structured_document(
@@ -209,21 +167,21 @@ try:
     )
 
     if saved_key:
-        os.environ["GROQ_API_KEY"] = saved_key
+        os.environ["MISTRAL_API_KEY"] = saved_key
 
 except Exception as e:
     if saved_key:
-        os.environ["GROQ_API_KEY"] = saved_key
+        os.environ["MISTRAL_API_KEY"] = saved_key
     fail("fallback generate_structured_document", str(e))
 
 
 # ════════════════════════════════════════════════════════════════════════════
-# 5. AI SERVICE (GROQ path)
+# 5. AI SERVICE (Mistral path)
 # ════════════════════════════════════════════════════════════════════════════
-section("5. AI Service — Groq Path")
+section("5. AI Service — Mistral Path")
 
-if not api_key or api_key == "your_groq_api_key_here":
-    skip("generate_structured_document via Groq", "GROQ_API_KEY not set")
+if not api_key or api_key.startswith("your_"):
+    skip("generate_structured_document via Mistral", "MISTRAL_API_KEY not set")
 else:
     try:
         from app.services import ai as ai_module
@@ -240,11 +198,11 @@ else:
         assert isinstance(result.get("sections"), list) and len(result["sections"]) > 0, "no sections"
 
         ok(
-            "generate_structured_document via Groq",
+            "generate_structured_document via Mistral",
             f"{elapsed:.2f}s · title='{result['title'][:50]}' · {len(result['sections'])} sections",
         )
     except Exception as e:
-        fail("generate_structured_document via Groq", str(e))
+        fail("generate_structured_document via Mistral", str(e))
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -467,9 +425,9 @@ except Exception as e:
 
 
 # ════════════════════════════════════════════════════════════════════════════
-# 10. MULTI-PROVIDER ROUTER
+# 10. PROVIDER ROUTER
 # ════════════════════════════════════════════════════════════════════════════
-section("10. Multi-Provider Router")
+section("10. Provider Router")
 
 try:
     from app.services.router import (
@@ -478,177 +436,95 @@ try:
         AllProvidersFailed,
         RateLimitExceeded,
         ProviderTimeout,
-        GROQ, GEMINI, OPENROUTER, HUGGINGFACE,
+        MISTRAL,
         DEFAULT_ORDER,
+        _timeout_for,
     )
-
-    _PLACEHOLDER = ("your_", "placeholder", "")
 
     def _is_real_key(key: str) -> bool:
         """Return True only if the key looks like a genuine credential."""
-        if not key:
-            return False
-        return not any(key.startswith(p) for p in _PLACEHOLDER)
+        return bool(key) and not key.startswith(("your_", "placeholder"))
 
     # ── 10a. status() snapshot ────────────────────────────────────────────────
     router = get_router()
     router.reset_cooldowns()
     status = router.status()
 
-    assert set(status.keys()) == {GROQ, GEMINI, OPENROUTER, HUGGINGFACE}, \
-        f"status keys wrong: {set(status.keys())}"
+    assert set(status.keys()) == {MISTRAL}, f"status keys wrong: {set(status.keys())}"
+    assert DEFAULT_ORDER == [MISTRAL], f"order wrong: {DEFAULT_ORDER}"
 
-    real_keys   = [p for p in DEFAULT_ORDER if _is_real_key(router._key(p))]
-    placeholder = [p for p in DEFAULT_ORDER if router._key(p) and not _is_real_key(router._key(p))]
-    no_key      = [p for p in DEFAULT_ORDER if not router._key(p)]
+    ok("router.status() — Mistral only", f"state={status[MISTRAL]['state']} · model={status[MISTRAL]['model']}")
 
-    ok(
-        "router.status() — all 4 providers present",
-        f"live={real_keys} | placeholder={placeholder} | no_key={no_key}",
-    )
+    # ── 10b. the timeout scales with the token budget ─────────────────────────
+    # A flat deadline aborted full-length documents mid-write: measured
+    # throughput is ~60 tok/s, so 8000 tokens needs well over the old 120s.
+    small, large = _timeout_for(1500), _timeout_for(8000)
+    assert large > small, f"timeout must grow with max_tokens ({small} -> {large})"
+    assert large > 8000 / 60, f"timeout {large}s too tight for 8000 tokens at 60 tok/s"
+    ok("timeout scales with max_tokens", f"1500 -> {small:.0f}s · 8000 -> {large:.0f}s")
 
-    # ── 10b. basic chat via the best available provider ───────────────────────
-    if not real_keys:
-        skip("router.chat() — live call", "no real provider keys set")
+    # ── 10c. basic chat ───────────────────────────────────────────────────────
+    if not _is_real_key(router._key(MISTRAL)):
+        skip("router.chat() — live call", "no real Mistral key set")
     else:
-        t0 = time.time()
         text, provider_used, elapsed = router.chat(
             [{"role": "user", "content": "Reply with exactly: pong"}],
             max_tokens=10,
         )
-        ok(
-            f"router.chat() — used {provider_used}",
-            f"{elapsed:.2f}s · reply='{text.strip()[:30]}'",
-        )
+        assert provider_used == MISTRAL
+        ok(f"router.chat() — used {provider_used}", f"{elapsed:.2f}s · reply='{text.strip()[:30]}'")
 
-    # ── 10c. fallback: mock Groq to raise RateLimitExceeded ───────────────────
+    # ── 10d. a rate limit fails loudly and sets a cooldown ────────────────────
     from unittest.mock import patch
 
     fresh = ProviderRouter()
     fresh.reset_cooldowns()
 
-    def _mock_groq_rate_limit(messages, max_tokens):
-        raise RateLimitExceeded(GROQ)
+    with patch.object(fresh, "_call_mistral", side_effect=RateLimitExceeded(MISTRAL)):
+        try:
+            fresh.chat([{"role": "user", "content": "pong"}], max_tokens=5)
+            fail("expected AllProvidersFailed on rate limit", "got a result instead")
+        except AllProvidersFailed:
+            ok("rate limit -> AllProvidersFailed", "no silent downgrade to a weaker model")
 
-    with patch.object(fresh, "_call_groq", side_effect=_mock_groq_rate_limit):
-        secondary_live = [p for p in DEFAULT_ORDER if p != GROQ and _is_real_key(fresh._key(p))]
+    in_cd, remaining = fresh._in_cooldown(MISTRAL)
+    assert in_cd, "Mistral should be in cooldown after RateLimitExceeded"
+    ok("cooldown set after RateLimitExceeded", f"{remaining}s remaining")
 
-        if not secondary_live:
-            # No real secondary keys — router should raise AllProvidersFailed
-            try:
-                fresh.chat([{"role": "user", "content": "pong"}], max_tokens=5)
-                fail("fallback: expected AllProvidersFailed but got result", "")
-            except AllProvidersFailed:
-                ok(
-                    "fallback: Groq rate-limited -> AllProvidersFailed (no real secondary keys)",
-                    "correct behaviour",
-                )
-        else:
-            t0 = time.time()
-            text, provider_used, elapsed = fresh.chat(
-                [{"role": "user", "content": "Reply with exactly: pong"}],
-                max_tokens=10,
-            )
-            assert provider_used != GROQ, f"should have skipped Groq, got {provider_used}"
-            ok(
-                f"fallback: Groq rate-limited -> fell back to {provider_used}",
-                f"{elapsed:.2f}s",
-            )
-
-    # Verify Groq entered cooldown regardless of outcome above
-    in_cd, remaining = fresh._in_cooldown(GROQ)
-    assert in_cd, "Groq should be in cooldown after RateLimitExceeded"
-    ok("cooldown set after RateLimitExceeded", f"Groq cooldown {remaining}s remaining")
-
-    # ── 10d. fallback: mock Groq to timeout ───────────────────────────────────
+    # ── 10e. a timeout does the same, and says how long it waited ─────────────
     fresh2 = ProviderRouter()
 
-    def _mock_groq_timeout(messages, max_tokens):
-        raise ProviderTimeout(GROQ)
+    with patch.object(fresh2, "_call_mistral", side_effect=ProviderTimeout(MISTRAL)):
+        try:
+            fresh2.chat([{"role": "user", "content": "pong"}], max_tokens=8000)
+            fail("expected AllProvidersFailed on timeout", "got a result instead")
+        except AllProvidersFailed as exc:
+            assert "timed out after" in str(exc), f"unhelpful timeout message: {exc}"
+            ok("timeout -> AllProvidersFailed", str(exc)[:70])
 
-    with patch.object(fresh2, "_call_groq", side_effect=_mock_groq_timeout):
-        secondary_live = [p for p in DEFAULT_ORDER if p != GROQ and _is_real_key(fresh2._key(p))]
+    in_cd, remaining = fresh2._in_cooldown(MISTRAL)
+    assert in_cd, "Mistral should be in cooldown after ProviderTimeout"
+    ok("cooldown set after ProviderTimeout", f"{remaining}s remaining")
 
-        if not secondary_live:
-            try:
-                fresh2.chat([{"role": "user", "content": "pong"}], max_tokens=5)
-                fail("fallback timeout: expected AllProvidersFailed", "")
-            except AllProvidersFailed:
-                ok(
-                    "fallback: Groq timeout -> AllProvidersFailed (no real secondary keys)",
-                    "correct behaviour",
-                )
-        else:
-            _, provider_used, _ = fresh2.chat(
-                [{"role": "user", "content": "Reply with exactly: pong"}],
-                max_tokens=10,
-            )
-            assert provider_used != GROQ
-            ok(f"fallback: Groq timeout -> fell back to {provider_used}")
-
-    in_cd, remaining = fresh2._in_cooldown(GROQ)
-    assert in_cd, "Groq should be in cooldown after ProviderTimeout"
-    ok("cooldown set after ProviderTimeout", f"Groq cooldown {remaining}s remaining")
-
-    # ── 10e. AllProvidersFailed when ALL providers have no keys ───────────────
+    # ── 10f. AllProvidersFailed when no key is configured ─────────────────────
     keyless = ProviderRouter()
     with patch.object(keyless, "_key", return_value=""):
         try:
             keyless.chat([{"role": "user", "content": "test"}], max_tokens=5)
             fail("AllProvidersFailed not raised", "expected exception but got result")
         except AllProvidersFailed as e:
-            ok("AllProvidersFailed raised when no keys configured", str(e)[:60])
+            ok("AllProvidersFailed raised when no key configured", str(e)[:60])
 
-    # ── 10f. reset_cooldowns() clears state ───────────────────────────────────
+    # ── 10g. reset_cooldowns() clears state ───────────────────────────────────
     r = ProviderRouter()
-    r._cool(GROQ,   60)
-    r._cool(GEMINI, 60)
+    r._cool(MISTRAL, 60)
     r.reset_cooldowns()
-    assert not r._in_cooldown(GROQ)[0],   "Groq should not be in cooldown after reset"
-    assert not r._in_cooldown(GEMINI)[0], "Gemini should not be in cooldown after reset"
+    assert not r._in_cooldown(MISTRAL)[0], "Mistral should not be in cooldown after reset"
     ok("reset_cooldowns() clears all cooldowns")
 
 except Exception as e:
     import traceback
     fail("router tests", traceback.format_exc())
-
-
-# ════════════════════════════════════════════════════════════════════════════
-# 11. PROVIDER CONNECTIVITY (individual key checks)
-# ════════════════════════════════════════════════════════════════════════════
-section("11. Individual Provider Connectivity")
-
-try:
-    from app.services.router import ProviderRouter, GROQ, GEMINI, OPENROUTER, HUGGINGFACE
-
-    probe_router = ProviderRouter()
-    probe_msg = [{"role": "user", "content": "Reply with exactly: pong"}]
-
-    def _is_real(k: str) -> bool:
-        return bool(k) and not k.startswith("your_")
-
-    for provider in [GROQ, GEMINI, OPENROUTER, HUGGINGFACE]:
-        key = probe_router._key(provider)
-        if not _is_real(key):
-            skip(f"{provider} ping", "placeholder or missing key in .env")
-            continue
-        try:
-            caller = {
-                GROQ:        probe_router._call_groq,
-                GEMINI:      probe_router._call_gemini,
-                OPENROUTER:  probe_router._call_openrouter,
-                HUGGINGFACE: probe_router._call_huggingface,
-            }[provider]
-            t0 = time.time()
-            reply = caller(probe_msg, max_tokens=15)
-            elapsed = time.time() - t0
-            ok(f"{provider} ping", f"{elapsed:.2f}s · '{reply.strip()[:40]}'")
-        except Exception as exc:
-            fail(f"{provider} ping", str(exc)[:200])
-
-except Exception as e:
-    import traceback
-    fail("individual provider connectivity", traceback.format_exc())
 
 
 # ════════════════════════════════════════════════════════════════════════════
