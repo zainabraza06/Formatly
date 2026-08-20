@@ -36,10 +36,10 @@ const quickActions = [
 ]
 
 const demoSteps = [
- 'Upload a CV template (DOCX)',
- 'Paste personal info',
- 'AI generates matching CV',
- 'Export PDF',
+ 'Paste your material — notes, data, or an assignment brief',
+ 'Pick a style and say anything extra it must do',
+ 'The AI writes it, with tables, charts and code listings',
+ 'Download the DOCX, or open it in Document OS to edit',
 ]
 
 export function DashboardHome() {
@@ -152,7 +152,7 @@ export function DashboardHome() {
  {/* Demo flow */}
  <GlassCard>
  <div className="text-sm font-semibold text-ink">Quick demo flow</div>
- <div className="mt-1 text-xs text-muted">Try template cloning in 4 steps.</div>
+ <div className="mt-1 text-xs text-muted">From material to a finished document in four steps.</div>
 
  <ol className="mt-4 space-y-3">
  {demoSteps.map((step, i) => (

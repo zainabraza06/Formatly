@@ -10,6 +10,7 @@ from __future__ import annotations
 import anyio
 import anyio.to_thread
 import threading
+from datetime import datetime, timezone
 from typing import Any, Callable, Optional, TypeVar
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Request
@@ -158,6 +159,39 @@ async def _run_cancellable(request: Request, work: Callable[[threading.Event], _
     return outcome["value"]
 
 
+
+def _save_spec(spec_dict: dict[str, Any], owner_id: str) -> str:
+    """Persist a generated spec and return its id.
+
+    The owner is stored beside the spec rather than inferred from the filename,
+    because every read has to be able to answer "is this yours" — a document id
+    is a guess away otherwise.
+    """
+    from app.services.storage import get_paths, write_json
+
+    doc_id = new_id("paper")
+    write_json(get_paths().documents / f"{doc_id}.spec.json", {
+        "owner_id": owner_id,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "spec": spec_dict,
+    })
+    return doc_id
+
+
+def _load_owned_spec(document_id: str, owner_id: str) -> dict[str, Any]:
+    """The saved spec, if it belongs to this user.
+
+    A stranger's document answers 404 rather than 403: whether an id exists is
+    itself worth not telling them.
+    """
+    from app.services.storage import get_paths, read_json
+
+    record = read_json(get_paths().documents / f"{document_id}.spec.json")
+    if not record or record.get("owner_id") != owner_id:
+        raise HTTPException(status_code=404, detail="Paper not found")
+    return record.get("spec") or {}
+
+
 @router.post("/generate")
 async def generate(req: GenerateRequest, request: Request,
                    user: User = Depends(get_current_user)) -> dict[str, Any]:
@@ -178,12 +212,8 @@ async def generate(req: GenerateRequest, request: Request,
     except PaperGenerationError as exc:
         raise HTTPException(status_code=502, detail=str(exc))
 
-    doc_id = new_id('paper')
     spec_dict = spec.to_dict()
-    
-    from app.services.storage import write_json, get_paths
-    write_json(get_paths().documents / f"{doc_id}.spec.json", spec_dict)
-    
+    doc_id = _save_spec(spec_dict, user.id)
     return {"provider": provider, "spec": spec_dict, "document_id": doc_id}
 
 
@@ -270,9 +300,7 @@ async def compose(req: GenerateRequest, request: Request,
     except PaperGenerationError as exc:
         raise HTTPException(status_code=502, detail=str(exc))
 
-    doc_id = new_id('paper')
-    from app.services.storage import write_json, get_paths
-    write_json(get_paths().documents / f"{doc_id}.spec.json", spec.to_dict())
+    doc_id = _save_spec(spec.to_dict(), user.id)
 
     out = get_paths().documents / f"{doc_id}.docx"
     render_paper(spec, out, owner_id=user.id)
@@ -310,34 +338,39 @@ async def refine(req: RefineInstructionsRequest, request: Request,
 
 
 @router.get("/recent")
-def recent_papers() -> list[dict[str, Any]]:
-    """List recently generated paper specs. No auth required — local file listing."""
+def recent_papers(user: User = Depends(get_current_user)) -> list[dict[str, Any]]:
+    """The caller's own recently generated papers, newest first.
+
+    Scoped to the owner: this used to list every spec in the shared directory to
+    anyone who asked, which handed out other people's document titles and the
+    ids that make their exports reachable.
+    """
     from app.services.storage import get_paths, read_json
+
     paths = get_paths()
-    specs = sorted(
-        paths.documents.glob("*.spec.json"),
-        key=lambda p: p.stat().st_mtime,
-        reverse=True,
-    )
-    out = []
-    for p in specs[:20]:
-        d = read_json(p) or {}
-        meta = d.get("meta", {})
+    out: list[dict[str, Any]] = []
+    for path in sorted(paths.documents.glob("*.spec.json"),
+                       key=lambda p: p.stat().st_mtime, reverse=True):
+        record = read_json(path) or {}
+        if record.get("owner_id") != user.id:
+            continue
+        meta = (record.get("spec") or {}).get("meta", {})
         out.append({
-            "document_id": p.name.replace(".spec.json", ""),
-            "title": meta.get("title", "Untitled Document"),
+            "document_id": path.name.replace(".spec.json", ""),
+            "title": meta.get("title") or "Untitled Document",
             "style_preset": meta.get("style", "ieee"),
+            "created_at": record.get("created_at", ""),
         })
+        if len(out) >= 20:
+            break
     return out
 
 
 @router.get("/{document_id}/export/docx")
 def export_paper_docx(document_id: str, user: User = Depends(get_current_user)) -> FileResponse:
-    from app.services.storage import get_paths, read_json
+    from app.services.storage import get_paths
     paths = get_paths()
-    spec = read_json(paths.documents / f"{document_id}.spec.json")
-    if not spec:
-        raise HTTPException(status_code=404, detail="Paper not found")
+    spec = _load_owned_spec(document_id, user.id)
     
     parsed = _parse_spec(spec, None, user.id)
     out = paths.documents / f"{document_id}.docx"
@@ -349,14 +382,12 @@ def export_paper_docx(document_id: str, user: User = Depends(get_current_user)) 
 
 @router.get("/{document_id}/export/pdf")
 def export_paper_pdf(document_id: str, user: User = Depends(get_current_user)) -> FileResponse:
-    from app.services.storage import get_paths, read_json
+    from app.services.storage import get_paths
     from app.docos.parser.paginator import docx_to_pdf, libreoffice_available
-    
+
     paths = get_paths()
-    spec = read_json(paths.documents / f"{document_id}.spec.json")
-    if not spec:
-        raise HTTPException(status_code=404, detail="Paper not found")
-        
+    spec = _load_owned_spec(document_id, user.id)
+
     if not libreoffice_available():
         raise HTTPException(status_code=503, detail="PDF export needs LibreOffice")
         
