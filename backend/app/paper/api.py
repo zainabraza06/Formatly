@@ -11,7 +11,7 @@ from typing import Any, Optional
 
 from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 from app.docos.auth import get_current_user
 from app.docos.auth.store import User
@@ -124,14 +124,42 @@ def generate(req: GenerateRequest, user: User = Depends(get_current_user)) -> di
     return {"provider": provider, "spec": spec.to_dict()}
 
 
+
+def _parse_spec(spec: Any, style: Optional[str], owner_id: str) -> PaperSpec:
+    """Validate a spec request body, refusing one with nothing in it.
+
+    Every PaperSpec field carries a default, so `{}` — or any JSON that simply
+    is not a spec — validates cleanly into an "Untitled" document with no
+    content. Rendering that returned 200 and a blank .docx, which reads as a
+    silent success: the caller gets a file and no hint that their body was
+    wrong. A spec with no blocks is a client error, so say so.
+    """
+    if not isinstance(spec, dict) or not spec:
+        raise HTTPException(status_code=422,
+                            detail="paper spec must be a non-empty JSON object")
+    try:
+        parsed = PaperSpec.model_validate(spec)
+    except ValidationError as exc:
+        raise HTTPException(status_code=422, detail=f"invalid paper spec: {exc}")
+
+    if not parsed.blocks:
+        raise HTTPException(
+            status_code=422,
+            detail="paper spec has no content blocks — nothing to render. "
+                   "Send the object returned by /paper/generate, or its \"spec\" field.")
+    try:
+        return resolve(parsed, style, owner_id)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail=f"could not apply style: {exc}")
+
+
 @router.post("/render")
 def render(spec: dict[str, Any] = Body(...), style: Optional[str] = None,
            user: User = Depends(get_current_user)) -> FileResponse:
     """Execute a spec JSON and return the .docx."""
-    try:
-        parsed = resolve(PaperSpec.model_validate(spec), style, user.id)
-    except Exception as exc:
-        raise HTTPException(status_code=422, detail=f"invalid paper spec: {exc}")
+    parsed = _parse_spec(spec, style, user.id)
 
     out = get_paths().documents / f"{new_id('paper')}.docx"
     render_paper(parsed, out, owner_id=user.id)
@@ -146,10 +174,7 @@ def preview(spec: dict[str, Any] = Body(...), style: Optional[str] = None,
     preview — the actual document, not an HTML approximation. Needs LibreOffice."""
     from app.docos.parser.paginator import docx_to_pdf, libreoffice_available
 
-    try:
-        parsed = resolve(PaperSpec.model_validate(spec), style, user.id)
-    except Exception as exc:
-        raise HTTPException(status_code=422, detail=f"invalid paper spec: {exc}")
+    parsed = _parse_spec(spec, style, user.id)
 
     if not libreoffice_available():
         raise HTTPException(status_code=503, detail="exact preview needs LibreOffice")
