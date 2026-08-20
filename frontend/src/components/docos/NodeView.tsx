@@ -94,11 +94,20 @@ function renderBody(node: GraphNode, css: CSSProperties) {
   }
 }
 
-/** The real picture when the importer could read it, and an honest placeholder
- *  when it could not — an image too large to inline, or a broken relationship. */
+/** The real picture when the importer could read it, and — when it could not —
+ *  a placeholder that says which problem it hit, because "linked, not stored"
+ *  and "too large" need different things from the reader. */
 function ImageView({ node, css }: { node: GraphNode; css: React.CSSProperties }) {
-  const src = typeof node.metadata?.src === 'string' ? node.metadata.src : ''
-  const tooLarge = typeof node.metadata?.too_large === 'number'
+  const meta = (node.metadata ?? {}) as Record<string, unknown>
+  const src = typeof meta.src === 'string' ? meta.src : ''
+  const linkedTo = typeof meta.linked_to === 'string' ? meta.linked_to : ''
+  const tooLarge = typeof meta.too_large === 'number'
+
+  const reason = linkedTo
+    ? 'Linked to a file outside this document, so the picture was not stored in it. Re-insert it in Word with Insert › Picture (not Link to File) and import again.'
+    : tooLarge
+      ? 'Too large to preview. It is still part of the document.'
+      : 'This picture could not be read from the file.'
 
   if (src) {
     return (
@@ -116,10 +125,16 @@ function ImageView({ node, css }: { node: GraphNode; css: React.CSSProperties })
   }
 
   return (
-    <div className="my-1 flex items-center gap-3 rounded border border-dashed border-neutral-300 bg-neutral-50 px-4 py-6">
-      <span className="text-2xl">🖼️</span>
-      <span className="text-[10pt] text-neutral-600">
-        {node.content || (tooLarge ? 'Image too large to preview' : 'Image could not be read')}
+    <div className="my-1 flex items-start gap-3 rounded border border-dashed border-neutral-300 bg-neutral-50 px-4 py-4">
+      <span className="text-2xl leading-none">🖼️</span>
+      <span className="min-w-0">
+        <span className="block text-[10pt] text-neutral-700">{node.content || 'Figure'}</span>
+        <span className="mt-0.5 block text-[9pt] leading-relaxed text-neutral-500">{reason}</span>
+        {linkedTo && (
+          <span className="mt-0.5 block truncate font-mono text-[8pt] text-neutral-400">
+            {linkedTo}
+          </span>
+        )}
       </span>
     </div>
   )

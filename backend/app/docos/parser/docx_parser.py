@@ -307,7 +307,7 @@ def _image_rel_ids(para: _Paragraph) -> list[str]:
         if rid:
             ids.append(rid)
     for imagedata in para._p.findall(".//" + _V_IMAGEDATA):
-        rid = imagedata.get(qn("r:id"))
+        rid = imagedata.get(qn("r:id")) or imagedata.get(qn("r:href"))
         if rid:
             ids.append(rid)
     return ids
@@ -324,19 +324,41 @@ def _images(para: _Paragraph) -> list[dict[str, Any]]:
     for rid in _image_rel_ids(para):
         item: dict[str, Any] = {"rel_id": rid}
         try:
-            part = para.part.related_parts[rid]
-            blob = part.blob
-            if len(blob) <= _MAX_INLINE_IMAGE_BYTES:
-                content_type = getattr(part, "content_type", "") or "image/png"
-                item["src"] = (f"data:{content_type};base64,"
-                               + base64.b64encode(blob).decode("ascii"))
-                item["bytes"] = len(blob)
-            else:
-                item["too_large"] = len(blob)
-        except (KeyError, AttributeError, ValueError):
-            pass    # a broken or external relationship; the node still stands
+            item.update(_resolve_image(para.part, rid))
+        except Exception:
+            item["unreadable"] = True   # the node still holds the picture's place
         out.append(item)
     return out
+
+
+def _resolve_image(part: Any, rid: str) -> dict[str, Any]:
+    """Read one image relationship.
+
+    Two kinds arrive. An *embedded* image has its bytes inside the file and is
+    inlined as a data URI. A *linked* image has none — the document only points
+    at where the picture lives, which is what LibreOffice writes when it converts
+    HTML and what Word writes for "Link to File". Those are not corrupt, and
+    reporting them as unreadable was wrong: an http(s) target is passed through
+    for the browser to load, exactly as Word would, and anything else is marked
+    as linked so the reader is told the picture is not in the document.
+    """
+    rel = part.rels[rid]
+
+    if getattr(rel, "is_external", False):
+        target = str(getattr(rel, "target_ref", "") or "")
+        if target.lower().startswith(("http://", "https://")):
+            return {"src": target, "external": True}
+        return {"linked_to": target, "external": True}
+
+    blob = rel.target_part.blob
+    if len(blob) > _MAX_INLINE_IMAGE_BYTES:
+        return {"too_large": len(blob)}
+
+    content_type = getattr(rel.target_part, "content_type", "") or "image/png"
+    return {
+        "src": f"data:{content_type};base64," + base64.b64encode(blob).decode("ascii"),
+        "bytes": len(blob),
+    }
 
 
 def _is_vml_rule(para: _Paragraph) -> bool:

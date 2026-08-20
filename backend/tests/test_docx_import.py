@@ -177,3 +177,71 @@ def test_cell_text_still_survives_alongside_its_picture():
     cell_node = table_node.children[0].children[0]
     assert "Figure 1" in cell_node.content
     assert len(cell_node.children) == 1
+
+
+# ── linked vs embedded pictures ─────────────────────────────────────────────
+
+def _link_image(doc, target: str) -> None:
+    """A picture the document points at rather than stores — what LibreOffice
+    writes converting HTML, and Word writes for "Link to File"."""
+    rid = doc.part.relate_to(
+        target,
+        "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image",
+        is_external=True,
+    )
+    p = doc.add_paragraph()
+    p._p.append(parse_xml(
+        '<w:r xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"'
+        '     xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"'
+        '     xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"'
+        '     xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"'
+        '     xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">'
+        '<w:drawing><wp:inline><a:graphic><a:graphicData>'
+        '<pic:pic><pic:blipFill>'
+        f'<a:blip r:link="{rid}"/>'
+        '</pic:blipFill></pic:pic>'
+        '</a:graphicData></a:graphic></wp:inline></w:drawing></w:r>'))
+
+
+def _first_image(nodes):
+    return next(n for node in nodes for n in node.walk() if n.type == NodeType.IMAGE)
+
+
+def test_a_locally_linked_picture_is_reported_as_linked_not_unreadable():
+    """The bytes are genuinely absent; saying "could not be read" blamed the
+    importer for something the document never contained."""
+    doc = Document()
+    _link_image(doc, "file:///C:/pictures/diagram.png")
+
+    image = _first_image(_render(doc))
+    assert image.metadata["external"] is True
+    assert image.metadata["linked_to"] == "file:///C:/pictures/diagram.png"
+    assert "src" not in image.metadata
+    assert "unreadable" not in image.metadata
+
+
+def test_a_local_path_is_never_read_from_disk():
+    """An imported document must not be able to make us open arbitrary files."""
+    doc = Document()
+    _link_image(doc, "file:///C:/Windows/win.ini")
+
+    image = _first_image(_render(doc))
+    assert "src" not in image.metadata, "a named local file must not be inlined"
+
+
+def test_an_http_linked_picture_is_passed_through():
+    doc = Document()
+    _link_image(doc, "https://example.com/figure.png")
+
+    image = _first_image(_render(doc))
+    assert image.metadata["src"] == "https://example.com/figure.png"
+    assert image.metadata["external"] is True
+
+
+def test_an_embedded_picture_is_still_inlined():
+    doc = Document()
+    doc.add_picture(_png(), width=Inches(1))
+
+    image = _first_image(_render(doc))
+    assert image.metadata["src"].startswith("data:image/")
+    assert "external" not in image.metadata
