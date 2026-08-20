@@ -15,12 +15,10 @@ export function GenerationStatus({
   state,
   error,
   onRetry,
-  onStop,
 }: {
   state: 'generating' | 'error' | null
   error?: string | null
   onRetry?: () => void
-  onStop?: () => void
 }) {
   const [step, setStep] = useState(0)
   const [seconds, setSeconds] = useState(0)
@@ -107,17 +105,6 @@ export function GenerationStatus({
           transition={{ repeat: Infinity, duration: 1.4, ease: 'easeInOut' }}
         />
       </div>
-
-      {/* Offered here as well as in the form: this panel is what the user is
-          watching while they wait, and a long run needs a visible way out. */}
-      {onStop && (
-        <button
-          onClick={onStop}
-          className="mt-3 rounded-lg border border-line bg-surface px-3 py-1.5 text-xs font-medium text-muted transition-colors hover:bg-surface-2 hover:text-ink"
-        >
-          Stop
-        </button>
-      )}
 
     </motion.div>
   )

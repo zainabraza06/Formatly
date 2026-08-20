@@ -310,10 +310,11 @@ Write in the first person plural.`}
 
             <div className="flex gap-2 pt-1">
               {/* While a run is in flight the only useful action is calling it
-                  off, so Stop replaces both buttons rather than joining them. */}
+                  off, so Stop replaces the rest. There is nothing to download
+                  until something has been written, so that button waits. */}
               {busy !== 'idle' ? (
                 <button onClick={stop} className={`${btnGhost} flex-1`}>
-                  Stop {busy === 'generating' ? 'writing' : 'rendering'}
+                  Stop
                 </button>
               ) : (
                 <>
@@ -324,13 +325,11 @@ Write in the first person plural.`}
                   >
                     {spec ? 'Regenerate' : 'Generate'}
                   </button>
-                  <button
-                    onClick={download}
-                    disabled={!rawText.trim()}
-                    className={`${btnGhost} flex-1`}
-                  >
-                    Download DOCX
-                  </button>
+                  {spec && (
+                    <button onClick={download} className={`${btnGhost} flex-1`}>
+                      Download DOCX
+                    </button>
+                  )}
                 </>
               )}
             </div>
@@ -352,7 +351,6 @@ Write in the first person plural.`}
             }
             error={error}
             onRetry={generate}
-            onStop={stop}
           />
         </div>
       </div>
