@@ -174,10 +174,16 @@ Interview: "The renewal price jumped 40% with no warning."`}
             />
           </Field>
 
-          <Field label="Extra instructions">
-            <input value={instructions} onChange={(e) => setInstructions(e.target.value)}
-                   placeholder="e.g. emphasise the cost savings; keep it under 4 pages"
-                   className={input} />
+          <Field
+            label="Extra instructions"
+            hint="Followed as written, and they override the defaults. One per line is fine."
+          >
+            <textarea value={instructions} onChange={(e) => setInstructions(e.target.value)}
+                      rows={3}
+                      placeholder={`e.g. Bold the important keywords and technical terms.
+Keep it under 4 pages.
+Write in the first person plural.`}
+                      className={area} />
           </Field>
         </GlassCard>
 
