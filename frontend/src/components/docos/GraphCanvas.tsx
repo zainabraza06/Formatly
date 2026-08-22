@@ -107,6 +107,36 @@ export function GraphCanvas({ graph, selectedIds, activeId, removingIds, marks }
   // the sheet's width would re-wrap every line and stop it being a page of this
   // document at all. 1 until measured, so a page that fits is untouched.
   const [scale, setScale] = useState(1)
+  // Measured, not assumed: every face has its own natural line height, and it
+  // is what Word's "1.15 line spacing" is a multiple of.
+  const [naturalLineHeight, setNaturalLineHeight] = useState(1.15)
+
+  useLayoutEffect(() => {
+    const measure = () => {
+      const probe = document.createElement('div')
+      probe.textContent = 'Hxg'
+      probe.setAttribute('aria-hidden', 'true')
+      Object.assign(probe.style, {
+        position: 'absolute', left: '-9999px', top: '0', lineHeight: 'normal',
+        fontFamily: geo.default_font
+          ? `"${geo.default_font}", Cambria, Georgia, serif`
+          : 'Calibri, "Segoe UI", Cambria, Georgia, serif',
+        fontSize: `${geo.default_size_pt || 11}pt`,
+      })
+      document.body.appendChild(probe)
+      const size = parseFloat(getComputedStyle(probe).fontSize)
+      const height = probe.getBoundingClientRect().height
+      document.body.removeChild(probe)
+      if (size > 0 && height > 0) setNaturalLineHeight(height / size)
+    }
+
+    measure()
+    // A face that arrives late has different metrics from the fallback that
+    // stood in for it, and every page break depends on them.
+    let cancelled = false
+    document.fonts?.ready.then(() => { if (!cancelled) measure() }).catch(() => {})
+    return () => { cancelled = true }
+  }, [geo.default_font, geo.default_size_pt])
 
   useLayoutEffect(() => {
     const frame = frameRef.current
@@ -139,15 +169,19 @@ export function GraphCanvas({ graph, selectedIds, activeId, removingIds, marks }
       const height = next
         ? next.offsetTop - element.offsetTop
         : proofBottom - element.offsetTop
-      measured.push({ node, element, height: Math.max(0, height) })
+      measured.push({
+        node, element,
+        height: Math.max(0, height),
+        own: element.getBoundingClientRect().height,
+      })
     })
     setMeasuredPages(measurePages(measured, textHeight))
     // `marks` changes the text on the page (struck-out words are still words),
     // so a diff opening or closing has to be measured again. The display scale
     // is deliberately absent: it changes how big the page looks, never how the
     // text wraps inside it.
-  }, [nodes, marks, geo.width_in, geo.height_in, geo.margin.top, geo.margin.bottom,
-      geo.default_font, geo.default_size_pt])
+  }, [nodes, marks, naturalLineHeight, geo.width_in, geo.height_in,
+      geo.margin.top, geo.margin.bottom, geo.default_font, geo.default_size_pt])
 
   const pages = measuredPages ?? markerPages
   const [page, setPage] = useState(0)
@@ -204,6 +238,7 @@ export function GraphCanvas({ graph, selectedIds, activeId, removingIds, marks }
             active={false}
             removing={false}
             mark={marks?.get(n.id)}
+            naturalLineHeight={naturalLineHeight}
           />
         ))}
       </div>
@@ -258,6 +293,7 @@ export function GraphCanvas({ graph, selectedIds, activeId, removingIds, marks }
                 active={activeId === n.id}
                 removing={removing.has(n.id)}
                 mark={marks?.get(n.id)}
+                naturalLineHeight={naturalLineHeight}
               />
             ))}
           </motion.div>

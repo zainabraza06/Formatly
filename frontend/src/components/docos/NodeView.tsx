@@ -26,11 +26,18 @@ function styleToCss(style: Style): CSSProperties {
 /** Line spacing and the gaps around a paragraph, as the document set them.
  *  Rendering a single-spaced document at 1.5 needs half again as much room as
  *  it has, which pushed text past the foot of the page. */
-function spacingToCss(node: GraphNode): CSSProperties {
+function spacingToCss(node: GraphNode, naturalLineHeight = 1): CSSProperties {
   const m = (node.metadata ?? {}) as Record<string, unknown>
   const out: CSSProperties = {}
   if (typeof m.line_spacing === 'number') {
-    out.lineHeight = m.line_spacing_exact ? `${m.line_spacing}pt` : m.line_spacing
+    // Word's multiple is a multiple of the font's *own* line height, not of its
+    // size: "1.15" on 10pt Times New Roman is 13.3pt, not 11.5pt. CSS ratios
+    // multiply the size, so the font's natural ratio has to come back in, or
+    // every line is a little tight and a document renders in fewer pages than
+    // it has.
+    out.lineHeight = m.line_spacing_exact
+      ? `${m.line_spacing}pt`
+      : m.line_spacing * naturalLineHeight
   }
   if (typeof m.space_before_pt === 'number') out.marginTop = `${m.space_before_pt}pt`
   if (typeof m.space_after_pt === 'number') out.marginBottom = `${m.space_after_pt}pt`
@@ -44,10 +51,12 @@ interface Props {
   removing: boolean
   /** Set while a compare result is open and names this node. */
   mark?: DiffMark
+  /** The document font's own line height, as a ratio of its size. */
+  naturalLineHeight?: number
 }
 
-export function NodeView({ node, selected, active, removing, mark }: Props) {
-  const css = { ...styleToCss(node.style), ...spacingToCss(node) }
+export function NodeView({ node, selected, active, removing, mark, naturalLineHeight }: Props) {
+  const css = { ...styleToCss(node.style), ...spacingToCss(node, naturalLineHeight) }
 
   return (
     <motion.div
@@ -103,15 +112,15 @@ function renderBody(node: GraphNode, css: CSSProperties, mark?: DiffMark) {
   const text = <Text node={node} mark={mark} />
   switch (node.type) {
     case 'heading':
-      return <h1 style={{ color: '#1a1a1a', ...css }} className="mb-1 mt-2 text-[20pt] font-semibold">{node.content ? text : 'Heading'}</h1>
+      return <h1 data-node-text style={{ color: '#1a1a1a', ...css }} className="mb-1 mt-2 text-[20pt] font-semibold">{node.content ? text : 'Heading'}</h1>
     case 'subheading':
-      return <h2 style={{ color: '#2a2a2a', ...css }} className="mb-1 mt-1.5 text-[15pt] font-semibold">{node.content ? text : 'Subheading'}</h2>
+      return <h2 data-node-text style={{ color: '#2a2a2a', ...css }} className="mb-1 mt-1.5 text-[15pt] font-semibold">{node.content ? text : 'Subheading'}</h2>
     case 'caption':
-      return <div style={css} className="text-center text-[9pt] italic text-neutral-600">{text}</div>
+      return <div data-node-text style={css} className="text-center text-[9pt] italic text-neutral-600">{text}</div>
     case 'reference':
-      return <div style={css} className="pl-6 -indent-6 text-[10pt] text-neutral-800">{text}</div>
+      return <div data-node-text style={css} className="pl-6 -indent-6 text-[10pt] text-neutral-800">{text}</div>
     case 'footnote':
-      return <div style={css} className="text-[9pt] text-neutral-500">{text}</div>
+      return <div data-node-text style={css} className="text-[9pt] text-neutral-500">{text}</div>
     case 'header':
     case 'footer':
       return <div style={css} className="text-[9pt] uppercase tracking-wide text-neutral-400">{node.type}: {text}</div>
@@ -133,7 +142,7 @@ function renderBody(node: GraphNode, css: CSSProperties, mark?: DiffMark) {
     case 'table':
       return <TableView node={node} />
     default:
-      return <p style={{ color: '#1a1a1a', ...css }} className="">{text}</p>
+      return <p data-node-text style={{ color: '#1a1a1a', ...css }} className="">{text}</p>
   }
 }
 
