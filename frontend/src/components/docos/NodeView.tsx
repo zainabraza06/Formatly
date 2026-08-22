@@ -61,8 +61,14 @@ export function NodeView({ node, selected, active, removing, mark }: Props) {
       exit={{ opacity: 0, x: 24 }}
       transition={{ duration: 0.22 }}
       className={clsx(
-        'group relative rounded-lg px-3 py-1.5 transition-colors',
-        selected && 'ring-2 ring-sky-400/70',
+        // No padding: a node's box is the document's box. Padding here was
+        // taking 12px of height and 24px of width from every paragraph, so a
+        // page held less than the real page does and the last paragraph on it
+        // was pushed over. The hover and selection affordances are drawn with
+        // a ring, which is a shadow and costs no layout, and the tint sits
+        // behind the text rather than around it.
+        'group relative rounded transition-colors',
+        selected && 'ring-2 ring-sky-400/70 ring-offset-2 ring-offset-white',
         active && 'bg-sky-400/10',
         mark && 'border-l-4 pl-2',
         mark?.kind === 'added' && 'border-emerald-500 bg-emerald-400/10',

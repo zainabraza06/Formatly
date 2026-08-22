@@ -190,7 +190,7 @@ export function GraphCanvas({ graph, selectedIds, activeId, removingIds, marks }
       <div
         ref={proofRef}
         aria-hidden
-        className="pointer-events-none absolute -left-[9999px] top-0 space-y-1"
+        className="pointer-events-none absolute -left-[9999px] top-0"
         style={{
           width: `calc(${geo.width_in}in - ${m.left}in - ${m.right}in)`,
           ...typography,
@@ -248,7 +248,7 @@ export function GraphCanvas({ graph, selectedIds, activeId, removingIds, marks }
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -20 }}
             transition={{ duration: 0.2 }}
-            className="h-full space-y-1"
+            className="h-full"
           >
             {currentPage.map((n) => (
               <NodeView

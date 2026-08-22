@@ -20,6 +20,8 @@ from docx.text.paragraph import Paragraph as _Paragraph
 
 from app.docos.graph import DocumentGraph, Node, NodeType, Run, Style, merge_runs
 
+_W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+
 _HEADING_STYLES = ("heading", "title")
 _REFERENCE_HINTS = ("reference", "bibliography", "works cited")
 
@@ -60,6 +62,9 @@ def _parse(doc: _Doc, *, title: str) -> DocumentGraph:
     page["default_size_pt"] = default_size or 11.0
     root.metadata["page"] = page
 
+    # Every paragraph starts from these, so they are read once.
+    spacing_defaults = _default_spacing(doc)
+
     in_references = False
     body = doc.element.body
 
@@ -67,7 +72,7 @@ def _parse(doc: _Doc, *, title: str) -> DocumentGraph:
         tag = child.tag
         if tag == qn("w:p"):
             para = _Paragraph(child, doc)
-            node = _paragraph_node(para, in_references)
+            node = _paragraph_node(para, in_references, spacing_defaults)
             if node is None:
                 continue
             if node.type == NodeType.HEADING and _looks_like_references(para.text):
@@ -118,7 +123,8 @@ def _looks_like_references(text: str) -> bool:
     return any(h in t for h in _REFERENCE_HINTS)
 
 
-def _paragraph_node(para: _Paragraph, in_references: bool) -> Optional[Node]:
+def _paragraph_node(para: _Paragraph, in_references: bool,
+                    spacing_defaults: Optional[dict] = None) -> Optional[Node]:
     style_name = (para.style.name if para.style else "") or ""
     lname = style_name.lower()
     text = para.text or ""
@@ -173,7 +179,7 @@ def _paragraph_node(para: _Paragraph, in_references: bool) -> Optional[Node]:
 
     node_type = _classify_paragraph(lname, in_references)
     meta: dict = {"style_name": style_name, "level": _heading_level(lname)}
-    meta.update(_spacing(para))
+    meta.update(_spacing(para, spacing_defaults))
     _apply_breaks(meta, breaks_before)
     return Node(
         type=node_type,
@@ -184,15 +190,12 @@ def _paragraph_node(para: _Paragraph, in_references: bool) -> Optional[Node]:
     )
 
 
-def _spacing(para: _Paragraph) -> dict:
-    """Line spacing and the gaps around a paragraph, in the units CSS wants.
-
-    A document set single-spaced and rendered at 1.5 needs half again as much
-    room as it has, which is how text ended up cut off at the foot of a page.
-    """
+def _format_spacing(pf) -> dict:
+    """What one paragraph format states about spacing, in the units CSS wants."""
     out: dict = {}
+    if pf is None:
+        return out
     try:
-        pf = para.paragraph_format
         if pf.line_spacing is not None:
             # a float is a multiple; a Length is an exact height
             out["line_spacing"] = (float(pf.line_spacing)
@@ -206,6 +209,65 @@ def _spacing(para: _Paragraph) -> dict:
     except Exception:
         pass
     return out
+
+
+def _default_spacing(doc: _Doc) -> dict:
+    """The spacing every paragraph starts from: `docDefaults`.
+
+    Word writes the document's real defaults here — `w:after="200"` is 10pt
+    between paragraphs, `w:line="276"` is 1.15 line spacing — and most files
+    never state either again. Reading only the paragraph found nothing, so
+    pages were filled with tighter, gapless text than the document describes
+    and more of it fit than really does.
+    """
+    try:
+        spacing = doc.styles.element.find(
+            f"{{{_W}}}docDefaults/{{{_W}}}pPrDefault/{{{_W}}}pPr/{{{_W}}}spacing")
+    except Exception:
+        return {}
+    if spacing is None:
+        return {}
+
+    out: dict = {}
+    after = spacing.get(qn("w:after"))
+    before = spacing.get(qn("w:before"))
+    line = spacing.get(qn("w:line"))
+    rule = spacing.get(qn("w:lineRule")) or "auto"
+    try:
+        if after is not None:
+            out["space_after_pt"] = round(int(after) / 20, 1)      # twips → pt
+        if before is not None:
+            out["space_before_pt"] = round(int(before) / 20, 1)
+        if line is not None:
+            # "auto" is a multiple of single, in 240ths; the others are twips.
+            out["line_spacing"] = (round(int(line) / 240, 3) if rule == "auto"
+                                   else round(int(line) / 20, 1))
+            out["line_spacing_exact"] = rule != "auto"
+    except (TypeError, ValueError):
+        return {}
+    return out
+
+
+def _spacing(para: _Paragraph, defaults: Optional[dict] = None) -> dict:
+    """Line spacing and the gaps around a paragraph, with what it inherits.
+
+    Nearest wins: the paragraph, then the styles it is based on, then the
+    document's defaults — the order Word resolves them in.
+    """
+    resolved: dict = dict(defaults or {})
+
+    chain: list[dict] = []
+    style = getattr(para, "style", None)
+    seen = 0
+    while style is not None and seen < 10:      # guard a cyclic base_style chain
+        chain.append(_format_spacing(getattr(style, "paragraph_format", None)))
+        style = getattr(style, "base_style", None)
+        seen += 1
+
+    for stated in reversed(chain):              # furthest ancestor first
+        resolved.update(stated)
+    resolved.update(_format_spacing(getattr(para, "paragraph_format", None)))
+    return resolved
 
 
 def _apply_breaks(meta: dict, breaks_before: int) -> None:

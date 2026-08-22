@@ -238,3 +238,44 @@ def test_rewriting_the_words_drops_formatting_that_described_the_old_ones():
     para2.runs = [__import__("app.docos.graph", fromlist=["Run"]).Run(text="stale")]
     para2.content = "new words entirely"
     assert [r.text for r in para2.inline_runs()] == ["new words entirely"]
+
+
+# ── spacing a document states somewhere other than the paragraph ────────────
+
+def _spaced_docx() -> bytes:
+    """python-docx's template states 10pt after and 1.15 line spacing in
+    docDefaults, and 24pt before a Heading 1 in the style — and nothing at all
+    on any paragraph."""
+    import io
+    from docx import Document
+    from docx.shared import Pt
+
+    d = Document()
+    d.add_heading("I. Introduction", 1)
+    d.add_paragraph("A body paragraph that states no spacing of its own.")
+    tight = d.add_paragraph("This one sets its own, and its own must win.")
+    tight.paragraph_format.space_after = Pt(0)
+    tight.paragraph_format.line_spacing = 1.0
+
+    buf = io.BytesIO(); d.save(buf); return buf.getvalue()
+
+
+def test_spacing_is_inherited_from_the_document_defaults():
+    graph = parse_docx_bytes(_spaced_docx(), title="S")
+    body = next(n for n in graph.nodes() if n.content.startswith("A body paragraph"))
+
+    assert body.metadata["space_after_pt"] == 10.0, "w:after=200 twips is 10pt"
+    assert body.metadata["line_spacing"] == 1.15, "w:line=276 auto is 1.15"
+
+
+def test_spacing_is_inherited_from_the_paragraph_style():
+    graph = parse_docx_bytes(_spaced_docx(), title="S")
+    heading = next(n for n in graph.nodes() if n.content.startswith("I. Introduction"))
+    assert heading.metadata["space_before_pt"] == 24.0
+
+
+def test_a_paragraph_that_states_its_own_spacing_still_wins():
+    graph = parse_docx_bytes(_spaced_docx(), title="S")
+    tight = next(n for n in graph.nodes() if n.content.startswith("This one sets"))
+    assert tight.metadata["space_after_pt"] == 0.0
+    assert tight.metadata["line_spacing"] == 1.0
