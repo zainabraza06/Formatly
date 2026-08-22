@@ -189,3 +189,59 @@ def test_command_engine_heuristics():
 
     r4 = ce.parse("Rewind to version 8", graph)
     assert r4.control.kind == "rewind" and r4.control.params["seq"] == 8
+
+
+# ── diff detail (what changed with what) ────────────────────────────────────
+
+def test_word_segments_isolate_the_words_that_moved():
+    from app.docos.versioning.diff import word_segments
+
+    segs = word_segments("the quick brown fox", "the slow brown fox")
+    assert [s["op"] for s in segs] == ["equal", "delete", "insert", "equal"]
+    assert "".join(s["text"] for s in segs if s["op"] in ("equal", "delete")) == "the quick brown fox"
+    assert "".join(s["text"] for s in segs if s["op"] in ("equal", "insert")) == "the slow brown fox"
+
+    assert word_segments("same", "same") == [{"op": "equal", "text": "same"}]
+
+
+def test_diff_carries_before_and_after_text_per_node():
+    from app.docos.versioning.diff import diff_graphs
+
+    before = DocumentGraph(title="T", root=Node(
+        id="root", type=NodeType.DOCUMENT, children=[
+            Node(id="p1", type=NodeType.BODY, content="We used a rigorous approach."),
+            Node(id="p2", type=NodeType.BODY, content="Dropped later."),
+        ]))
+    after = DocumentGraph(title="T", root=Node(
+        id="root", type=NodeType.DOCUMENT, children=[
+            Node(id="p1", type=NodeType.BODY, content="We used a careful approach."),
+            Node(id="p3", type=NodeType.BODY, content="Brand new."),
+        ]))
+
+    d = diff_graphs(before, after).to_dict()
+    assert d["added"][0]["content"] == "Brand new."
+    assert d["removed"][0]["content"] == "Dropped later."
+
+    change = d["changed"][0]["content"]
+    assert change["before"] == "We used a rigorous approach."
+    assert change["after"] == "We used a careful approach."
+    assert {"op": "insert", "text": "careful"} in change["segments"]
+    assert {"op": "delete", "text": "rigorous"} in change["segments"]
+
+    assert d["summary"] == {"added": 1, "removed": 1, "changed": 1, "text_changed": 1,
+                            "style_changed": 0, "words_added": 1, "words_removed": 1}
+
+
+def test_diff_names_the_style_fields_that_changed(engine):
+    graph = _sample_graph()
+    engine.init_document("doc3", "T", graph)
+    g = engine.current_graph("doc3")
+    batch = validate_batch({"actions": [
+        {"type": "format", "target": "heading", "style": {"font_size": 22}}]})
+    res = ExecutionEngine().execute(g, batch)
+    v1 = engine.commit("doc3", batch, res.graph)
+
+    d = engine.diff(engine.history("doc3")[0].id, v1.id).to_dict()
+    fields = d["changed"][0]["style"]["fields"]
+    assert {"field": "font_size", "before": None, "after": 22} in fields
+    assert d["summary"]["style_changed"] == len(d["changed"])
