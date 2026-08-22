@@ -32,6 +32,10 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    # A cross-origin fetch can only read the simple response headers unless the
+    # server names the others. Without this the browser hides the filename the
+    # export routes send, and a download is saved as "docx" or "pdf".
+    expose_headers=["Content-Disposition"],
 )
 
 # DocOS — visual AI document editor (graph + command + execution + version engines)

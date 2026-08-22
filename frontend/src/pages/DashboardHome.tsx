@@ -48,11 +48,11 @@ export function DashboardHome() {
  // Which row is fetching, so its button can say so and cannot be double-clicked.
  const [saving, setSaving] = useState<string | null>(null)
 
- const save = async (id: string, kind: 'docx' | 'pdf') => {
+ const save = async (id: string, title: string, kind: 'docx' | 'pdf') => {
  setSaving(`${id}:${kind}`)
  setError(null)
  try {
- await (kind === 'docx' ? api.exportDocx(id) : api.exportPdf(id))
+ await (kind === 'docx' ? api.exportDocx(id, title) : api.exportPdf(id, title))
  } catch (e) {
  setError(e instanceof Error ? e.message : 'Download failed')
  } finally {
@@ -135,14 +135,14 @@ export function DashboardHome() {
  </div>
  <div className="flex gap-1.5">
  <button
- onClick={() => save(d.document_id, 'docx')}
+ onClick={() => save(d.document_id, d.title, 'docx')}
  disabled={saving !== null}
  className="rounded-lg border border-line bg-surface px-2.5 py-1 text-[11px] font-medium text-ink transition hover:bg-surface-2 disabled:opacity-50"
  >
  {saving === `${d.document_id}:docx` ? '…' : 'DOCX'}
  </button>
  <button
- onClick={() => save(d.document_id, 'pdf')}
+ onClick={() => save(d.document_id, d.title, 'pdf')}
  disabled={saving !== null}
  className="rounded-lg border border-line bg-surface-2 px-2.5 py-1 text-[11px] font-medium text-ink transition hover:bg-surface-2 disabled:opacity-50"
  >

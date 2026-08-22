@@ -84,19 +84,29 @@ export const api = {
   // These routes are owner-scoped, and a plain <a href> cannot carry a bearer
   // token — following one lands on `{"detail":"authentication required"}`
   // instead of a file. So fetch the bytes with the token and save them.
-  exportDocx: (documentId: string) => download(`/paper/${documentId}/export/docx`),
-  exportPdf: (documentId: string) => download(`/paper/${documentId}/export/pdf`),
-  exportExcel: (documentId: string) => download(`/documents/${documentId}/export/excel`),
+  exportDocx: (documentId: string, title?: string) =>
+    download(`/paper/${documentId}/export/docx`, filenameFor(title, documentId, 'docx')),
+  exportPdf: (documentId: string, title?: string) =>
+    download(`/paper/${documentId}/export/pdf`, filenameFor(title, documentId, 'pdf')),
+  exportExcel: (documentId: string, title?: string) =>
+    download(`/documents/${documentId}/export/excel`, filenameFor(title, documentId, 'xlsx')),
 }
 
-/** Fetch an authenticated file and save it under the name the server gave it. */
-async function download(path: string): Promise<void> {
+/** The name to save under when the server's own is unreadable. */
+function filenameFor(title: string | undefined, documentId: string, ext: string): string {
+  const base = (title || documentId).replace(/[\/:*?"<>|]/g, '').trim() || documentId
+  return `${base}.${ext}`
+}
+
+/** Fetch an authenticated file and save it under the name the server gave it,
+ *  falling back to `fallback` when the header is missing or hidden by CORS. */
+async function download(path: string, fallback: string): Promise<void> {
   const res = await fetch(`${API_URL}${path}`, { headers: authHeaders() })
   if (!res.ok) throw new Error(await failure(res))
 
   const disposition = res.headers.get('content-disposition') || ''
   const match = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(disposition)
-  const filename = match ? decodeURIComponent(match[1]) : path.split('/').pop() || 'download'
+  const filename = match ? decodeURIComponent(match[1]) : fallback
 
   const url = URL.createObjectURL(await res.blob())
   const a = document.createElement('a')

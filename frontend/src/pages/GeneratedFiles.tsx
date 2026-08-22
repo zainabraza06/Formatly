@@ -9,11 +9,11 @@ export function GeneratedFiles() {
  // Which row is fetching, so its button can say so and cannot be double-clicked.
  const [busy, setBusy] = useState<string | null>(null)
 
- const save = async (id: string, kind: 'docx' | 'pdf') => {
+ const save = async (id: string, title: string, kind: 'docx' | 'pdf') => {
  setBusy(`${id}:${kind}`)
  setError(null)
  try {
- await (kind === 'docx' ? api.exportDocx(id) : api.exportPdf(id))
+ await (kind === 'docx' ? api.exportDocx(id, title) : api.exportPdf(id, title))
  } catch (e) {
  setError(e instanceof Error ? e.message : 'Download failed')
  } finally {
@@ -47,14 +47,14 @@ export function GeneratedFiles() {
  </div>
  <div className="flex gap-2">
  <button
- onClick={() => save(d.document_id, 'docx')}
+ onClick={() => save(d.document_id, d.title, 'docx')}
  disabled={busy !== null}
  className="rounded-xl border border-line bg-surface px-3 py-1 text-[11px] text-ink hover:bg-surface-2 disabled:opacity-50"
  >
  {busy === `${d.document_id}:docx` ? 'Preparing…' : 'Download DOCX'}
  </button>
  <button
- onClick={() => save(d.document_id, 'pdf')}
+ onClick={() => save(d.document_id, d.title, 'pdf')}
  disabled={busy !== null}
  className="rounded-xl bg-accent px-3 py-1 text-[11px] text-accent-fg disabled:opacity-50"
  >

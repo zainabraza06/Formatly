@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { motion } from 'framer-motion'
+import { AnimatePresence, motion } from 'framer-motion'
+import clsx from 'clsx'
 import { docosApi, type DocumentSummary } from '../lib/docosApi'
 import { btnPrimary } from '../lib/ui'
 
@@ -81,65 +82,145 @@ export function MyDocuments() {
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {docs.map((d) => (
-            <motion.div
+            <DocumentCard
               key={d.document_id}
-              initial={{ opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="group relative rounded-xl border border-line bg-surface transition-colors hover:bg-surface-2"
-            >
-              {/* The card opens the document; the delete control sits outside
-                  that button rather than inside it — a button cannot nest. */}
-              <button
-                onClick={() => navigate(`/app/editor?doc=${d.document_id}`)}
-                disabled={deleting === d.document_id}
-                className="flex w-full items-start gap-3 p-4 text-left disabled:opacity-50"
-              >
-                <span className="text-xl">📄</span>
-                <div className="min-w-0 pr-6">
-                  <div className="truncate text-sm font-medium text-ink">{d.title || 'Untitled'}</div>
-                  <div className="mt-0.5 text-[11px] text-faint">
-                    {d.versions} version{d.versions === 1 ? '' : 's'} · {new Date(d.created_at).toLocaleDateString()}
-                  </div>
-                </div>
-              </button>
-
-              {confirming === d.document_id ? (
-                <div className="absolute inset-x-0 bottom-0 flex items-center justify-between gap-2 rounded-b-xl border-t border-danger/30 bg-danger/10 px-3 py-2">
-                  <span className="text-[11px] text-danger">
-                    Delete this and all {d.versions} version{d.versions === 1 ? '' : 's'}?
-                  </span>
-                  <span className="flex gap-1">
-                    <button
-                      onClick={() => setConfirming(null)}
-                      className="rounded-lg border border-line bg-surface px-2 py-0.5 text-[11px] text-muted hover:bg-surface-2"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      onClick={() => remove(d.document_id)}
-                      disabled={deleting === d.document_id}
-                      className="rounded-lg bg-danger px-2 py-0.5 text-[11px] font-medium text-white disabled:opacity-50"
-                    >
-                      {deleting === d.document_id ? 'Deleting…' : 'Delete'}
-                    </button>
-                  </span>
-                </div>
-              ) : (
-                <button
-                  onClick={() => setConfirming(d.document_id)}
-                  aria-label={`Delete ${d.title || 'Untitled'}`}
-                  title="Delete upload"
-                  className="absolute right-2 top-2 rounded-lg p-1.5 text-faint opacity-0 transition hover:bg-danger/10 hover:text-danger focus:opacity-100 group-hover:opacity-100"
-                >
-                  <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.5">
-                    <path d="M2.5 4h11M6 4V2.5h4V4M4 4l.5 9.5h7L12 4" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                </button>
-              )}
-            </motion.div>
+              doc={d}
+              confirming={confirming === d.document_id}
+              deleting={deleting === d.document_id}
+              onOpen={() => navigate(`/app/editor?doc=${d.document_id}`)}
+              onAskDelete={() => setConfirming(d.document_id)}
+              onCancelDelete={() => setConfirming(null)}
+              onConfirmDelete={() => remove(d.document_id)}
+            />
           ))}
         </div>
       )}
     </div>
   )
+}
+
+interface CardProps {
+  doc: DocumentSummary
+  confirming: boolean
+  deleting: boolean
+  onOpen: () => void
+  onAskDelete: () => void
+  onCancelDelete: () => void
+  onConfirmDelete: () => void
+}
+
+/**
+ * One upload. Asking to delete *replaces* the card's face rather than covering
+ * it — an overlay left the title and date showing through the question, which
+ * read as a glitch at the moment the user most needs to be sure what they are
+ * deleting. Both faces are the same height, so the grid does not jump.
+ */
+function DocumentCard({
+  doc, confirming, deleting, onOpen, onAskDelete, onCancelDelete, onConfirmDelete,
+}: CardProps) {
+  const versions = `${doc.versions} version${doc.versions === 1 ? '' : 's'}`
+
+  return (
+    <motion.div
+      layout
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, scale: 0.97 }}
+      transition={{ duration: 0.18 }}
+      className={clsx(
+        'group relative h-[104px] overflow-hidden rounded-xl border transition-colors',
+        confirming
+          ? 'border-danger/40 bg-danger/5'
+          : 'border-line bg-surface hover:border-line-strong hover:bg-surface-2',
+      )}
+    >
+      <AnimatePresence mode="wait" initial={false}>
+        {confirming ? (
+          <motion.div
+            key="confirm"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.14 }}
+            className="flex h-full flex-col justify-between gap-2 p-4"
+          >
+            <div className="min-w-0">
+              <div className="truncate text-sm font-medium text-ink">
+                Delete “{doc.title || 'Untitled'}”?
+              </div>
+              <p className="mt-0.5 truncate text-[11px] text-muted">
+                {versions} and its history, permanently.
+              </p>
+            </div>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={onCancelDelete}
+                disabled={deleting}
+                className="rounded-lg border border-line bg-surface px-3 py-1.5 text-xs font-medium text-muted transition-colors hover:bg-surface-2 hover:text-ink disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={onConfirmDelete}
+                disabled={deleting}
+                autoFocus
+                className="rounded-lg bg-danger px-3 py-1.5 text-xs font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+              >
+                {deleting ? 'Deleting…' : 'Delete'}
+              </button>
+            </div>
+          </motion.div>
+        ) : (
+          <motion.div
+            key="face"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.14 }}
+            className="relative h-full"
+          >
+            <button
+              onClick={onOpen}
+              className="flex h-full w-full items-center gap-3 rounded-xl p-4 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+            >
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-line bg-surface-2 text-base">
+                📄
+              </span>
+              {/* Room on the right so a long title never runs under the trash. */}
+              <span className="min-w-0 flex-1 pr-7">
+                <span className="block truncate text-sm font-medium text-ink">
+                  {doc.title || 'Untitled'}
+                </span>
+                <span className="mt-1 flex items-center gap-1.5 text-[11px] text-faint">
+                  <span>{versions}</span>
+                  <span aria-hidden>·</span>
+                  <span>{formatDate(doc.created_at)}</span>
+                </span>
+              </span>
+            </button>
+
+            <button
+              onClick={onAskDelete}
+              aria-label={`Delete ${doc.title || 'Untitled'}`}
+              title="Delete upload"
+              className="absolute right-2 top-2 rounded-lg p-1.5 text-faint opacity-60 transition hover:bg-danger/10 hover:text-danger focus:outline-none focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-focus group-hover:opacity-100 sm:opacity-0"
+            >
+              <svg viewBox="0 0 16 16" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.4">
+                <path d="M2.5 4h11M6.5 4V2.8h3V4M4.2 4l.6 9.2h6.4l.6-9.2M6.6 6.4v4.6M9.4 6.4v4.6"
+                      strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
+  )
+}
+
+/** "20 Aug 2026" rather than "8/20/2026" — unambiguous, and the same width
+ *  whichever month it is. */
+function formatDate(iso: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
 }
