@@ -51,6 +51,30 @@ def test_only_prose_nodes_are_in_scope():
     assert all(n.type is not NodeType.TABLE for n in nodes)
 
 
+def test_table_cells_are_in_scope():
+    """A paper's display equations sit in a one-row table, equation then number,
+    so a rewrite that skips cells reaches none of the equations."""
+    graph = DocumentGraph(root=Node(type=NodeType.DOCUMENT, children=[
+        Node(type=NodeType.BODY, content="The objective is defined below."),
+        Node(type=NodeType.TABLE, children=[
+            Node(type=NodeType.TABLE_ROW, children=[
+                Node(type=NodeType.TABLE_CELL, content=r"$\mathcal{L} = -\sum y_i$"),
+                Node(type=NodeType.TABLE_CELL, content="(1)"),
+            ]),
+        ]),
+        Node(type=NodeType.CAPTION, content=r"Figure 1. $x = rac{a}{b}$ per channel."),
+    ]))
+
+    scoped = rewritable(graph, [], None)
+    kinds = [n.type for n in scoped]
+    assert NodeType.TABLE_CELL in kinds
+    assert NodeType.CAPTION in kinds
+    assert NodeType.TABLE not in kinds, "the table itself holds no text of its own"
+
+    # Targeting the body alone still means the body alone.
+    assert [n.type for n in rewritable(graph, [], "body")] == [NodeType.BODY]
+
+
 def test_empty_nodes_are_skipped():
     graph = build("real text", "   ")
     assert [n.content for n in rewritable(graph, [], "body")] == ["real text"]

@@ -162,8 +162,13 @@ class DocOSService:
                         "payload": {"reason": "the planned edit matched nothing"}})
             from app.docos.actions import Action, ActionType
 
+            # The whole document, not just its body paragraphs. This runs
+            # because the planned edit matched nothing, so narrowing the second
+            # attempt to where the first already failed to find anything is how
+            # an instruction about equations — which live in table cells and
+            # captions — came back "done" with the document untouched.
             rewrite_edits, more_failures = await self._rewrite_scope(
-                graph, None, "body", command, emit)
+                graph, None, None, command, emit)
             rewrite_failures.extend(more_failures)
             if rewrite_edits:
                 batch.actions.append(Action(type=ActionType.REWRITE, target="body",

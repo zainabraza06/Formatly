@@ -31,9 +31,13 @@ _MAX_TOKENS = 4000
 
 # Node types whose text is prose the user meant. A caption is included; a table
 # cell is not, because rewriting one in isolation loses the row it belonged to.
+# Everything that holds words a rewrite could be about. Table cells belong
+# here: a paper's display equations are usually laid out in a one-row table,
+# equation in the left cell and its number in the right, so leaving cells out
+# meant "convert every equation" reached none of the equations.
 _TEXT_TYPES = {
     NodeType.BODY, NodeType.PARAGRAPH, NodeType.HEADING, NodeType.SUBHEADING,
-    NodeType.CAPTION, NodeType.REFERENCE, NodeType.FOOTNOTE,
+    NodeType.CAPTION, NodeType.REFERENCE, NodeType.FOOTNOTE, NodeType.TABLE_CELL,
 }
 
 SYSTEM = """You rewrite the text of a document, one page at a time.
