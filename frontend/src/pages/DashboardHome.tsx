@@ -45,6 +45,20 @@ const demoSteps = [
 export function DashboardHome() {
  const [recent, setRecent] = useState<RecentDocument[]>([])
  const [error, setError] = useState<string | null>(null)
+ // Which row is fetching, so its button can say so and cannot be double-clicked.
+ const [saving, setSaving] = useState<string | null>(null)
+
+ const save = async (id: string, kind: 'docx' | 'pdf') => {
+ setSaving(`${id}:${kind}`)
+ setError(null)
+ try {
+ await (kind === 'docx' ? api.exportDocx(id) : api.exportPdf(id))
+ } catch (e) {
+ setError(e instanceof Error ? e.message : 'Download failed')
+ } finally {
+ setSaving(null)
+ }
+ }
 
  useEffect(() => {
  let mounted = true
@@ -120,18 +134,20 @@ export function DashboardHome() {
  </div>
  </div>
  <div className="flex gap-1.5">
- <a
- href={api.exportDocxUrl(d.document_id)}
- className="rounded-lg border border-line bg-surface px-2.5 py-1 text-[11px] font-medium text-ink transition hover:bg-surface-2 "
+ <button
+ onClick={() => save(d.document_id, 'docx')}
+ disabled={saving !== null}
+ className="rounded-lg border border-line bg-surface px-2.5 py-1 text-[11px] font-medium text-ink transition hover:bg-surface-2 disabled:opacity-50"
  >
- DOCX
- </a>
- <a
- href={api.exportPdfUrl(d.document_id)}
- className="rounded-lg border border-line bg-surface-2 px-2.5 py-1 text-[11px] font-medium text-ink transition hover:bg-surface-2 "
+ {saving === `${d.document_id}:docx` ? '…' : 'DOCX'}
+ </button>
+ <button
+ onClick={() => save(d.document_id, 'pdf')}
+ disabled={saving !== null}
+ className="rounded-lg border border-line bg-surface-2 px-2.5 py-1 text-[11px] font-medium text-ink transition hover:bg-surface-2 disabled:opacity-50"
  >
- PDF
- </a>
+ {saving === `${d.document_id}:pdf` ? '…' : 'PDF'}
+ </button>
  </div>
  </motion.div>
  ))

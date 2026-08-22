@@ -6,6 +6,20 @@ import type { RecentDocument } from '../types/api'
 export function GeneratedFiles() {
  const [recent, setRecent] = useState<RecentDocument[]>([])
  const [error, setError] = useState<string | null>(null)
+ // Which row is fetching, so its button can say so and cannot be double-clicked.
+ const [busy, setBusy] = useState<string | null>(null)
+
+ const save = async (id: string, kind: 'docx' | 'pdf') => {
+ setBusy(`${id}:${kind}`)
+ setError(null)
+ try {
+ await (kind === 'docx' ? api.exportDocx(id) : api.exportPdf(id))
+ } catch (e) {
+ setError(e instanceof Error ? e.message : 'Download failed')
+ } finally {
+ setBusy(null)
+ }
+ }
 
  useEffect(() => {
  api
@@ -32,18 +46,20 @@ export function GeneratedFiles() {
  <div className="text-[11px] text-muted">Preset: {d.style_preset}</div>
  </div>
  <div className="flex gap-2">
- <a
- className="rounded-xl border border-line bg-surface px-3 py-1 text-[11px] text-ink hover:bg-surface-2 "
- href={api.exportDocxUrl(d.document_id)}
+ <button
+ onClick={() => save(d.document_id, 'docx')}
+ disabled={busy !== null}
+ className="rounded-xl border border-line bg-surface px-3 py-1 text-[11px] text-ink hover:bg-surface-2 disabled:opacity-50"
  >
- Download DOCX
- </a>
- <a
- className="rounded-xl bg-accent px-3 py-1 text-[11px] text-accent-fg "
- href={api.exportPdfUrl(d.document_id)}
+ {busy === `${d.document_id}:docx` ? 'Preparing…' : 'Download DOCX'}
+ </button>
+ <button
+ onClick={() => save(d.document_id, 'pdf')}
+ disabled={busy !== null}
+ className="rounded-xl bg-accent px-3 py-1 text-[11px] text-accent-fg disabled:opacity-50"
  >
- Download PDF
- </a>
+ {busy === `${d.document_id}:pdf` ? 'Preparing…' : 'Download PDF'}
+ </button>
  </div>
  </div>
  ))}
