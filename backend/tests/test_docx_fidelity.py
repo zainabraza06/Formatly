@@ -113,3 +113,56 @@ def test_a_rule_keeps_the_page_marker_it_sits_on():
     nodes = _render(doc).root.children
     marked = [n for n in nodes if n.metadata.get("page_break_before")]
     assert marked, "the page boundary must survive whatever the paragraph became"
+
+
+# ── emphasis that lives on the style, not the runs ──────────────────────────
+
+def _emphasis_docx() -> bytes:
+    """Four paragraphs, each a different way of saying (or not saying) italic."""
+    import io
+    from docx import Document
+    from docx.shared import Pt
+
+    d = Document()
+    p = d.add_paragraph(); r = p.add_run("Every run italic. " * 6); r.italic = True
+
+    style = d.styles.add_style("AbstractStyle", 1)
+    style.font.italic = True
+    style.font.size = Pt(9)
+    d.add_paragraph("Italic from the paragraph style. " * 6, style="AbstractStyle")
+
+    p = d.add_paragraph()
+    lead = p.add_run("A long italic lead. " * 6); lead.italic = True
+    tail = p.add_run("Short roman tail."); tail.italic = False
+
+    p = d.add_paragraph()
+    label = p.add_run("Index Terms— "); label.italic = True
+    body = p.add_run("A much longer upright body of text. " * 6); body.italic = False
+
+    buf = io.BytesIO(); d.save(buf); return buf.getvalue()
+
+
+def test_italic_is_read_from_the_paragraph_style_too():
+    """An IEEE abstract is italic because its *style* is, and no run says so."""
+    graph = parse_docx_bytes(_emphasis_docx(), title="E")
+    paras = [n for n in graph.nodes() if n.content and "Italic from the paragraph style" in n.content]
+    assert paras and paras[0].style.italic is True
+    assert paras[0].style.font_size == 9.0
+
+
+def test_mixed_runs_are_weighted_by_how_much_text_carries_them():
+    graph = parse_docx_bytes(_emphasis_docx(), title="E")
+    by_text = {n.content[:20]: n.style for n in graph.nodes() if n.content}
+
+    # A long italic lead outweighs a short upright tail...
+    lead = next(s for t, s in by_text.items() if t.startswith("A long italic lead"))
+    assert lead.italic is True
+    # ...and a three-word italic label does not make a whole paragraph italic.
+    label = next(s for t, s in by_text.items() if t.startswith("Index Terms—"))
+    assert label.italic is False
+
+
+def test_every_run_italic_still_reads_as_italic():
+    graph = parse_docx_bytes(_emphasis_docx(), title="E")
+    para = next(n for n in graph.nodes() if n.content and n.content.startswith("Every run italic"))
+    assert para.style.italic is True

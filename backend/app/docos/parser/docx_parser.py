@@ -10,7 +10,7 @@ from __future__ import annotations
 import base64
 import io
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, NamedTuple, Optional
 
 from docx import Document
 from docx.document import Document as _Doc
@@ -241,37 +241,60 @@ def _heading_level(lname: str) -> int:
     return 0
 
 
-def _style_font(style) -> tuple[Optional[str], Optional[float]]:
-    """Walk a paragraph style and the styles it inherits from for a font.
+class StyleFont(NamedTuple):
+    """What a paragraph style, and the styles it inherits from, say about type."""
+    name: Optional[str] = None
+    size: Optional[float] = None
+    bold: Optional[bool] = None
+    italic: Optional[bool] = None
+    underline: Optional[bool] = None
+    color: Optional[str] = None
+
+
+def _style_font(style) -> StyleFont:
+    """Walk a paragraph style and the styles it inherits from for its type.
 
     Most documents set their typeface once, on a style, and never touch a run.
     Reading only run formatting therefore finds nothing and the document renders
     in whatever the viewer defaults to — which is why an imported file came out
     in the wrong face at the wrong size.
+
+    Emphasis works the same way and was read only off the runs, so a paragraph
+    that is italic because its style is italic — an IEEE abstract, a block
+    quotation — arrived with no italic at all.
     """
-    name = size = None
+    found: dict[str, Any] = {}
     seen = 0
     while style is not None and seen < 10:      # guard a cyclic base_style chain
         font = getattr(style, "font", None)
         if font is not None:
-            if name is None and font.name:
-                name = font.name
-            if size is None and font.size is not None:
+            if found.get("name") is None and font.name:
+                found["name"] = font.name
+            if found.get("size") is None and font.size is not None:
                 try:
-                    size = float(font.size.pt)
+                    found["size"] = float(font.size.pt)
                 except (AttributeError, TypeError):
                     pass
-        if name and size:
+            # None means "inherit from the style I am based on", so only a real
+            # True/False here settles the question.
+            for attr in ("bold", "italic", "underline"):
+                if found.get(attr) is None and getattr(font, attr, None) is not None:
+                    found[attr] = bool(getattr(font, attr))
+            if found.get("color") is None:
+                rgb = getattr(getattr(font, "color", None), "rgb", None)
+                if rgb is not None:
+                    found["color"] = f"#{rgb}"
+        if len(found) == 6:
             break
         style = getattr(style, "base_style", None)
         seen += 1
-    return name, size
+    return StyleFont(**found)
 
 
 def _document_default_font(doc: _Doc) -> tuple[Optional[str], Optional[float]]:
     """The typeface a document falls back to: the Normal style, then docDefaults."""
     try:
-        name, size = _style_font(doc.styles["Normal"])
+        name, size = _style_font(doc.styles["Normal"])[:2]
     except (KeyError, AttributeError):
         name = size = None
 
@@ -325,45 +348,71 @@ def _theme_font(doc: _Doc, theme_ref: Optional[str]) -> Optional[str]:
 
 def _paragraph_style(para: _Paragraph) -> Style:
     """Aggregate run formatting to a paragraph-level style (majority wins)."""
-    sizes: list[float] = []
-    bolds: list[bool] = []
-    italics: list[bool] = []
-    underlines: list[bool] = []
-    colors: list[str] = []
-    families: list[str] = []
+    # Each entry is (value, weight), the weight being how many characters carry
+    # it. Counting runs instead let a three-word italic label outvote the
+    # paragraph it introduces.
+    sizes: list[tuple[float, int]] = []
+    bolds: list[tuple[bool, int]] = []
+    italics: list[tuple[bool, int]] = []
+    underlines: list[tuple[bool, int]] = []
+    colors: list[tuple[str, int]] = []
+    families: list[tuple[str, int]] = []
 
     for run in para.runs:
         f = run.font
+        weight = len(run.text or "")
+        if not weight:
+            continue                      # an empty run describes no text
         if f.size is not None:
-            sizes.append(f.size.pt)
+            sizes.append((f.size.pt, weight))
         if run.bold is not None:
-            bolds.append(bool(run.bold))
+            bolds.append((bool(run.bold), weight))
         if run.italic is not None:
-            italics.append(bool(run.italic))
+            italics.append((bool(run.italic), weight))
         if run.underline is not None:
-            underlines.append(bool(run.underline))
+            underlines.append((bool(run.underline), weight))
         if f.color is not None and f.color.rgb is not None:
-            colors.append(f"#{str(f.color.rgb)}")
+            colors.append((f"#{str(f.color.rgb)}", weight))
         if f.name:
-            families.append(f.name)
+            families.append((f.name, weight))
 
     # Runs win where they say something; otherwise the paragraph's own style,
-    # and the styles it inherits from, decide.
-    if not families or not sizes:
-        style_name, style_size = _style_font(getattr(para, "style", None))
-        if not families and style_name:
-            families.append(style_name)
-        if not sizes and style_size:
-            sizes.append(style_size)
+    # and the styles it inherits from, decide. Emphasis is included: a run that
+    # says nothing about italic is not a run that is upright.
+    if not (families and sizes and bolds and italics and underlines and colors):
+        from_style = _style_font(getattr(para, "style", None))
+        length = len(para.text or "") or 1
+        if not families and from_style.name:
+            families.append((from_style.name, length))
+        if not sizes and from_style.size:
+            sizes.append((from_style.size, length))
+        if not bolds and from_style.bold is not None:
+            bolds.append((from_style.bold, length))
+        if not italics and from_style.italic is not None:
+            italics.append((from_style.italic, length))
+        if not underlines and from_style.underline is not None:
+            underlines.append((from_style.underline, length))
+        if not colors and from_style.color:
+            colors.append((from_style.color, length))
 
     align = None
     if para.alignment is not None:
         align = {0: "left", 1: "center", 2: "right", 3: "justify"}.get(int(para.alignment), None)
 
-    def _majority(vals: list) -> Optional[object]:
-        if not vals:
+    def _majority(weighted: list[tuple[Any, int]]) -> Optional[Any]:
+        """The value carrying the most text, and on a tie the one that came first.
+
+        `max(set(...))` used to leave a tie to set ordering, so a paragraph split
+        evenly between italic and upright runs came out one way on one import and
+        the other way on the next.
+        """
+        if not weighted:
             return None
-        return max(set(vals), key=vals.count)
+        totals: dict[Any, int] = {}
+        for value, weight in weighted:
+            totals[value] = totals.get(value, 0) + weight
+        order = [value for value, _ in weighted]
+        return max(totals, key=lambda v: (totals[v], -order.index(v)))
 
     return Style(
         font_family=_majority(families),
