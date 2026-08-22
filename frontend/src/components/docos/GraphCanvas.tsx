@@ -20,6 +20,13 @@ interface Props {
 // never rendered/saved by Word), chunk by node count so we still show pages.
 const FALLBACK_PER_PAGE = 40
 
+// CSS defines an inch as exactly 96px, so the page's real text box is known from
+// the geometry alone. Reading it off the rendered sheet instead was wrong twice
+// over: before the first measurement the sheet is only min-height, so it is as
+// tall as whatever content it happens to hold, and once it is scaled to fit its
+// column every measurement off it comes back scaled too.
+const PX_PER_INCH = 96
+
 function meta(n: GraphNode): Record<string, unknown> {
   return (n.metadata as Record<string, unknown> | undefined) ?? {}
 }
@@ -95,16 +102,30 @@ export function GraphCanvas({ graph, selectedIds, activeId, removingIds, marks }
   const [measuredPages, setMeasuredPages] = useState<GraphNode[][] | null>(null)
   const sheetRef = useRef<HTMLDivElement>(null)
   const proofRef = useRef<HTMLDivElement>(null)
+  const frameRef = useRef<HTMLDivElement>(null)
+  // A page too wide for its column is shown smaller, never squeezed: shrinking
+  // the sheet's width would re-wrap every line and stop it being a page of this
+  // document at all. 1 until measured, so a page that fits is untouched.
+  const [scale, setScale] = useState(1)
 
   useLayoutEffect(() => {
-    const sheet = sheetRef.current
-    const proof = proofRef.current
-    if (!sheet || !proof || !nodes.length) return
+    const frame = frameRef.current
+    if (!frame) return
+    const fit = () => {
+      const available = frame.clientWidth
+      if (available > 0) setScale(Math.min(1, available / (geo.width_in * PX_PER_INCH)))
+    }
+    fit()
+    const observer = new ResizeObserver(fit)
+    observer.observe(frame)
+    return () => observer.disconnect()
+  }, [geo.width_in])
 
-    const style = getComputedStyle(sheet)
-    const textHeight =
-      sheet.getBoundingClientRect().height
-      - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom)
+  useLayoutEffect(() => {
+    const proof = proofRef.current
+    if (!proof || !nodes.length) return
+
+    const textHeight = (geo.height_in - geo.margin.top - geo.margin.bottom) * PX_PER_INCH
     if (!(textHeight > 0)) return
 
     const children = Array.from(proof.children) as HTMLElement[]
@@ -121,10 +142,12 @@ export function GraphCanvas({ graph, selectedIds, activeId, removingIds, marks }
       measured.push({ node, element, height: Math.max(0, height) })
     })
     setMeasuredPages(measurePages(measured, textHeight))
-    // The sheet's own height is fixed by the geometry, so it is not a dependency.
     // `marks` changes the text on the page (struck-out words are still words),
-    // so a diff opening or closing has to be measured again.
-  }, [nodes, marks, geo.width_in, geo.height_in, geo.default_font, geo.default_size_pt])
+    // so a diff opening or closing has to be measured again. The display scale
+    // is deliberately absent: it changes how big the page looks, never how the
+    // text wraps inside it.
+  }, [nodes, marks, geo.width_in, geo.height_in, geo.margin.top, geo.margin.bottom,
+      geo.default_font, geo.default_size_pt])
 
   const pages = measuredPages ?? markerPages
   const [page, setPage] = useState(0)
@@ -185,6 +208,13 @@ export function GraphCanvas({ graph, selectedIds, activeId, removingIds, marks }
         ))}
       </div>
 
+      {/* The frame owns the space the scaled page takes up; the sheet inside it
+          keeps the document's true dimensions. */}
+      <div
+        ref={frameRef}
+        className="flex w-full justify-center overflow-hidden"
+        style={{ height: `${geo.height_in * PX_PER_INCH * scale}px` }}
+      >
       {/* the "paper" — a fixed white sheet at the document's real page size */}
       <div
         ref={sheetRef}
@@ -196,7 +226,9 @@ export function GraphCanvas({ graph, selectedIds, activeId, removingIds, marks }
           // as the floor so a short last page is still a full sheet.
           height: measuredPages ? `${geo.height_in}in` : undefined,
           minHeight: `${geo.height_in}in`,
-          maxWidth: '100%',
+          transform: `scale(${scale})`,
+          transformOrigin: 'top center',
+          flex: '0 0 auto',
           paddingTop: `${m.top}in`,
           paddingRight: `${m.right}in`,
           paddingBottom: `${m.bottom}in`,
@@ -230,6 +262,7 @@ export function GraphCanvas({ graph, selectedIds, activeId, removingIds, marks }
             ))}
           </motion.div>
         </AnimatePresence>
+      </div>
       </div>
 
       {/* pager controls */}
