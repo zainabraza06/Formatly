@@ -154,7 +154,9 @@ def _apply_paragraph_format(paragraph, node: Node) -> None:
     spacing = meta.get("line_spacing")
     if isinstance(spacing, (int, float)):
         pf.line_spacing = Pt(float(spacing)) if meta.get("line_spacing_exact") else float(spacing)
-    for key, attr in (("space_before_pt", "space_before"), ("space_after_pt", "space_after")):
+    for key, attr in (("space_before_pt", "space_before"), ("space_after_pt", "space_after"),
+                      ("indent_left_pt", "left_indent"), ("indent_right_pt", "right_indent"),
+                      ("indent_first_line_pt", "first_line_indent")):
         value = meta.get(key)
         if isinstance(value, (int, float)):
             setattr(pf, attr, Pt(float(value)))

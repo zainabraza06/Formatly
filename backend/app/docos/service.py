@@ -218,8 +218,17 @@ class DocOSService:
                 all_failures.append("a rewrite action arrived with no instruction")
                 continue
 
+            # The planner fills in a target whether or not the request named
+            # one, and it nearly always guesses "body". "Convert every equation"
+            # then reached the equations in body paragraphs and silently skipped
+            # the ones in table cells and captions. A scope the user did not ask
+            # for is not a scope: unless they named one, or picked nodes
+            # themselves, the rewrite covers the document. The rewriter is told
+            # to leave passages the instruction does not cover alone, so a wider
+            # scope changes what it *can* reach, not what it *will* touch.
+            target = action.target if (action.node_ids or _names_a_scope(command)) else None
             edits, failures = await self._rewrite_scope(
-                graph, action.node_ids, action.target, instruction, emit)
+                graph, action.node_ids, target, instruction, emit)
             # Recorded on the action so the executor applies it and the version
             # log can be replayed without asking a model again.
             if edits:
@@ -308,6 +317,22 @@ def _changed_node_ids(before: DocumentGraph, after: DocumentGraph) -> set[str]:
                 or a[nid].style.model_dump() != b[nid].style.model_dump()):
             changed.add(nid)
     return changed
+
+
+# The words a request uses when it means one part of the document. "Table" and
+# "figure" are here because "reword the table captions" is a scope; "equation"
+# is not, because an equation is a thing to change, not a place to look.
+_SCOPE_WORDS = (
+    "body", "paragraph", "heading", "subheading", "title", "caption", "reference",
+    "bibliography", "footnote", "table", "figure", "abstract", "header", "footer",
+    "selected", "selection", "this section",
+)
+
+
+def _names_a_scope(command: str) -> bool:
+    """Did the request name a part of the document to work on?"""
+    lowered = (command or "").lower()
+    return any(word in lowered for word in _SCOPE_WORDS)
 
 
 def _wanted_text_change(batch) -> bool:

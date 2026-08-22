@@ -41,6 +41,11 @@ function spacingToCss(node: GraphNode, naturalLineHeight = 1): CSSProperties {
   }
   if (typeof m.space_before_pt === 'number') out.marginTop = `${m.space_before_pt}pt`
   if (typeof m.space_after_pt === 'number') out.marginBottom = `${m.space_after_pt}pt`
+  // A display equation is often nothing but an indented paragraph, so an
+  // indent that is not drawn is a line in the wrong place.
+  if (typeof m.indent_left_pt === 'number') out.marginLeft = `${m.indent_left_pt}pt`
+  if (typeof m.indent_right_pt === 'number') out.marginRight = `${m.indent_right_pt}pt`
+  if (typeof m.indent_first_line_pt === 'number') out.textIndent = `${m.indent_first_line_pt}pt`
   return out
 }
 
@@ -118,6 +123,8 @@ function renderBody(node: GraphNode, css: CSSProperties, mark?: DiffMark) {
     case 'caption':
       return <div data-node-text style={css} className="text-center text-[9pt] italic text-neutral-600">{text}</div>
     case 'reference':
+      // pl-6/-indent-6 is the fallback hanging indent for a reference list;
+      // a document that states its own overrides it through `css`.
       return <div data-node-text style={css} className="pl-6 -indent-6 text-[10pt] text-neutral-800">{text}</div>
     case 'footnote':
       return <div data-node-text style={css} className="text-[9pt] text-neutral-500">{text}</div>

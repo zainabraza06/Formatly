@@ -177,3 +177,20 @@ def test_a_rewrite_without_edits_changes_nothing_and_does_not_fail():
     result = ExecutionEngine().execute(graph, batch)
     assert result.ok
     assert result.graph.get(graph.root.children[1].id).content == "before"
+
+
+# ── whose scope is it ───────────────────────────────────────────────────────
+
+def test_a_request_that_names_no_part_of_the_document_is_not_narrowed():
+    """The planner fills in a target whether or not the request named one, and
+    it nearly always guesses "body". Only the request may narrow the scope."""
+    from app.docos.service import _names_a_scope
+
+    assert not _names_a_scope("convert all latex equations into readable maths")
+    assert not _names_a_scope("shorten everything")
+    assert not _names_a_scope("fix the spelling")
+
+    assert _names_a_scope("make the body paragraphs more concise")
+    assert _names_a_scope("reword every figure caption")
+    assert _names_a_scope("rewrite the abstract")
+    assert _names_a_scope("tidy up the references")

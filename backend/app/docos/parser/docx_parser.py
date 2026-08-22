@@ -206,6 +206,14 @@ def _format_spacing(pf) -> dict:
             out["space_before_pt"] = round(pf.space_before.pt, 1)
         if pf.space_after is not None:
             out["space_after_pt"] = round(pf.space_after.pt, 1)
+        # Indents. A display equation is often just an indented paragraph, and
+        # a hanging indent is what makes a reference list look like one.
+        for attr, key in (("left_indent", "indent_left_pt"),
+                          ("right_indent", "indent_right_pt"),
+                          ("first_line_indent", "indent_first_line_pt")):
+            value = getattr(pf, attr, None)
+            if value is not None:
+                out[key] = round(value.pt, 1)
     except Exception:
         pass
     return out
