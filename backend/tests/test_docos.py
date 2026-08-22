@@ -245,3 +245,47 @@ def test_diff_names_the_style_fields_that_changed(engine):
     fields = d["changed"][0]["style"]["fields"]
     assert {"field": "font_size", "before": None, "after": 22} in fields
     assert d["summary"]["style_changed"] == len(d["changed"])
+
+
+# ── deleting an upload ──────────────────────────────────────────────────────
+
+def test_delete_document_removes_it_and_its_versions(engine):
+    graph = _sample_graph()
+    engine.init_document("doc4", "T", graph)
+    batch = validate_batch({"actions": [
+        {"type": "format", "target": "heading", "style": {"bold": True}}]})
+    res = ExecutionEngine().execute(engine.current_graph("doc4"), batch)
+    engine.commit("doc4", batch, res.graph)
+    assert len(engine.store.list_versions("doc4")) == 2
+
+    assert engine.store.delete_document("doc4") is True
+    assert engine.store.get_document("doc4") is None
+    assert engine.store.list_versions("doc4") == []
+    # A second delete is not an error, but it reports that nothing was there.
+    assert engine.store.delete_document("doc4") is False
+
+
+def test_delete_document_leaves_other_documents_alone(engine):
+    engine.init_document("keep", "K", _sample_graph())
+    engine.init_document("drop", "D", _sample_graph())
+
+    engine.store.delete_document("drop")
+
+    assert engine.store.get_document("keep") is not None
+    assert len(engine.store.list_versions("keep")) == 1
+
+
+def test_delete_document_refuses_someone_elses(tmp_path):
+    from app.docos.service import DocOSService
+    from app.docos.versioning import VersionEngine
+
+    service = DocOSService(versions=VersionEngine(
+        store=VersionStore(db_path=tmp_path / "own.db")))
+    service.versions.init_document("mine", "M", _sample_graph(), owner_id="user-a")
+
+    with pytest.raises(PermissionError):
+        service.delete_document("mine", owner_id="user-b")
+    with pytest.raises(KeyError):
+        service.delete_document("nope", owner_id="user-a")
+
+    assert service.delete_document("mine", owner_id="user-a") is True

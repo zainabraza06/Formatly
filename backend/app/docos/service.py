@@ -54,6 +54,15 @@ class DocOSService:
             })
         return out
 
+    def delete_document(self, doc_id: str, owner_id: Optional[str] = None) -> bool:
+        """Delete one of the caller's own documents, with all its history.
+
+        Ownership is checked first, so a stranger's id is a 403 and an unknown
+        id is a 404 — neither silently reports success.
+        """
+        self._require_owner(doc_id, owner_id)
+        return self.versions.store.delete_document(doc_id)
+
     # ── import / read ─────────────────────────────────────────────────────
     def import_docx(self, data: bytes, *, title: str = "", user: str = "user",
                     owner_id: Optional[str] = None) -> dict[str, Any]:

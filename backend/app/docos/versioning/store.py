@@ -116,6 +116,18 @@ class VersionStore:
                 ).fetchall()
             return [dict(r) for r in rows]
 
+    def delete_document(self, doc_id: str) -> bool:
+        """Remove a document and every version of it. True if one was there.
+
+        Versions go first: they carry a foreign key onto `documents`, and
+        `PRAGMA foreign_keys = ON` would refuse the parent row otherwise. Both
+        statements share one transaction, so a failure leaves neither half done.
+        """
+        with self._lock, self._conn() as c:
+            c.execute("DELETE FROM versions WHERE document_id=?", (doc_id,))
+            cur = c.execute("DELETE FROM documents WHERE id=?", (doc_id,))
+            return cur.rowcount > 0
+
     # ── versions ────────────────────────────────────────────────────────────
     def add_version(self, row: VersionRow) -> None:
         with self._lock, self._conn() as c:

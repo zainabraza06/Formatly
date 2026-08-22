@@ -45,6 +45,12 @@ export const docosApi = {
   listDocuments: async (): Promise<DocumentSummary[]> =>
     json(await fetch(`${API_URL}/docos`, { headers: authHeaders() })),
 
+  /** Delete an upload and its whole version history. Not undoable. */
+  deleteDocument: async (id: string): Promise<{ deleted: boolean }> =>
+    json(await fetch(`${API_URL}/docos/${id}`, {
+      method: 'DELETE', headers: authHeaders(),
+    })),
+
   importDocx: async (file: File): Promise<ImportResponse> => {
     const form = new FormData()
     form.append('file', file)

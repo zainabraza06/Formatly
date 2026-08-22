@@ -99,6 +99,16 @@ def exact_view(doc_id: str, user: User = Depends(get_current_user)) -> FileRespo
                         filename=f"{doc_id}.pdf")
 
 
+@router.delete("/{doc_id}")
+def delete_document(doc_id: str, user: User = Depends(get_current_user)) -> dict[str, bool]:
+    try:
+        return {"deleted": get_service().delete_document(doc_id, owner_id=user.id)}
+    except KeyError:
+        raise HTTPException(status_code=404, detail="document not found")
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="not your document")
+
+
 @router.get("/{doc_id}/history")
 def history(doc_id: str, user: User = Depends(get_current_user)) -> list[dict[str, Any]]:
     try:
