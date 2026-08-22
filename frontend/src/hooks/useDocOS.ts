@@ -44,6 +44,9 @@ export function useDocOS() {
 
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [activeId, setActiveId] = useState<string | null>(null)
+  // The node the editor should turn to — set while the assistant is reading
+  // through a document, so the page on screen is the page being worked on.
+  const [focusId, setFocusId] = useState<string | null>(null)
   const [removingIds, setRemovingIds] = useState<string[]>([])
   const [panel, setPanel] = useState<PanelState>(EMPTY_PANEL)
   const [versions, setVersions] = useState<VersionInfo[]>([])
@@ -151,6 +154,34 @@ export function useDocOS() {
       case 'move_item':
         setActiveId(p.id)
         return ITEM_DELAY
+
+      case 'rewrite_progress': {
+        // The assistant reads a long document a page at a time. Following it
+        // there turns "nothing seems to be happening" into visible progress.
+        const ids: string[] = Array.isArray(p.ids) ? p.ids : []
+        if (ids.length) {
+          setFocusId(ids[0])
+          setSelectedIds(ids)
+        }
+        setPanel((s) => ({
+          ...s,
+          currentAction: `Reading page ${p.pass ?? '?'} of ${p.of ?? '?'}…`,
+          progress: { done: (p.pass ?? 1) - 1, total: p.of ?? 0 },
+        }))
+        return STEP_DELAY
+      }
+      case 'rewrite_finished':
+        setSelectedIds([])
+        setPanel((s) => ({
+          ...s,
+          currentAction: `Rewrote ${p.edited ?? 0} passage(s)`,
+          // A pass that never came back is worth saying out loud rather than
+          // leaving the reader to notice the gap themselves.
+          error: (p.warnings || []).length
+            ? `${(p.warnings || []).length} passage(s) could not be rewritten: ${(p.warnings || [])[0]}`
+            : s.error,
+        }))
+        return STEP_DELAY
 
       case 'batch_failed':
         setPanel((s) => ({ ...s, error: `Action ${p.index} failed: ${p.error}`, currentAction: 'Rolled back' }))
@@ -269,7 +300,7 @@ export function useDocOS() {
 
   return {
     docId, title, graph, status, connected,
-    selectedIds, activeId, removingIds, panel, versions, diff,
+    selectedIds, activeId, focusId, removingIds, panel, versions, diff,
     importFile, loadDocument, runCommand, undo, redo, rewind, restore, compare, clearDiff,
   }
 }

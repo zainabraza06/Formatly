@@ -128,6 +128,7 @@ export function DocumentEditor() {
               activeId={doc.activeId}
               removingIds={doc.removingIds}
               marks={marks}
+              focusId={doc.focusId}
             />
           )}
         </div>

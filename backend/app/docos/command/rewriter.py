@@ -232,7 +232,11 @@ def rewrite_nodes(
             failures.append(f"pass {index} of {len(batches)}: cancelled")
             break
         if on_progress:
-            on_progress({"pass": index, "of": len(batches), "nodes": len(batch)})
+            # The ids travel with the progress so the editor can turn to the
+            # page being read rather than leaving the reader to guess where the
+            # work is happening.
+            on_progress({"pass": index, "of": len(batches), "nodes": len(batch),
+                         "ids": [n.id for n in batch]})
         run(batch, f"pass {index} of {len(batches)}")
 
     return edits, failures

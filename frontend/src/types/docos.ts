@@ -111,6 +111,8 @@ export type DocOSEventName =
   | 'move_started' | 'move_item' | 'move_finished'
   | 'replace_started' | 'replace_item' | 'replace_finished'
   | 'action_error' | 'version_committed' | 'version_changed'
+  // The assistant reading a long document, a page at a time.
+  | 'rewrite_progress' | 'rewrite_finished' | 'rewrite_fallback' | 'command_noop'
   | 'control_noop' | 'compare_result' | 'error'
 
 export interface DocOSEvent {

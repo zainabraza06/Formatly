@@ -14,6 +14,8 @@ interface Props {
   removingIds: string[]
   /** Nodes a compare result names, keyed by id. Empty when no diff is open. */
   marks?: Map<string, DiffMark>
+  /** Turn to the page holding this node — the assistant is working there. */
+  focusId?: string | null
 }
 
 // Fallback only: when a document carries no real page-break markers (e.g. it was
@@ -91,7 +93,7 @@ function paginate(nodes: GraphNode[], exactCount?: number): GraphNode[][] {
   return pages.length ? pages : [[]]
 }
 
-export function GraphCanvas({ graph, selectedIds, activeId, removingIds, marks }: Props) {
+export function GraphCanvas({ graph, selectedIds, activeId, removingIds, marks, focusId }: Props) {
   const nodes = flatten(graph)
   const geo = pageGeometry(graph)
 
@@ -189,10 +191,18 @@ export function GraphCanvas({ graph, selectedIds, activeId, removingIds, marks }
   const selected = new Set(selectedIds)
   const removing = new Set(removingIds)
 
-  // keep the page index in range as the document changes
+  // Keep the page index in range as the document changes, and follow the
+  // assistant to the page it is working on. A node split across a page boundary
+  // carries a suffixed id, so the base id is what is matched.
   useEffect(() => {
-    setPage((p) => Math.min(Math.max(p, 0), pages.length - 1))
-  }, [pages.length])
+    setPage((current) => {
+      const clamped = Math.min(Math.max(current, 0), pages.length - 1)
+      if (!focusId) return clamped
+      const base = (id: string) => id.split('~')[0]
+      const found = pages.findIndex((nodes) => nodes.some((n) => base(n.id) === base(focusId)))
+      return found >= 0 ? found : clamped
+    })
+  }, [pages, focusId])
 
   if (!graph) {
     return (
