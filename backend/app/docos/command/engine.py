@@ -38,7 +38,10 @@ class CommandEngine:
     def __init__(self, router: Any = None):
         self._router = router  # injected; defaults to app.services.router.get_router()
 
-    def parse(self, command: str, graph: DocumentGraph) -> CommandResult:
+    def parse(self, command: str, graph: DocumentGraph,
+              reading: Optional[dict[str, str]] = None) -> CommandResult:
+        """`reading` is what a pass over the document found each section to be
+        about, so an instruction naming a part of the document can be placed."""
         control = self._detect_control(command)
         if control is not None:
             return CommandResult(kind="control", control=control, source="rule")
@@ -82,7 +85,7 @@ class CommandEngine:
         text, provider, _elapsed = router.chat(
             [
                 {"role": "system", "content": SYSTEM},
-                {"role": "user", "content": build_user_message(command, graph)},
+                {"role": "user", "content": build_user_message(command, graph, reading)},
             ],
             max_tokens=900,
         )

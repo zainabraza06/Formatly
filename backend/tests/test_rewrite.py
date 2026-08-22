@@ -245,3 +245,53 @@ def test_a_retry_only_asks_about_the_nodes_it_missed():
     assert ids[0] not in retries, "a node already edited is not asked about again"
     for nid in ids[1:]:
         assert nid in retries, "every node it missed is asked about again"
+
+
+# ── reading a document once ─────────────────────────────────────────────────
+
+def test_reading_records_what_each_section_is_about():
+    from app.docos.command.reading import brief_with_reading, read_document
+    from app.docos.graph import DocumentGraph, Node, NodeType
+
+    graph = DocumentGraph(title="Falls", root=Node(type=NodeType.DOCUMENT, children=[
+        Node(type=NodeType.HEADING, content="I. INTRODUCTION"),
+        Node(type=NodeType.BODY, content="Falls are a major cause of injury among older adults."),
+        Node(type=NodeType.HEADING, content="III. RESULTS"),
+        Node(type=NodeType.BODY, content="The model reaches 89.01% accuracy on held-out subjects."),
+    ]))
+    router = FakeRouter(
+        '{"notes": [{"heading": "I. INTRODUCTION", "about": "motivates automated fall detection"},'
+        ' {"heading": "III. RESULTS", "about": "reports 89.01% accuracy on held-out subjects"}]}')
+
+    about, failures = read_document(graph, router=router)
+
+    assert not failures
+    assert about["I. INTRODUCTION"] == "motivates automated fall detection"
+
+    brief = brief_with_reading(graph, about)
+    results = next(s for s in brief["sections"] if s["heading"] == "III. RESULTS")
+    assert results["about"] == "reports 89.01% accuracy on held-out subjects"
+
+
+def test_a_page_that_could_not_be_read_is_named():
+    from app.docos.command.reading import read_document
+    from app.docos.graph import DocumentGraph, Node, NodeType
+
+    graph = DocumentGraph(root=Node(type=NodeType.DOCUMENT, children=[
+        Node(type=NodeType.BODY, content="Some prose to read."),
+    ]))
+    about, failures = read_document(graph, router=FakeRouter("not json"))
+
+    assert about == {}
+    assert failures and "page 1" in failures[0]
+
+
+def test_a_reading_that_was_never_taken_leaves_the_brief_as_it_was():
+    from app.docos.command.brief import document_brief
+    from app.docos.command.reading import brief_with_reading
+    from app.docos.graph import DocumentGraph, Node, NodeType
+
+    graph = DocumentGraph(root=Node(type=NodeType.DOCUMENT, children=[
+        Node(type=NodeType.HEADING, content="I. INTRODUCTION"),
+    ]))
+    assert brief_with_reading(graph, {}) == document_brief(graph)

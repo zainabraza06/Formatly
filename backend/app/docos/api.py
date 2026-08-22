@@ -116,15 +116,31 @@ def brief(doc_id: str, user: User = Depends(get_current_user)) -> dict[str, Any]
     Read from the graph each time rather than stored, so it cannot fall behind
     the document it describes.
     """
-    from app.docos.command.brief import document_brief
-
     try:
-        graph = get_service().current_graph(doc_id, owner_id=user.id)
+        return get_service().brief(doc_id, owner_id=user.id)
     except KeyError:
         raise HTTPException(status_code=404, detail="document not found")
     except PermissionError:
         raise HTTPException(status_code=403, detail="not your document")
-    return document_brief(graph)
+
+
+@router.post("/{doc_id}/read")
+async def read(doc_id: str, user: User = Depends(get_current_user)) -> dict[str, Any]:
+    """Read the document through once, page by page, and keep what it says."""
+    hub = get_hub()
+    collected: list[dict[str, Any]] = []
+
+    async def emit(msg: dict[str, Any]) -> None:
+        collected.append(msg)
+        await hub.broadcast(doc_id, msg)
+
+    try:
+        result = await get_service().read_document(doc_id, emit, owner_id=user.id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="document not found")
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="not your document")
+    return {**result, "events": collected}
 
 
 @router.get("/{doc_id}/history")

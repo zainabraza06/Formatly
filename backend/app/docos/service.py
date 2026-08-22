@@ -31,6 +31,9 @@ class DocOSService:
         self.versions = versions or VersionEngine()
         self.commands = commands or CommandEngine()
         self.executor = executor or ExecutionEngine()
+        # What has been read of each document, by heading. Survives edits,
+        # because it describes what a section is about rather than its words.
+        self._readings: dict[str, dict[str, str]] = {}
 
     # ── ownership ─────────────────────────────────────────────────────────
     def _require_owner(self, doc_id: str, owner_id: Optional[str]) -> dict[str, Any]:
@@ -53,6 +56,45 @@ class DocOSService:
                 "versions": len(versions),
             })
         return out
+
+    async def read_document(self, doc_id: str, emit: Emit,
+                            owner_id: Optional[str] = None) -> dict[str, Any]:
+        """Read the document once so later instructions arrive with context.
+
+        Streamed page by page: the reader sees where the assistant is, and the
+        pages it could not read are named rather than quietly missing.
+        """
+        from app.docos.command.reading import brief_with_reading, read_document
+        from app.services.router import get_router
+
+        self._require_owner(doc_id, owner_id)
+        graph = self.versions.current_graph(doc_id)
+        loop = asyncio.get_running_loop()
+
+        def on_progress(info: dict) -> None:
+            asyncio.run_coroutine_threadsafe(
+                emit({"event": "reading_progress", "payload": info}), loop)
+
+        await emit({"event": "reading_started", "payload": {"document_id": doc_id}})
+        about, failures = await anyio.to_thread.run_sync(
+            lambda: read_document(graph, router=get_router(), on_progress=on_progress))
+
+        # Kept on the document, not the version: it describes the document as a
+        # whole and would otherwise be re-read after every edit.
+        self._readings[doc_id] = about
+        brief = brief_with_reading(graph, about)
+        await emit({"event": "reading_finished",
+                    "payload": {"sections": len(brief.get("sections", [])),
+                                "read": len(about), "warnings": failures}})
+        return {"ok": True, "brief": brief, "warnings": failures}
+
+    def brief(self, doc_id: str, owner_id: Optional[str] = None) -> dict[str, Any]:
+        """What the document is, with whatever has been read of it."""
+        from app.docos.command.reading import brief_with_reading
+
+        self._require_owner(doc_id, owner_id)
+        graph = self.versions.current_graph(doc_id)
+        return brief_with_reading(graph, self._readings.get(doc_id, {}))
 
     def delete_document(self, doc_id: str, owner_id: Optional[str] = None) -> bool:
         """Delete one of the caller's own documents, with all its history.
@@ -126,7 +168,7 @@ class DocOSService:
                           *, user: str = "user", owner_id: Optional[str] = None) -> dict[str, Any]:
         self._require_owner(doc_id, owner_id)
         graph = self.versions.current_graph(doc_id)
-        result = self.commands.parse(command, graph)
+        result = self.commands.parse(command, graph, self._readings.get(doc_id))
 
         if result.kind == "control":
             return await self._run_control(doc_id, result.control, emit)  # type: ignore[arg-type]

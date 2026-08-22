@@ -8,6 +8,7 @@ validated and rejected before it ever touches the graph.
 from __future__ import annotations
 
 import json
+from typing import Optional
 
 from app.docos.actions import ActionType, TARGETS
 from app.docos.graph import DocumentGraph
@@ -36,8 +37,9 @@ SYSTEM = (
 )
 
 
-def build_user_message(command: str, graph: DocumentGraph) -> str:
-    from app.docos.command.brief import document_brief
+def build_user_message(command: str, graph: DocumentGraph,
+                       reading: Optional[dict[str, str]] = None) -> str:
+    from app.docos.command.reading import brief_with_reading
 
     counts: dict[str, int] = {}
     for n in graph.nodes():
@@ -62,7 +64,7 @@ def build_user_message(command: str, graph: DocumentGraph) -> str:
     # section a request is about.
     context = {
         "instruction": command,
-        "document": document_brief(graph),
+        "document": brief_with_reading(graph, reading or {}),
         "document_node_counts": counts,
         "headings": outline,
         "text_sample": sample,
