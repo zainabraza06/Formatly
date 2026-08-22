@@ -7,7 +7,11 @@ import { NODE_LABEL } from '../../lib/graphUtils'
 
 function styleToCss(style: Style): CSSProperties {
   return {
-    fontSize: style.font_size ? `${style.font_size}px` : undefined,
+    // Word measures type in points and the parser stores what Word said, so
+    // this has to be pt. Drawing an 11pt run as 11px rendered it at 8.25pt —
+    // a quarter too small — which then fit more words per line than the real
+    // document does and made every page's break land in the wrong place.
+    fontSize: style.font_size ? `${style.font_size}pt` : undefined,
     fontWeight: style.bold ? 700 : undefined,
     fontStyle: style.italic ? 'italic' : undefined,
     textDecoration: style.underline ? 'underline' : undefined,
@@ -92,13 +96,13 @@ function renderBody(node: GraphNode, css: CSSProperties, mark?: DiffMark) {
   const text = <Text node={node} mark={mark} />
   switch (node.type) {
     case 'heading':
-      return <h1 style={{ color: '#1a1a1a', ...css }} className="mb-1 mt-2 text-[20pt] font-semibold leading-snug">{node.content ? text : 'Heading'}</h1>
+      return <h1 style={{ color: '#1a1a1a', ...css }} className="mb-1 mt-2 text-[20pt] font-semibold">{node.content ? text : 'Heading'}</h1>
     case 'subheading':
-      return <h2 style={{ color: '#2a2a2a', ...css }} className="mb-1 mt-1.5 text-[15pt] font-semibold leading-snug">{node.content ? text : 'Subheading'}</h2>
+      return <h2 style={{ color: '#2a2a2a', ...css }} className="mb-1 mt-1.5 text-[15pt] font-semibold">{node.content ? text : 'Subheading'}</h2>
     case 'caption':
       return <div style={css} className="text-center text-[9pt] italic text-neutral-600">{text}</div>
     case 'reference':
-      return <div style={css} className="pl-6 -indent-6 text-[10pt] leading-relaxed text-neutral-800">{text}</div>
+      return <div style={css} className="pl-6 -indent-6 text-[10pt] text-neutral-800">{text}</div>
     case 'footnote':
       return <div style={css} className="text-[9pt] text-neutral-500">{text}</div>
     case 'header':
@@ -122,7 +126,7 @@ function renderBody(node: GraphNode, css: CSSProperties, mark?: DiffMark) {
     case 'table':
       return <TableView node={node} />
     default:
-      return <p style={{ color: '#1a1a1a', ...css }} className="text-[11pt] leading-relaxed">{text}</p>
+      return <p style={{ color: '#1a1a1a', ...css }} className="">{text}</p>
   }
 }
 
