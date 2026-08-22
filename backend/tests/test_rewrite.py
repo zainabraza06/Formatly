@@ -194,3 +194,54 @@ def test_a_request_that_names_no_part_of_the_document_is_not_narrowed():
     assert _names_a_scope("reword every figure caption")
     assert _names_a_scope("rewrite the abstract")
     assert _names_a_scope("tidy up the references")
+
+
+# ── a reply that did not survive the trip ───────────────────────────────────
+
+def test_a_truncated_reply_keeps_what_arrived_and_asks_again_for_the_rest():
+    """A conversion can be longer than what it converts, so a pass that fits
+    going in can overrun the reply ceiling coming back and be cut mid-JSON."""
+    graph = build("alpha", "beta", "gamma")
+    nodes = rewritable(graph, [], "body")
+    ids = [n.id for n in nodes]
+
+    cut = '{"edits": [{"id": "%s", "text": "ALPHA"}, {"id": "%s", "text": "BET' % (ids[0], ids[1])
+    whole = '{"edits": [{"id": "%s", "text": "BETA"}, {"id": "%s", "text": "GAMMA"}]}' % (ids[1], ids[2])
+    router = FakeRouter(cut, whole)
+
+    edits, failures = rewrite_nodes(graph, nodes, "shout", router=router)
+
+    assert edits[ids[0]] == "ALPHA", "the finished edit in the cut reply is kept"
+    assert edits[ids[1]] == "BETA", "the unfinished one is asked for again"
+    assert edits[ids[2]] == "GAMMA"
+    assert not failures
+    assert len(router.sent) > 1, "the nodes it missed were retried"
+
+
+def test_a_node_that_never_comes_back_is_reported_not_silently_skipped():
+    graph = build("alpha", "beta")
+    nodes = rewritable(graph, [], "body")
+    router = FakeRouter("not json at all")
+
+    edits, failures = rewrite_nodes(graph, nodes, "shout", router=router)
+
+    assert edits == {}
+    assert failures, "the caller has to be able to say what was not edited"
+
+
+def test_a_retry_only_asks_about_the_nodes_it_missed():
+    graph = build("alpha", "beta", "gamma", "delta")
+    nodes = rewritable(graph, [], "body")
+    ids = [n.id for n in nodes]
+
+    first = '{"edits": [{"id": "%s", "text": "ALPHA"}]}' % ids[0]
+    rest = '{"edits": [%s]}' % ", ".join(
+        '{"id": "%s", "text": "X"}' % nid for nid in ids[1:])
+    router = FakeRouter(first, rest, rest)
+
+    rewrite_nodes(graph, nodes, "shout", router=router)
+
+    retries = " ".join(router.sent[1:])
+    assert ids[0] not in retries, "a node already edited is not asked about again"
+    for nid in ids[1:]:
+        assert nid in retries, "every node it missed is asked about again"

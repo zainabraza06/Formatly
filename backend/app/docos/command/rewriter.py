@@ -20,7 +20,6 @@ import threading
 from typing import Any, Callable, Optional
 
 from app.docos.graph import DocumentGraph, Node, NodeType
-from app.paper.jsonx import extract_json
 
 # How much text one pass may carry. Small enough that the reply cannot truncate,
 # large enough that a normal page goes in a single pass.
@@ -96,6 +95,57 @@ def passes(nodes: list[Node], budget: int = _PASS_CHARS) -> list[list[Node]]:
     return out
 
 
+def _strict_json(text: str) -> Optional[dict[str, Any]]:
+    """The reply, parsed only if it is complete.
+
+    `extract_json` repairs a truncated reply by closing it at the last value
+    boundary, which is right for a plan and wrong for text: it would hand back
+    a paragraph cut off mid-sentence as though the model had meant it, and the
+    document would quietly lose the rest. Rewriting takes whole replies only.
+    """
+    if not text:
+        return None
+    start = text.find("{")
+    if start < 0:
+        return None
+    try:
+        value, _end = json.JSONDecoder().raw_decode(text, start)
+    except ValueError:
+        return None
+    return value if isinstance(value, dict) else None
+
+
+def salvage_edits(text: str) -> Optional[dict[str, Any]]:
+    """The edits a reply managed to finish before it was cut off.
+
+    `extract_json` repairs a truncated object where it can; when even that
+    fails, the reply is still likely to hold several complete `{"id": ...,
+    "text": ...}` entries before the point it stopped. Taking those turns a lost
+    pass into a partly finished one, and the nodes it did not reach are asked
+    for again rather than left as they were.
+    """
+    if not text:
+        return None
+    edits: list[dict[str, str]] = []
+    decoder = json.JSONDecoder()
+    index = 0
+    while True:
+        start = text.find('{"id"', index)
+        if start < 0:
+            start = text.find('{ "id"', index)
+        if start < 0:
+            break
+        try:
+            value, end = decoder.raw_decode(text, start)
+        except ValueError:
+            index = start + 1
+            continue
+        index = end
+        if isinstance(value, dict) and isinstance(value.get("id"), str)                 and isinstance(value.get("text"), str):
+            edits.append({"id": value["id"], "text": value["text"]})
+    return {"edits": edits} if edits else None
+
+
 def rewrite_nodes(
     graph: DocumentGraph,
     nodes: list[Node],
@@ -114,13 +164,37 @@ def rewrite_nodes(
     failures: list[str] = []
     batches = passes(nodes)
 
-    for index, batch in enumerate(batches, start=1):
-        if cancel is not None and cancel.is_set():
-            failures.append(f"pass {index} of {len(batches)}: cancelled")
-            break
+    def collect(data: Any, batch: list[Node]) -> set[str]:
+        """Take the edits a reply offers for this pass. Returns the ids it covered."""
+        covered: set[str] = set()
+        allowed = {n.id for n in batch}
+        for edit in (data or {}).get("edits") or []:
+            if not isinstance(edit, dict):
+                continue
+            nid, new_text = edit.get("id"), edit.get("text")
+            # Only nodes in this pass, and only real replacements: a model that
+            # returns an empty string would otherwise erase a paragraph.
+            if nid in allowed and isinstance(new_text, str) and new_text.strip():
+                covered.add(nid)
+                node = graph.get(nid)
+                if node is not None and new_text != node.content:
+                    edits[nid] = new_text
+        return covered
 
-        if on_progress:
-            on_progress({"pass": index, "of": len(batches), "nodes": len(batch)})
+    def run(batch: list[Node], label: str) -> None:
+        """One pass, halved and retried if the reply does not survive.
+
+        A reply carries the full new text of every node in the pass, and a
+        conversion can be longer than what it converts — spelling a fraction out
+        in words is — so a pass that fits going in can overrun the reply ceiling
+        coming back. The reply is then cut mid-JSON. Dropping the pass there is
+        what left half a document converted and half untouched, so what did
+        arrive is kept and whatever it missed is asked for again in smaller
+        pieces, down to one node at a time.
+        """
+        if cancel is not None and cancel.is_set():
+            failures.append(f"{label}: cancelled")
+            return
 
         payload = {
             "instruction": instruction,
@@ -134,24 +208,31 @@ def rewrite_nodes(
                 cancel=cancel,
             )
         except Exception as exc:
-            failures.append(f"pass {index} of {len(batches)}: {exc}")
-            continue
+            text = ""
+            error: Optional[str] = str(exc)
+        else:
+            error = None
 
-        data = extract_json(text)
-        if not data:
-            failures.append(f"pass {index} of {len(batches)}: no usable reply")
-            continue
+        covered = collect(_strict_json(text) or salvage_edits(text), batch) if text else set()
+        missed = [n for n in batch if n.id not in covered]
 
-        allowed = {n.id for n in batch}
-        for edit in data.get("edits") or []:
-            if not isinstance(edit, dict):
-                continue
-            nid, new_text = edit.get("id"), edit.get("text")
-            # Only nodes in this pass, and only real replacements: a model that
-            # returns an empty string would otherwise erase a paragraph.
-            if nid in allowed and isinstance(new_text, str) and new_text.strip():
-                node = graph.get(nid)
-                if node is not None and new_text != node.content:
-                    edits[nid] = new_text
+        if not missed:
+            return
+        if len(batch) == 1 or not text:
+            failures.append(f"{label}: {error or 'no usable reply'}")
+            return
+
+        # Ask again for what did not come back, in halves.
+        half = max(1, len(missed) // 2)
+        run(missed[:half], f"{label}a")
+        run(missed[half:], f"{label}b")
+
+    for index, batch in enumerate(batches, start=1):
+        if cancel is not None and cancel.is_set():
+            failures.append(f"pass {index} of {len(batches)}: cancelled")
+            break
+        if on_progress:
+            on_progress({"pass": index, "of": len(batches), "nodes": len(batch)})
+        run(batch, f"pass {index} of {len(batches)}")
 
     return edits, failures
