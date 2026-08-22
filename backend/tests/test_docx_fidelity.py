@@ -279,3 +279,83 @@ def test_a_paragraph_that_states_its_own_spacing_still_wins():
     tight = next(n for n in graph.nodes() if n.content.startswith("This one sets"))
     assert tight.metadata["space_after_pt"] == 0.0
     assert tight.metadata["line_spacing"] == 1.0
+
+
+# ── headings a document never declared ──────────────────────────────────────
+
+def _hand_formatted_docx() -> bytes:
+    """A paper written the way most are: Normal style, headings set by hand."""
+    import io
+    from docx import Document
+    from docx.shared import Pt
+
+    d = Document()
+    d.styles["Normal"].font.size = Pt(10)
+
+    def para(text, bold=False, size=10):
+        p = d.add_paragraph()
+        run = p.add_run(text)
+        run.bold = bold
+        run.font.size = Pt(size)
+        return p
+
+    para("I. INTRODUCTION", bold=True, size=12)
+    para("Falls are a major cause of injury among older adults, motivating research.")
+    para("A. Dataset", bold=True, size=11)
+    para("MobiAct contains recordings from 67 subjects performing twelve activities.")
+    para("II. RELATED WORK", bold=True, size=12)
+    para("Most existing approaches formulate fall detection as a joint problem.")
+
+    buf = io.BytesIO(); d.save(buf); return buf.getvalue()
+
+
+def test_headings_are_recognised_by_shape_when_no_style_says_so():
+    graph = parse_docx_bytes(_hand_formatted_docx(), title="H")
+    found = [(n.type.value, n.content) for n in graph.nodes()
+             if n.type.value in ("heading", "subheading")]
+
+    assert ("heading", "I. INTRODUCTION") in found, "a roman numeral opens a section"
+    assert ("heading", "II. RELATED WORK") in found
+    assert ("subheading", "A. Dataset") in found, "a letter numbers a subsection"
+
+
+def test_a_bold_sentence_is_not_a_heading():
+    """Calling a paragraph a heading is worse than missing one, so everything
+    that merely looks emphatic stays where it is."""
+    import io
+    from docx import Document
+    from docx.shared import Pt
+
+    d = Document()
+    d.styles["Normal"].font.size = Pt(10)
+    for text, bold, size in [
+        ("This sentence is bold for emphasis and should stay a paragraph.", True, 10),
+        ("Figure 1. Distribution of per-subject accuracy across folds.", True, 9),
+        ("Table II. Per-class precision and recall.", True, 9),
+        ("1. Load the dataset from disk into memory before windowing begins.", False, 10),
+        ("Note:", True, 10),
+        ("Zhang, Y., and Li, Q. (2020). Fall detection. IEEE Access.", False, 10),
+    ]:
+        p = d.add_paragraph()
+        run = p.add_run(text)
+        run.bold = bold
+        run.font.size = Pt(size)
+    buf = io.BytesIO(); d.save(buf)
+
+    graph = parse_docx_bytes(buf.getvalue(), title="F")
+    assert not [n for n in graph.nodes() if n.type.value in ("heading", "subheading")]
+
+
+def test_a_declared_heading_style_still_wins():
+    """Inference only fills a silence; it never argues with the document."""
+    import io
+    from docx import Document
+
+    d = Document()
+    d.add_heading("Introduction", level=1)
+    d.add_heading("Dataset", level=2)
+    buf = io.BytesIO(); d.save(buf)
+
+    graph = parse_docx_bytes(buf.getvalue(), title="D")
+    kinds = [n.type.value for n in graph.nodes() if n.content]
+    assert kinds == ["heading", "subheading"]

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import base64
 import io
+import re
 from pathlib import Path
 from typing import Any, NamedTuple, Optional
 
@@ -72,7 +73,7 @@ def _parse(doc: _Doc, *, title: str) -> DocumentGraph:
         tag = child.tag
         if tag == qn("w:p"):
             para = _Paragraph(child, doc)
-            node = _paragraph_node(para, in_references, spacing_defaults)
+            node = _paragraph_node(para, in_references, spacing_defaults, default_size)
             if node is None:
                 continue
             if node.type == NodeType.HEADING and _looks_like_references(para.text):
@@ -124,7 +125,8 @@ def _looks_like_references(text: str) -> bool:
 
 
 def _paragraph_node(para: _Paragraph, in_references: bool,
-                    spacing_defaults: Optional[dict] = None) -> Optional[Node]:
+                    spacing_defaults: Optional[dict] = None,
+                    default_size: Optional[float] = None) -> Optional[Node]:
     style_name = (para.style.name if para.style else "") or ""
     lname = style_name.lower()
     text = para.text or ""
@@ -177,14 +179,22 @@ def _paragraph_node(para: _Paragraph, in_references: bool,
     if not text.strip():
         return None
 
+    style = _paragraph_style(para)
     node_type = _classify_paragraph(lname, in_references)
+    # The style name is believed when it says something. When it does not — a
+    # plain paragraph — the line's own shape is read, so a paper that never
+    # applied Word's Heading styles still has headings.
+    if node_type is NodeType.BODY and not in_references:
+        inferred = _infer_structure(text, style, default_size)
+        if inferred is not None:
+            node_type = inferred
     meta: dict = {"style_name": style_name, "level": _heading_level(lname)}
     meta.update(_spacing(para, spacing_defaults))
     _apply_breaks(meta, breaks_before)
     return Node(
         type=node_type,
         content=text,
-        style=_paragraph_style(para),
+        style=style,
         metadata=meta,
         runs=_paragraph_runs(para),
     )
@@ -286,6 +296,64 @@ def _apply_breaks(meta: dict, breaks_before: int) -> None:
         meta["page_break_before"] = True
     if breaks_before > 1:
         meta["extra_pages"] = breaks_before - 1
+
+
+# How a numbered heading announces itself. Sub-level patterns are tried first,
+# because "1.1" also starts like "1." and "IV-C" like "IV".
+# A single letter is a sub-heading — "A. Dataset" — except where it is also a
+# section numeral. "I." opens a paper; a section numbered C would be the
+# hundredth, so the letters that read both ways are given to the numerals.
+_SUB_NUMBER = re.compile(
+    r"^(?:\d+\.\d+|[ABCDEFGHJKLMNOPQRSTUWYZ][.)]\s|[IVXLCDM]+-[A-Z0-9])", re.ASCII)
+_TOP_NUMBER = re.compile(r"^(?:[IVXLCDM]+|\d+)[.)]\s", re.ASCII)
+
+# Things that begin like a heading and are not one.
+_NOT_A_HEADING = re.compile(r"^(fig\.|figure|table|eq\.|equation|algorithm|appendix\s+\w+\s*[:.]?\s*\S)",
+                            re.IGNORECASE)
+
+
+def _infer_structure(text: str, style: Style, default_size: Optional[float]) -> Optional[NodeType]:
+    """Is this hand-formatted paragraph really a heading?
+
+    Most papers never apply Word's Heading styles. The author types "I.
+    INTRODUCTION" in bold at 12pt with the Normal style, and reading the style
+    name alone then finds a document with no structure at all — nothing to
+    target with "standardise the headings", and nothing to show in an outline.
+
+    So the shape of the line is read instead: short, unpunctuated, set apart by
+    weight or size, and often numbered. All of that has to agree, because a
+    bold sentence is not a heading and calling it one is worse than missing it.
+    """
+    line = (text or "").strip()
+    if not line or len(line) > 90 or len(line.split()) > 14:
+        return None
+    if _NOT_A_HEADING.match(line):
+        return None
+
+    sub = bool(_SUB_NUMBER.match(line))
+    top = bool(_TOP_NUMBER.match(line)) and not sub
+    # A heading does not end a sentence. A numbered one may end with a period
+    # only because of its own numbering, which the patterns above have matched.
+    if line.endswith((".", "?", "!", ";", ",")) and not (sub or top):
+        return None
+
+    bigger = bool(style.font_size and default_size and style.font_size >= default_size + 0.5)
+    much_bigger = bool(style.font_size and default_size and style.font_size >= default_size + 2)
+    shouted = line.isupper() and len(line) > 3
+
+    # Numbering alone is not enough — a numbered list item is numbered too —
+    # so the line must also be set apart from the text around it.
+    set_apart = bool(style.bold) or bigger or shouted
+    if not set_apart:
+        return None
+    if not (sub or top or bigger or shouted):
+        return None
+
+    if sub:
+        return NodeType.SUBHEADING
+    if top:
+        return NodeType.HEADING
+    return NodeType.HEADING if (much_bigger or shouted) else NodeType.SUBHEADING
 
 
 def _classify_paragraph(lname: str, in_references: bool) -> NodeType:
