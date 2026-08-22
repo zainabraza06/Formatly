@@ -430,7 +430,16 @@ High-level action **targets** map to types, e.g. `figure` -> figure + image, `bo
 - **rewind**: pointer to any historical version (non-destructive).
 - **restore**: new version whose graph equals an old one (history kept).
 - **branch**: commit with `parent_id` set to an old version (engine supports it; UI is linear timeline today).
-- **diff**: node-level `GraphDiff` between two seqs.
+- **diff**: node-level `GraphDiff` between two seqs, carrying the text as well as the counts.
+
+A `GraphDiff` answers "what changed with what". `added` and `removed` entries carry
+the node's `content` (with `truncated: true` when it ran past 2000 characters).
+A `changed` entry carries `content.before`, `content.after` and `content.segments` —
+word-level runs tagged `equal` / `insert` / `delete` from `difflib`, so the timeline
+can strike out the words that left and highlight the ones that arrived — plus
+`style.fields`, one `{field, before, after}` per property that moved. A `summary`
+block holds the counts (`added`, `removed`, `changed`, `text_changed`,
+`style_changed`, `words_added`, `words_removed`).
 
 Materialise: walk to nearest checkpoint snapshot, replay action batches forward.
 
