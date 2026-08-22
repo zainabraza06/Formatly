@@ -109,6 +109,24 @@ def delete_document(doc_id: str, user: User = Depends(get_current_user)) -> dict
         raise HTTPException(status_code=403, detail="not your document")
 
 
+@router.get("/{doc_id}/brief")
+def brief(doc_id: str, user: User = Depends(get_current_user)) -> dict[str, Any]:
+    """What the document is: its kind, sections, inventory and conventions.
+
+    Read from the graph each time rather than stored, so it cannot fall behind
+    the document it describes.
+    """
+    from app.docos.command.brief import document_brief
+
+    try:
+        graph = get_service().current_graph(doc_id, owner_id=user.id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="document not found")
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="not your document")
+    return document_brief(graph)
+
+
 @router.get("/{doc_id}/history")
 def history(doc_id: str, user: User = Depends(get_current_user)) -> list[dict[str, Any]]:
     try:

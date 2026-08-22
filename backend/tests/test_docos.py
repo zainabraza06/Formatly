@@ -340,3 +340,66 @@ def test_pasting_a_paragraph_copies_how_it_is_formatted():
     copies = [n for n in result.graph.nodes() if n.content == original.content]
     assert len(copies) == 2, "the paragraph and its copy"
     assert all(any(r.style.bold for r in c.inline_runs()) for c in copies)
+
+
+# ── what the document is ────────────────────────────────────────────────────
+
+def _paper_graph() -> DocumentGraph:
+    return DocumentGraph(title="A Study of Falls", root=Node(type=NodeType.DOCUMENT, children=[
+        Node(type=NodeType.BODY, content="Abstract— This paper evaluates fall detection [1], [2]."),
+        Node(type=NodeType.HEADING, content="I. INTRODUCTION"),
+        Node(type=NodeType.BODY, content="Falls are a major cause of injury among older adults."),
+        Node(type=NodeType.HEADING, content="II. METHOD"),
+        Node(type=NodeType.SUBHEADING, content="A. Feature Extraction"),
+        Node(type=NodeType.BODY, content=r"Each window is summarised by $\hat{E}_{j,c}$ per bin."),
+        Node(type=NodeType.TABLE, children=[
+            Node(type=NodeType.TABLE_ROW, children=[
+                Node(type=NodeType.TABLE_CELL, content=r"$\mu_j = \frac{1}{n}\sum_i m_i$"),
+                Node(type=NodeType.TABLE_CELL, content="(1)"),
+            ]),
+        ]),
+        Node(type=NodeType.HEADING, content="REFERENCES"),
+        Node(type=NodeType.REFERENCE, content="[1] Author, A. (2020). A study."),
+    ]))
+
+
+def test_the_brief_says_what_kind_of_document_it_is():
+    from app.docos.command.brief import document_brief
+
+    brief = document_brief(_paper_graph())
+    assert brief["kind"] == "research paper"
+    assert brief["title"] == "A Study of Falls"
+    assert brief["conventions"]["citation_style"] == "numbered, [n]"
+    assert "roman" in brief["conventions"]["heading_numbering"]
+
+
+def test_the_brief_says_where_the_maths_lives():
+    """The knowledge that was missing when "convert every equation" reached
+    only the equations that happened to be in body paragraphs."""
+    from app.docos.command.brief import document_brief
+
+    where = document_brief(_paper_graph())["conventions"]["maths_appears_in"]
+    assert where.get("body"), "inline maths in prose"
+    assert where.get("table_cell"), "a display equation in its usual one-row table"
+
+
+def test_the_brief_cuts_the_document_at_its_headings():
+    from app.docos.command.brief import document_brief
+
+    sections = document_brief(_paper_graph())["sections"]
+    by_heading = {s["heading"]: s for s in sections}
+
+    assert by_heading["I. INTRODUCTION"]["level"] == 1
+    assert by_heading["A. Feature Extraction"]["level"] == 2
+    assert by_heading["A. Feature Extraction"]["holds"]["tables"] == 1
+    assert by_heading["REFERENCES"]["holds"]["references"] == 1
+    assert by_heading["II. METHOD"]["holds"] == {}, "a heading followed by a subheading holds nothing itself"
+
+
+def test_the_planner_is_told_what_the_document_is():
+    from app.docos.command.prompt import build_user_message
+
+    message = build_user_message("convert all latex equations", _paper_graph())
+    assert "research paper" in message
+    assert "maths_appears_in" in message
+    assert "table_cell" in message, "so a plan can reach the equations in the table"

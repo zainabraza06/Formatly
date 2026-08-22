@@ -37,6 +37,8 @@ SYSTEM = (
 
 
 def build_user_message(command: str, graph: DocumentGraph) -> str:
+    from app.docos.command.brief import document_brief
+
     counts: dict[str, int] = {}
     for n in graph.nodes():
         counts[n.type.value] = counts.get(n.type.value, 0) + 1
@@ -53,8 +55,14 @@ def build_user_message(command: str, graph: DocumentGraph) -> str:
         for n in graph.nodes()
         if n.type.value in {"body", "paragraph"} and n.content.strip()
     ][:6]
+    # What the document is, read from the document itself: what kind of thing it
+    # is, how it is divided, what each part holds, and where its maths and
+    # citations live. Planning from counts alone is guessing — it could not tell
+    # that the equations an instruction names sit in table cells, or which
+    # section a request is about.
     context = {
         "instruction": command,
+        "document": document_brief(graph),
         "document_node_counts": counts,
         "headings": outline,
         "text_sample": sample,
