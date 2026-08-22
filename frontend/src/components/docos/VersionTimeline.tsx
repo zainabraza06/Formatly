@@ -1,6 +1,12 @@
 import { useState } from 'react'
 import clsx from 'clsx'
-import type { GraphDiff, VersionInfo } from '../../types/docos'
+import type {
+  DiffChange,
+  DiffNode,
+  DiffSegment,
+  GraphDiff,
+  VersionInfo,
+} from '../../types/docos'
 
 interface Props {
  versions: VersionInfo[]
@@ -11,9 +17,10 @@ interface Props {
  onRewind: (seq: number) => void
  onRestore: (seq: number) => void
  onCompare: (a: number, b: number) => void
+ onCloseDiff: () => void
 }
 
-export function VersionTimeline({ versions, diff, disabled, onUndo, onRedo, onRewind, onRestore, onCompare }: Props) {
+export function VersionTimeline({ versions, diff, disabled, onUndo, onRedo, onRewind, onRestore, onCompare, onCloseDiff }: Props) {
  const [pick, setPick] = useState<number[]>([])
 
  const togglePick = (seq: number) => {
@@ -82,27 +89,136 @@ export function VersionTimeline({ versions, diff, disabled, onUndo, onRedo, onRe
  ))}
  </div>
 
- {diff && (
- <div className="rounded-2xl border border-line bg-surface-2 p-3 text-xs">
- <div className="mb-1 font-semibold text-ink ">
- Diff v{diff.a} → v{diff.b}
+ {diff && <DiffPanel a={diff.a} b={diff.b} diff={diff.diff} onClose={onCloseDiff} />}
  </div>
- <DiffLine color="text-emerald-500" label="added" items={diff.diff.added.length} />
- <DiffLine color="text-danger" label="removed" items={diff.diff.removed.length} />
- <DiffLine color="text-amber-500" label="changed" items={diff.diff.changed.length} />
+ )
+}
+
+/** The compare result: counts up top, then the actual words that changed. */
+function DiffPanel({ a, b, diff, onClose }: { a: number; b: number; diff: GraphDiff; onClose: () => void }) {
+ const [open, setOpen] = useState(true)
+ const summary = diff.summary ?? {
+ added: diff.added.length,
+ removed: diff.removed.length,
+ changed: diff.changed.length,
+ text_changed: diff.changed.filter((c) => c.content).length,
+ style_changed: diff.changed.filter((c) => c.style).length,
+ words_added: 0,
+ words_removed: 0,
+ }
+ const empty = summary.added + summary.removed + summary.changed === 0
+
+ return (
+ <div className="flex max-h-[45%] flex-col rounded-2xl border border-line bg-surface-2 text-xs">
+ <div className="flex items-center justify-between gap-2 px-3 pt-3">
+ <button onClick={() => setOpen((o) => !o)} className="flex items-center gap-1 font-semibold text-ink">
+ <span className={clsx('transition-transform', open && 'rotate-90')}>›</span>
+ Diff v{a} → v{b}
+ </button>
+ <button onClick={onClose} className="rounded px-1 text-faint hover:text-ink" aria-label="Close diff">
+ ✕
+ </button>
+ </div>
+
+ <div className="flex flex-wrap gap-1 px-3 py-2">
+ <Chip color="text-emerald-500" label="added" n={summary.added} />
+ <Chip color="text-danger" label="removed" n={summary.removed} />
+ <Chip color="text-amber-500" label="changed" n={summary.changed} />
+ {(summary.words_added > 0 || summary.words_removed > 0) && (
+ <span className="rounded-full bg-surface px-2 py-0.5 text-[10px] text-faint">
+ +{summary.words_added} / −{summary.words_removed} words
+ </span>
+ )}
+ </div>
+
+ {open && (
+ <div className="space-y-2 overflow-auto px-3 pb-3">
+ {empty && <div className="text-[11px] text-faint">These two versions are identical.</div>}
+ {diff.changed.map((c) => (
+ <ChangedEntry key={c.id} change={c} />
+ ))}
+ {diff.added.map((n) => (
+ <NodeEntry key={n.id} node={n} kind="added" />
+ ))}
+ {diff.removed.map((n) => (
+ <NodeEntry key={n.id} node={n} kind="removed" />
+ ))}
  </div>
  )}
  </div>
  )
 }
 
-function DiffLine({ color, label, items }: { color: string; label: string; items: number }) {
+function ChangedEntry({ change }: { change: DiffChange }) {
  return (
- <div className={clsx('flex justify-between', color)}>
- <span>{label}</span>
- <span>{items}</span>
+ <div className="rounded-lg border border-line bg-surface p-2">
+ <EntryLabel color="text-amber-500" kind="changed" type={change.type} />
+ {change.content && (
+ <p className="mt-1 leading-relaxed">
+ {change.content.segments.map((seg, i) => (
+ <Segment key={i} seg={seg} />
+ ))}
+ {change.content.truncated && <span className="text-faint"> …</span>}
+ </p>
+ )}
+ {change.style?.fields.map((f) => (
+ <div key={f.field} className="mt-1 flex items-center gap-1 text-[10px] text-muted">
+ <span className="text-faint">{f.field}</span>
+ <s className="text-danger">{fmt(f.before)}</s>
+ <span className="text-faint">→</span>
+ <span className="text-emerald-500">{fmt(f.after)}</span>
+ </div>
+ ))}
  </div>
  )
+}
+
+function NodeEntry({ node, kind }: { node: DiffNode; kind: 'added' | 'removed' }) {
+ const added = kind === 'added'
+ return (
+ <div className="rounded-lg border border-line bg-surface p-2">
+ <EntryLabel color={added ? 'text-emerald-500' : 'text-danger'} kind={kind} type={node.type} />
+ <p
+ className={clsx(
+ 'mt-1 leading-relaxed',
+ added ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400' : 'bg-danger/15 text-danger line-through',
+ )}
+ >
+ {node.content || <span className="text-faint italic">(no text)</span>}
+ {node.truncated && <span className="text-faint"> …</span>}
+ </p>
+ </div>
+ )
+}
+
+/** One run of words, coloured by whether it arrived, left, or stayed put. */
+function Segment({ seg }: { seg: DiffSegment }) {
+ if (seg.op === 'equal') return <span className="text-muted">{seg.text}</span>
+ if (seg.op === 'insert')
+ return <ins className="bg-emerald-500/15 text-emerald-600 no-underline dark:text-emerald-400">{seg.text}</ins>
+ return <del className="bg-danger/15 text-danger">{seg.text}</del>
+}
+
+function EntryLabel({ color, kind, type }: { color: string; kind: string; type: string }) {
+ return (
+ <div className="flex items-center justify-between text-[9px] uppercase tracking-wide">
+ <span className={color}>{kind}</span>
+ <span className="text-faint">{type.replace(/_/g, ' ')}</span>
+ </div>
+ )
+}
+
+function Chip({ color, label, n }: { color: string; label: string; n: number }) {
+ return (
+ <span className={clsx('rounded-full bg-surface px-2 py-0.5 text-[10px]', color)}>
+ {n} {label}
+ </span>
+ )
+}
+
+function fmt(value: unknown): string {
+ if (value === null || value === undefined || value === '') return '—'
+ return typeof value === 'object' ? JSON.stringify(value) : String(value)
 }
 
 function IconBtn({ label, onClick, disabled }: { label: string; onClick: () => void; disabled: boolean }) {

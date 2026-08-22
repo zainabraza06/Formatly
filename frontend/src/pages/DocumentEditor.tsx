@@ -143,6 +143,7 @@ export function DocumentEditor() {
               onRewind={doc.rewind}
               onRestore={doc.restore}
               onCompare={doc.compare}
+              onCloseDiff={doc.clearDiff}
             />
           </GlassCard>
         </div>

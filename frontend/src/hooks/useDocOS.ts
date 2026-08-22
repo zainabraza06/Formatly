@@ -265,11 +265,12 @@ export function useDocOS() {
   const rewind = useCallback((seq: number) => runCommand(`Rewind to version ${seq}`), [runCommand])
   const restore = useCallback((seq: number) => runCommand(`Restore version ${seq}`), [runCommand])
   const compare = useCallback((a: number, b: number) => runCommand(`Compare version ${a} and ${b}`), [runCommand])
+  const clearDiff = useCallback(() => setDiff(null), [])
 
   return {
     docId, title, graph, status, connected,
     selectedIds, activeId, removingIds, panel, versions, diff,
-    importFile, loadDocument, runCommand, undo, redo, rewind, restore, compare,
+    importFile, loadDocument, runCommand, undo, redo, rewind, restore, compare, clearDiff,
   }
 }
 

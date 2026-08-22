@@ -94,8 +94,58 @@ export interface DocOSEvent {
   payload: Record<string, any>
 }
 
+export interface DiffNode {
+  id: string
+  type: string
+  content: string
+  truncated?: boolean
+}
+
+/** One run of words shared by, or unique to, one side of a text change. */
+export interface DiffSegment {
+  op: 'equal' | 'insert' | 'delete'
+  text: string
+}
+
+export interface DiffContentChange {
+  before: string
+  after: string
+  segments: DiffSegment[]
+  truncated?: boolean
+}
+
+export interface DiffStyleField {
+  field: string
+  before: unknown
+  after: unknown
+}
+
+export interface DiffStyleChange {
+  before: Record<string, unknown>
+  after: Record<string, unknown>
+  fields: DiffStyleField[]
+}
+
+export interface DiffChange {
+  id: string
+  type: string
+  content?: DiffContentChange
+  style?: DiffStyleChange
+}
+
+export interface DiffSummary {
+  added: number
+  removed: number
+  changed: number
+  text_changed: number
+  style_changed: number
+  words_added: number
+  words_removed: number
+}
+
 export interface GraphDiff {
-  added: Array<{ id: string; type: string; content: string }>
-  removed: Array<{ id: string; type: string; content: string }>
-  changed: Array<{ id: string; type: string; content?: any; style?: any }>
+  added: DiffNode[]
+  removed: DiffNode[]
+  changed: DiffChange[]
+  summary?: DiffSummary
 }
