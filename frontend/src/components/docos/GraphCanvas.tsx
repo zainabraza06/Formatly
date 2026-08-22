@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { flatten } from '../../lib/graphUtils'
 import type { DocumentGraph, GraphNode } from '../../types/docos'
+import type { DiffMark } from '../../lib/diffMarks'
 import { pageGeometry } from '../../types/docos'
 import { measurePages, type Measured } from './measurePages'
 import { NodeView } from './NodeView'
@@ -11,6 +12,8 @@ interface Props {
   selectedIds: string[]
   activeId: string | null
   removingIds: string[]
+  /** Nodes a compare result names, keyed by id. Empty when no diff is open. */
+  marks?: Map<string, DiffMark>
 }
 
 // Fallback only: when a document carries no real page-break markers (e.g. it was
@@ -81,7 +84,7 @@ function paginate(nodes: GraphNode[], exactCount?: number): GraphNode[][] {
   return pages.length ? pages : [[]]
 }
 
-export function GraphCanvas({ graph, selectedIds, activeId, removingIds }: Props) {
+export function GraphCanvas({ graph, selectedIds, activeId, removingIds, marks }: Props) {
   const nodes = flatten(graph)
   const geo = pageGeometry(graph)
 
@@ -119,8 +122,9 @@ export function GraphCanvas({ graph, selectedIds, activeId, removingIds }: Props
     })
     setMeasuredPages(measurePages(measured, textHeight))
     // The sheet's own height is fixed by the geometry, so it is not a dependency.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [nodes, geo.width_in, geo.height_in, geo.default_font, geo.default_size_pt])
+    // `marks` changes the text on the page (struck-out words are still words),
+    // so a diff opening or closing has to be measured again.
+  }, [nodes, marks, geo.width_in, geo.height_in, geo.default_font, geo.default_size_pt])
 
   const pages = measuredPages ?? markerPages
   const [page, setPage] = useState(0)
@@ -170,7 +174,14 @@ export function GraphCanvas({ graph, selectedIds, activeId, removingIds }: Props
         }}
       >
         {nodes.map((n) => (
-          <NodeView key={n.id} node={n} selected={false} active={false} removing={false} />
+          <NodeView
+            key={n.id}
+            node={n}
+            selected={false}
+            active={false}
+            removing={false}
+            mark={marks?.get(n.id)}
+          />
         ))}
       </div>
 
@@ -214,6 +225,7 @@ export function GraphCanvas({ graph, selectedIds, activeId, removingIds }: Props
                 selected={selected.has(n.id)}
                 active={activeId === n.id}
                 removing={removing.has(n.id)}
+                mark={marks?.get(n.id)}
               />
             ))}
           </motion.div>

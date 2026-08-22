@@ -2,6 +2,7 @@ import { motion } from 'framer-motion'
 import clsx from 'clsx'
 import type { CSSProperties } from 'react'
 import type { GraphNode, Style } from '../../types/docos'
+import type { DiffMark } from '../../lib/diffMarks'
 import { NODE_LABEL } from '../../lib/graphUtils'
 
 function styleToCss(style: Style): CSSProperties {
@@ -36,9 +37,11 @@ interface Props {
   selected: boolean
   active: boolean
   removing: boolean
+  /** Set while a compare result is open and names this node. */
+  mark?: DiffMark
 }
 
-export function NodeView({ node, selected, active, removing }: Props) {
+export function NodeView({ node, selected, active, removing, mark }: Props) {
   const css = { ...styleToCss(node.style), ...spacingToCss(node) }
 
   return (
@@ -56,14 +59,27 @@ export function NodeView({ node, selected, active, removing }: Props) {
         'group relative rounded-lg px-3 py-1.5 transition-colors',
         selected && 'ring-2 ring-sky-400/70',
         active && 'bg-sky-400/10',
+        mark && 'border-l-4 pl-2',
+        mark?.kind === 'added' && 'border-emerald-500 bg-emerald-400/10',
+        mark?.kind === 'changed' && 'border-amber-500 bg-amber-300/10',
       )}
     >
+      {mark && (
+        <span
+          className={clsx(
+            'pointer-events-none absolute -left-2 -top-1.5 -translate-x-full rounded px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-wide text-white',
+            mark.kind === 'added' ? 'bg-emerald-600' : 'bg-amber-600',
+          )}
+        >
+          {mark.kind}
+        </span>
+      )}
       <span
         className="pointer-events-none absolute -left-1 top-1/2 -translate-x-full -translate-y-1/2 rounded bg-neutral-900/80 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-white opacity-0 transition-opacity group-hover:opacity-100 dark:bg-white/80 dark:text-neutral-900"
       >
         {NODE_LABEL[node.type]}
       </span>
-      {renderBody(node, css)}
+      {renderBody(node, css, mark)}
     </motion.div>
   )
 }
@@ -71,21 +87,23 @@ export function NodeView({ node, selected, active, removing }: Props) {
 // The page is always a white sheet (see GraphCanvas), so text colours are fixed
 // dark-on-white like Word — never inverted by the app's dark theme. Explicit
 // colours parsed from the DOCX still win via inline `css`.
-function renderBody(node: GraphNode, css: CSSProperties) {
+function renderBody(node: GraphNode, css: CSSProperties, mark?: DiffMark) {
+  // The words themselves, marked up when a compare result knows how they changed.
+  const text = <Text node={node} mark={mark} />
   switch (node.type) {
     case 'heading':
-      return <h1 style={{ color: '#1a1a1a', ...css }} className="mb-1 mt-2 text-[20pt] font-semibold leading-snug">{node.content || 'Heading'}</h1>
+      return <h1 style={{ color: '#1a1a1a', ...css }} className="mb-1 mt-2 text-[20pt] font-semibold leading-snug">{node.content ? text : 'Heading'}</h1>
     case 'subheading':
-      return <h2 style={{ color: '#2a2a2a', ...css }} className="mb-1 mt-1.5 text-[15pt] font-semibold leading-snug">{node.content || 'Subheading'}</h2>
+      return <h2 style={{ color: '#2a2a2a', ...css }} className="mb-1 mt-1.5 text-[15pt] font-semibold leading-snug">{node.content ? text : 'Subheading'}</h2>
     case 'caption':
-      return <div style={css} className="text-center text-[9pt] italic text-neutral-600">{node.content}</div>
+      return <div style={css} className="text-center text-[9pt] italic text-neutral-600">{text}</div>
     case 'reference':
-      return <div style={css} className="pl-6 -indent-6 text-[10pt] leading-relaxed text-neutral-800">{node.content}</div>
+      return <div style={css} className="pl-6 -indent-6 text-[10pt] leading-relaxed text-neutral-800">{text}</div>
     case 'footnote':
-      return <div style={css} className="text-[9pt] text-neutral-500">{node.content}</div>
+      return <div style={css} className="text-[9pt] text-neutral-500">{text}</div>
     case 'header':
     case 'footer':
-      return <div style={css} className="text-[9pt] uppercase tracking-wide text-neutral-400">{node.type}: {node.content}</div>
+      return <div style={css} className="text-[9pt] uppercase tracking-wide text-neutral-400">{node.type}: {text}</div>
     case 'horizontal_rule':
       return <hr className="my-2 border-neutral-400" />
     case 'page_break':
@@ -104,8 +122,28 @@ function renderBody(node: GraphNode, css: CSSProperties) {
     case 'table':
       return <TableView node={node} />
     default:
-      return <p style={{ color: '#1a1a1a', ...css }} className="text-[11pt] leading-relaxed">{node.content}</p>
+      return <p style={{ color: '#1a1a1a', ...css }} className="text-[11pt] leading-relaxed">{text}</p>
   }
+}
+
+/** A node's text: plain, or split into the words that left and the ones that
+ *  arrived when a diff describes it. The page is a white sheet, so these keep
+ *  fixed light-on-paper colours rather than theme tokens. */
+function Text({ node, mark }: { node: GraphNode; mark?: DiffMark }) {
+  if (!mark?.segments) return <>{node.content}</>
+  return (
+    <>
+      {mark.segments.map((seg, i) =>
+        seg.op === 'equal' ? (
+          <span key={i}>{seg.text}</span>
+        ) : seg.op === 'insert' ? (
+          <ins key={i} className="rounded bg-emerald-200 text-emerald-900 no-underline">{seg.text}</ins>
+        ) : (
+          <del key={i} className="rounded bg-rose-200 text-rose-900">{seg.text}</del>
+        ),
+      )}
+    </>
+  )
 }
 
 /** The real picture when the importer could read it, and — when it could not —

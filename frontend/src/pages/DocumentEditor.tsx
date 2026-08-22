@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import clsx from 'clsx'
 import { GlassCard } from '../components/GlassCard'
@@ -7,6 +7,7 @@ import { ExactView } from '../components/docos/ExactView'
 import { GraphCanvas } from '../components/docos/GraphCanvas'
 import { VersionTimeline } from '../components/docos/VersionTimeline'
 import { useDocOS } from '../hooks/useDocOS'
+import { diffMarks } from '../lib/diffMarks'
 import { btnPrimary } from '../lib/ui'
 
 export function DocumentEditor() {
@@ -30,6 +31,8 @@ export function DocumentEditor() {
 
   const running = doc.status === 'running'
   const noDoc = !doc.docId
+  // The open compare result, indexed by node id so the page can tint what it names.
+  const marks = useMemo(() => diffMarks(doc.diff?.diff), [doc.diff])
 
   const handleFile = async (file: File | undefined) => {
     if (!file) return
@@ -124,6 +127,7 @@ export function DocumentEditor() {
               selectedIds={doc.selectedIds}
               activeId={doc.activeId}
               removingIds={doc.removingIds}
+              marks={marks}
             />
           )}
         </div>
