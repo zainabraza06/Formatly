@@ -1,7 +1,8 @@
 import { motion } from 'framer-motion'
 import clsx from 'clsx'
 import type { CSSProperties } from 'react'
-import type { GraphNode, Style } from '../../types/docos'
+import type { GraphNode, Run, Style } from '../../types/docos'
+import { inlineRuns } from '../../types/docos'
 import type { DiffMark } from '../../lib/diffMarks'
 import { NODE_LABEL } from '../../lib/graphUtils'
 
@@ -130,24 +131,54 @@ function renderBody(node: GraphNode, css: CSSProperties, mark?: DiffMark) {
   }
 }
 
-/** A node's text: plain, or split into the words that left and the ones that
- *  arrived when a diff describes it. The page is a white sheet, so these keep
- *  fixed light-on-paper colours rather than theme tokens. */
+/** A node's text, drawn the way the document formats it.
+ *
+ *  Three cases, in order: a diff is open and describes this node, so the words
+ *  that left and arrived are what matters; the paragraph is formatted in
+ *  pieces, so each piece is drawn as its own span; or it is formatted alike
+ *  throughout and is one plain string. The page is a white sheet, so diff
+ *  colours are fixed light-on-paper rather than theme tokens.
+ */
 function Text({ node, mark }: { node: GraphNode; mark?: DiffMark }) {
-  if (!mark?.segments) return <>{node.content}</>
+  if (mark?.segments) {
+    return (
+      <>
+        {mark.segments.map((seg, i) =>
+          seg.op === 'equal' ? (
+            <span key={i}>{seg.text}</span>
+          ) : seg.op === 'insert' ? (
+            <ins key={i} className="rounded bg-emerald-200 text-emerald-900 no-underline">{seg.text}</ins>
+          ) : (
+            <del key={i} className="rounded bg-rose-200 text-rose-900">{seg.text}</del>
+          ),
+        )}
+      </>
+    )
+  }
+
+  const runs = inlineRuns(node)
+  if (runs.length <= 1) return <>{node.content}</>
   return (
     <>
-      {mark.segments.map((seg, i) =>
-        seg.op === 'equal' ? (
-          <span key={i}>{seg.text}</span>
-        ) : seg.op === 'insert' ? (
-          <ins key={i} className="rounded bg-emerald-200 text-emerald-900 no-underline">{seg.text}</ins>
-        ) : (
-          <del key={i} className="rounded bg-rose-200 text-rose-900">{seg.text}</del>
-        ),
-      )}
+      {runs.map((run, i) => (
+        <RunView key={i} run={run} />
+      ))}
     </>
   )
+}
+
+/** One formatted piece. Only what the run states is set here; everything else
+ *  is left to inherit from the paragraph, which is how the document means it. */
+function RunView({ run }: { run: Run }) {
+  const css = styleToCss(run.style)
+  const raised = run.style.vertical_align
+  if (raised) {
+    // <sup>/<sub> rather than a shifted span: the browser already knows to
+    // shrink the text and keep it off the line's baseline.
+    const Tag = raised === 'superscript' ? 'sup' : 'sub'
+    return <Tag style={css}>{run.text}</Tag>
+  }
+  return <span style={css}>{run.text}</span>
 }
 
 /** The real picture when the importer could read it, and — when it could not —

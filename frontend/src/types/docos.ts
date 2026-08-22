@@ -14,6 +14,15 @@ export interface Style {
   color?: string | null
   highlight?: string | null
   alignment?: 'left' | 'center' | 'right' | 'justify' | null
+  /** Inline only: a citation marker or a formula, raised or lowered. */
+  vertical_align?: 'superscript' | 'subscript' | null
+}
+
+/** A stretch of a paragraph formatted as one piece. `style` holds only what the
+ *  run states for itself; anything null it inherits from the paragraph. */
+export interface Run {
+  text: string
+  style: Style
 }
 
 export interface GraphNode {
@@ -23,6 +32,21 @@ export interface GraphNode {
   style: Style
   metadata: Record<string, unknown>
   children: GraphNode[]
+  /** Empty when the whole node is formatted alike — see `inlineRuns`. */
+  runs?: Run[]
+}
+
+/**
+ * A node's text as formatted pieces, always safe to render.
+ *
+ * Mirrors `Node.inline_runs()` on the server, including its safety check: the
+ * content is the text of record, so runs that no longer spell it out (a rewrite
+ * replaced the words) are ignored rather than drawn over the new text.
+ */
+export function inlineRuns(node: GraphNode): Run[] {
+  const runs = node.runs
+  if (runs?.length && runs.map((r) => r.text).join('') === node.content) return runs
+  return node.content ? [{ text: node.content, style: {} }] : []
 }
 
 export interface PageGeometry {

@@ -164,6 +164,41 @@ class Node(BaseModel):
             return self.runs
         return [Run(text=self.content)] if self.content else []
 
+    def apply_style(self, patch: "Style") -> None:
+        """Format the whole node, inline pieces included.
+
+        A run that states `italic=False` would otherwise defeat "make the body
+        italic" on the words it covers — the command would look like it had
+        half worked. Formatting the paragraph clears the run-level overrides
+        for the attributes being set, and only those: a superscript citation
+        stays raised, a run in a different face keeps it.
+        """
+        fields = [k for k, v in patch.model_dump().items() if v is not None]
+        self.style = self.style.merged(patch)
+        if not fields or not self.runs:
+            return
+        for run in self.runs:
+            run.style = Style(**{k: (None if k in fields else v)
+                                 for k, v in run.style.model_dump().items()})
+        self.runs = merge_runs(self.runs)
+
+    def replace_text(self, find: str, repl: str) -> bool:
+        """Swap one string for another, keeping inline formatting where it can.
+
+        The replacement is made in each piece as well as in the text, and the
+        pieces are kept only if they still spell out the result — a match that
+        straddled a boundary between two of them did not survive, and guessing
+        which piece the new words belong to would be inventing formatting the
+        document never had.
+        """
+        if not find or find not in self.content:
+            return False
+        self.content = self.content.replace(find, repl)
+        if self.runs:
+            candidate = [Run(text=r.text.replace(find, repl), style=r.style) for r in self.runs]
+            self.runs = merge_runs(candidate)                 if "".join(r.text for r in candidate) == self.content else []
+        return True
+
     def set_text(self, text: str) -> None:
         """Replace the words, dropping inline formatting that described the old
         ones. The paragraph's own `style` survives, because that describes the

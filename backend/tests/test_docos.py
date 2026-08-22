@@ -15,7 +15,7 @@ import pytest
 from app.docos.actions import ActionValidationError, validate_batch
 from app.docos.command import CommandEngine
 from app.docos.execution import ExecutionEngine
-from app.docos.graph import DocumentGraph, Node, NodeType
+from app.docos.graph import DocumentGraph, Node, NodeType, Run, Style
 from app.docos.parser import parse_docx_bytes
 from app.docos.versioning import VersionEngine
 from app.docos.versioning.store import VersionStore
@@ -289,3 +289,54 @@ def test_delete_document_refuses_someone_elses(tmp_path):
         service.delete_document("nope", owner_id="user-a")
 
     assert service.delete_document("mine", owner_id="user-a") is True
+
+
+# ── inline runs through the execution engine ────────────────────────────────
+
+def _mixed_node():
+    return Node(type=NodeType.BODY, content="Recent work outperforms the baseline.",
+                runs=[Run(text="Recent work "),
+                      Run(text="outperforms", style=Style(bold=True, italic=False)),
+                      Run(text=" the baseline.")])
+
+
+def test_formatting_a_paragraph_reaches_the_words_inside_it():
+    """A run saying italic=False must not defeat "make the body italic"."""
+    node = _mixed_node()
+    node.apply_style(Style(italic=True))
+
+    assert node.style.italic is True
+    assert all(r.style.italic is None for r in node.runs), "the override should be cleared"
+    # Only the attribute being set is cleared; the bold phrase stays bold.
+    assert any(r.style.bold is True for r in node.runs)
+
+
+def test_replace_keeps_inline_formatting_when_it_still_fits():
+    node = _mixed_node()
+    assert node.replace_text("baseline", "benchmark") is True
+    assert node.content == "Recent work outperforms the benchmark."
+    assert node.runs_describe_content()
+    assert any(r.style.bold is True for r in node.runs)
+
+
+def test_replace_across_a_run_boundary_drops_the_pieces_rather_than_guessing():
+    node = _mixed_node()
+    # "work outperforms" straddles two runs, so no run-wise replacement matches.
+    assert node.replace_text("work outperforms", "work beats") is True
+    assert node.content == "Recent work beats the baseline."
+    assert node.runs == []
+    assert [r.text for r in node.inline_runs()] == ["Recent work beats the baseline."]
+
+
+def test_pasting_a_paragraph_copies_how_it_is_formatted():
+    graph = DocumentGraph(root=Node(type=NodeType.DOCUMENT, children=[_mixed_node()]))
+    original = graph.root.children[0]
+    batch = validate_batch({"actions": [
+        {"type": "copy", "node_ids": [original.id]},
+        {"type": "paste", "node_ids": [original.id]},
+    ]})
+    result = ExecutionEngine().execute(graph, batch)
+
+    copies = [n for n in result.graph.nodes() if n.content == original.content]
+    assert len(copies) == 2, "the paragraph and its copy"
+    assert all(any(r.style.bold for r in c.inline_runs()) for c in copies)

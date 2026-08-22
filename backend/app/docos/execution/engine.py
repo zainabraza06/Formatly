@@ -96,7 +96,7 @@ class ExecutionEngine:
                     payload={"target": action.target, "total": len(nodes),
                              "style": patch.model_dump(exclude_none=True)})
         for k, n in enumerate(nodes):
-            n.style = n.style.merged(patch)
+            n.apply_style(patch)
             yield Event(name=EventName.FORMAT_PROGRESS,
                         payload={"id": n.id, "index": k, "total": len(nodes),
                                  "style": n.style.model_dump(exclude_none=True)})
@@ -109,7 +109,7 @@ class ExecutionEngine:
         yield Event(name=EventName.FORMAT_STARTED,
                     payload={"target": action.target, "total": len(nodes), "highlight": color})
         for k, n in enumerate(nodes):
-            n.style = n.style.merged(Style(highlight=color))
+            n.apply_style(Style(highlight=color))
             yield Event(name=EventName.FORMAT_PROGRESS,
                         payload={"id": n.id, "index": k, "highlight": color})
         yield Event(name=EventName.FORMAT_FINISHED, payload={"count": len(nodes)})
@@ -132,7 +132,7 @@ class ExecutionEngine:
                     payload={"target": action.target, "total": len(nodes),
                              "style": patch.model_dump(exclude_none=True)})
         for k, n in enumerate(nodes):
-            n.style = n.style.merged(patch)
+            n.apply_style(patch)
             yield Event(name=EventName.FORMAT_PROGRESS, payload={"id": n.id, "index": k})
         yield Event(name=EventName.FORMAT_FINISHED, payload={"count": len(nodes)})
         return [n.id for n in nodes]
@@ -157,8 +157,7 @@ class ExecutionEngine:
                     payload={"find": find, "with": repl, "total": len(nodes)})
         changed = 0
         for n in nodes:
-            if find and find in n.content:
-                n.content = n.content.replace(find, repl)
+            if find and n.replace_text(find, repl):
                 changed += 1
                 yield Event(name=EventName.REPLACE_ITEM, payload={"id": n.id, "preview": n.content[:80]})
         yield Event(name=EventName.REPLACE_FINISHED, payload={"count": changed})
@@ -224,7 +223,8 @@ class ExecutionEngine:
         for node_id, text in edits.items():
             node = g.get(node_id)
             if node is not None and isinstance(text, str) and text.strip():
-                node.content = text
+                # New words: whatever formatted the old ones no longer applies.
+                node.set_text(text)
                 touched.append(node_id)
                 yield Event(name=EventName.FORMAT_PROGRESS,
                             payload={"id": node_id, "index": len(touched) - 1})
@@ -236,7 +236,7 @@ class ExecutionEngine:
         if len(nodes) < 2:
             raise ExecutionError(i, "merge needs at least two nodes")
         first, rest = nodes[0], nodes[1:]
-        first.content = " ".join([first.content, *[n.content for n in rest]]).strip()
+        first.set_text(" ".join([first.content, *[n.content for n in rest]]).strip())
         for n in rest:
             g.remove(n.id)
         yield Event(name=EventName.FORMAT_FINISHED, payload={"merged_into": first.id, "count": len(rest)})
@@ -250,7 +250,7 @@ class ExecutionEngine:
             parts = [p for p in n.content.split(sep) if p.strip()]
             if len(parts) < 2:
                 continue
-            n.content = parts[0]
+            n.set_text(parts[0])
             prev = n.id
             for part in parts[1:]:
                 clone = Node(type=n.type, content=part, style=n.style.model_copy())
@@ -273,7 +273,9 @@ class ExecutionEngine:
             if not src:
                 continue
             dup = Node(type=src.type, content=src.content, style=src.style.model_copy(),
-                       metadata=dict(src.metadata))
+                       metadata=dict(src.metadata),
+                       # A copy of a paragraph is formatted like the original.
+                       runs=[r.model_copy(deep=True) for r in src.runs])
             if after and g.insert_after(after, dup):
                 after = dup.id
             else:

@@ -410,7 +410,22 @@ Root is always `type: document`. Children are typed nodes:
 
 `paragraph`, `heading`, `subheading`, `body`, `image`, `figure`, `caption`, `table`, `table_row`, `table_cell`, `horizontal_rule`, `page_break`, `header`, `footer`, `reference`, `footnote`.
 
-Each node: `id` (`n_` + hex), `content`, `style` (font_family, font_size, bold, italic, underline, color, highlight, alignment), `metadata`, `children`.
+Each node: `id` (`n_` + hex), `content`, `style` (font_family, font_size, bold, italic, underline, color, highlight, alignment, vertical_align), `metadata`, `children`, `runs`.
+
+`runs` describes formatting that varies *inside* a paragraph — a bold phrase, an
+italic term, a superscript citation. Each run states only what it says for
+itself; anything left null it inherits from the paragraph, as Word resolves it.
+A paragraph formatted alike throughout carries no runs at all, which is every
+node that came from anywhere but a `.docx`.
+
+`content` stays the text of record. `Node.inline_runs()` (and `inlineRuns()` on
+the client) checks the runs against it and falls back to a single unformatted
+run when they disagree, so anything that rewrites the words — an AI rewrite, a
+restored version — drops formatting that described the old ones instead of
+drawing stale pieces over new text. `Node.set_text()` does that explicitly,
+`Node.replace_text()` keeps the pieces when the replacement still fits inside
+one, and `Node.apply_style()` clears the run-level overrides for the attributes
+it sets, so "make the body italic" is not defeated by a run that says otherwise.
 
 High-level action **targets** map to types, e.g. `figure` -> figure + image, `body` -> body + paragraph.
 
