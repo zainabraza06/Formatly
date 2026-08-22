@@ -166,3 +166,75 @@ def test_every_run_italic_still_reads_as_italic():
     graph = parse_docx_bytes(_emphasis_docx(), title="E")
     para = next(n for n in graph.nodes() if n.content and n.content.startswith("Every run italic"))
     assert para.style.italic is True
+
+
+# ── inline runs ─────────────────────────────────────────────────────────────
+
+def _mixed_runs_docx() -> bytes:
+    """A paragraph whose words are not all formatted alike."""
+    import io
+    from docx import Document
+    from docx.shared import Pt
+
+    d = Document()
+    p = d.add_paragraph()
+    p.add_run("Recent work ")
+    bold = p.add_run("substantially outperforms"); bold.bold = True
+    p.add_run(" the earlier baseline ")
+    cite = p.add_run("12"); cite.font.superscript = True
+    p.add_run(" on every subject.")
+
+    # Word loves to split a sentence into identically formatted pieces.
+    p2 = d.add_paragraph()
+    for piece in ("One ", "sentence ", "in ", "four ", "runs."):
+        p2.add_run(piece)
+
+    d.save(io := __import__("io").BytesIO()); return io.getvalue()
+
+
+def test_inline_formatting_survives_the_paragraph():
+    graph = parse_docx_bytes(_mixed_runs_docx(), title="M")
+    para = next(n for n in graph.nodes() if n.content.startswith("Recent work"))
+
+    assert para.content == "Recent work substantially outperforms the earlier baseline 12 on every subject."
+    formatting = [(r.text, r.style.bold, r.style.vertical_align) for r in para.inline_runs()]
+    assert ("substantially outperforms", True, None) in formatting
+    assert ("12", None, "superscript") in formatting
+
+
+def test_a_uniform_paragraph_carries_no_runs():
+    """Runs describe variation; a paragraph without any needs none of them."""
+    graph = parse_docx_bytes(_mixed_runs_docx(), title="M")
+    para = next(n for n in graph.nodes() if n.content.startswith("One sentence"))
+    assert para.runs == []
+    assert [r.text for r in para.inline_runs()] == ["One sentence in four runs."]
+
+
+def test_inline_formatting_survives_a_round_trip_through_docx():
+    from app.docos.export import graph_to_docx_bytes
+
+    before = parse_docx_bytes(_mixed_runs_docx(), title="M")
+    after = parse_docx_bytes(graph_to_docx_bytes(before), title="M")
+
+    def shape(graph):
+        return [[(r.text, r.style.bold, r.style.italic, r.style.vertical_align)
+                 for r in n.inline_runs()]
+                for n in graph.nodes() if n.content]
+
+    assert shape(after) == shape(before)
+
+
+def test_rewriting_the_words_drops_formatting_that_described_the_old_ones():
+    graph = parse_docx_bytes(_mixed_runs_docx(), title="M")
+    para = next(n for n in graph.nodes() if n.content.startswith("Recent work"))
+    assert len(para.inline_runs()) > 1
+
+    para.set_text("A completely different sentence.")
+    assert para.runs == []
+    assert [r.text for r in para.inline_runs()] == ["A completely different sentence."]
+
+    # Even a caller that forgets and assigns content directly stays safe.
+    para2 = next(n for n in graph.nodes() if n.content.startswith("One sentence"))
+    para2.runs = [__import__("app.docos.graph", fromlist=["Run"]).Run(text="stale")]
+    para2.content = "new words entirely"
+    assert [r.text for r in para2.inline_runs()] == ["new words entirely"]

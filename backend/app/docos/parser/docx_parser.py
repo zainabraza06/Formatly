@@ -18,7 +18,7 @@ from docx.oxml.ns import qn
 from docx.table import Table as _Table
 from docx.text.paragraph import Paragraph as _Paragraph
 
-from app.docos.graph import DocumentGraph, Node, NodeType, Style
+from app.docos.graph import DocumentGraph, Node, NodeType, Run, Style, merge_runs
 
 _HEADING_STYLES = ("heading", "title")
 _REFERENCE_HINTS = ("reference", "bibliography", "works cited")
@@ -180,6 +180,7 @@ def _paragraph_node(para: _Paragraph, in_references: bool) -> Optional[Node]:
         content=text,
         style=_paragraph_style(para),
         metadata=meta,
+        runs=_paragraph_runs(para),
     )
 
 
@@ -346,6 +347,48 @@ def _theme_font(doc: _Doc, theme_ref: Optional[str]) -> Optional[str]:
     return None
 
 
+def _run_style(run) -> Style:
+    """What one run says about itself — and only that.
+
+    Anything it leaves unsaid stays None so it inherits from the paragraph, the
+    same way it does in Word. Resolving it here instead would freeze the
+    paragraph's formatting into every run, and a later "make the body 12pt"
+    would appear to do nothing.
+    """
+    f = run.font
+    color = None
+    if f.color is not None and f.color.rgb is not None:
+        color = f"#{str(f.color.rgb)}"
+
+    vertical = None
+    if getattr(f, "superscript", None):
+        vertical = "superscript"
+    elif getattr(f, "subscript", None):
+        vertical = "subscript"
+
+    return Style(
+        font_family=f.name or None,
+        font_size=float(f.size.pt) if f.size is not None else None,
+        bold=None if run.bold is None else bool(run.bold),
+        italic=None if run.italic is None else bool(run.italic),
+        underline=None if run.underline is None else bool(run.underline),
+        color=color,
+        vertical_align=vertical,
+    )
+
+
+def _paragraph_runs(para: _Paragraph) -> list[Run]:
+    """The paragraph's inline formatting, or nothing when it has none.
+
+    A paragraph formatted alike throughout needs no runs — its `style` already
+    says everything — so the common case stays as small as it was.
+    """
+    runs = merge_runs(Run(text=r.text or "", style=_run_style(r)) for r in para.runs)
+    if len(runs) <= 1:
+        return []
+    return runs
+
+
 def _paragraph_style(para: _Paragraph) -> Style:
     """Aggregate run formatting to a paragraph-level style (majority wins)."""
     # Each entry is (value, weight), the weight being how many characters carry
@@ -358,6 +401,12 @@ def _paragraph_style(para: _Paragraph) -> Style:
     colors: list[tuple[str, int]] = []
     families: list[tuple[str, int]] = []
 
+    # What the paragraph's style says, so a run that states nothing can still
+    # vote with the value it actually inherits. Without this only the runs that
+    # spoke up counted, and one bold word carried a whole paragraph.
+    from_style = _style_font(getattr(para, "style", None))
+    emphasis_stated = False
+
     for run in para.runs:
         f = run.font
         weight = len(run.text or "")
@@ -365,35 +414,41 @@ def _paragraph_style(para: _Paragraph) -> Style:
             continue                      # an empty run describes no text
         if f.size is not None:
             sizes.append((f.size.pt, weight))
-        if run.bold is not None:
-            bolds.append((bool(run.bold), weight))
-        if run.italic is not None:
-            italics.append((bool(run.italic), weight))
-        if run.underline is not None:
-            underlines.append((bool(run.underline), weight))
         if f.color is not None and f.color.rgb is not None:
             colors.append((f"#{str(f.color.rgb)}", weight))
         if f.name:
             families.append((f.name, weight))
 
-    # Runs win where they say something; otherwise the paragraph's own style,
-    # and the styles it inherits from, decide. Emphasis is included: a run that
-    # says nothing about italic is not a run that is upright.
-    if not (families and sizes and bolds and italics and underlines and colors):
-        from_style = _style_font(getattr(para, "style", None))
-        length = len(para.text or "") or 1
-        if not families and from_style.name:
-            families.append((from_style.name, length))
-        if not sizes and from_style.size:
-            sizes.append((from_style.size, length))
-        if not bolds and from_style.bold is not None:
-            bolds.append((from_style.bold, length))
-        if not italics and from_style.italic is not None:
-            italics.append((from_style.italic, length))
-        if not underlines and from_style.underline is not None:
-            underlines.append((from_style.underline, length))
-        if not colors and from_style.color:
-            colors.append((from_style.color, length))
+        for value, inherited, votes in (
+            (run.bold, from_style.bold, bolds),
+            (run.italic, from_style.italic, italics),
+            (run.underline, from_style.underline, underlines),
+        ):
+            if value is not None or inherited is not None:
+                emphasis_stated = True
+            # Unstated on both the run and the style means Word's own default,
+            # which is upright, unbolded and unlined — a real vote, not silence.
+            votes.append((bool(value if value is not None else inherited), weight))
+
+    # A paragraph with no runs at all (or none carrying text) still has a style.
+    length = len(para.text or "") or 1
+    if not families and from_style.name:
+        families.append((from_style.name, length))
+    if not sizes and from_style.size:
+        sizes.append((from_style.size, length))
+    if not colors and from_style.color:
+        colors.append((from_style.color, length))
+    if not bolds and from_style.bold is not None:
+        bolds.append((from_style.bold, length)); emphasis_stated = True
+    if not italics and from_style.italic is not None:
+        italics.append((from_style.italic, length)); emphasis_stated = True
+    if not underlines and from_style.underline is not None:
+        underlines.append((from_style.underline, length)); emphasis_stated = True
+
+    # Nobody ever mentioned emphasis, so the node says nothing about it either
+    # rather than asserting a bold=False that would override a future style.
+    if not emphasis_stated:
+        bolds = italics = underlines = []
 
     align = None
     if para.alignment is not None:

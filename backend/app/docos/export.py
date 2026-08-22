@@ -135,8 +135,11 @@ def _paragraph(doc: Document, node: Node, page: dict[str, Any]):
             pass
 
     _apply_paragraph_format(paragraph, node)
-    if node.content:
-        _apply_run(paragraph.add_run(node.content), node, page, heading=bool(level))
+    # One Word run per formatted piece, so a bold phrase or a superscript
+    # citation comes back out of the file the way it went in.
+    for piece in node.inline_runs():
+        _apply_run(paragraph.add_run(piece.text), node, page,
+                   heading=bool(level), inline=piece.style)
     return paragraph
 
 
@@ -157,8 +160,11 @@ def _apply_paragraph_format(paragraph, node: Node) -> None:
             setattr(pf, attr, Pt(float(value)))
 
 
-def _apply_run(run, node: Node, page: dict[str, Any], heading: bool = False) -> None:
-    style = node.style
+def _apply_run(run, node: Node, page: dict[str, Any], heading: bool = False,
+               inline: Optional[Style] = None) -> None:
+    # The run's own formatting wins where it states any; everything it leaves
+    # unstated it inherits from the paragraph, exactly as Word resolves it.
+    style = node.style.merged(inline) if inline is not None else node.style
     font = style.font_family or page.get("default_font") or ""
     if font:
         run.font.name = font
@@ -174,17 +180,25 @@ def _apply_run(run, node: Node, page: dict[str, Any], heading: bool = False) -> 
         # Word's built-in heading styles are blue; the document decides colour,
         # so an unstated one is black rather than the template's accent.
         run.font.color.rgb = RGBColor(0, 0, 0)
-    if style.bold:
-        run.font.bold = True
-    if style.italic:
-        run.font.italic = True
-    if style.underline:
-        run.font.underline = True
+    # True is written plainly. False is written only when there is something to
+    # cancel — a Heading style is bold in Word, and a paragraph can be italic —
+    # because writing it everywhere else would state on every run what the file
+    # never said, and the document would come back noisier than it went in.
+    for attr in ("bold", "italic", "underline"):
+        resolved = getattr(style, attr)
+        if resolved:
+            setattr(run.font, attr, True)
+        elif resolved is False and (heading or getattr(node.style, attr)):
+            setattr(run.font, attr, False)
     if style.color:
         try:
             run.font.color.rgb = RGBColor.from_string(str(style.color).lstrip("#").upper())
         except (ValueError, AttributeError):
             pass
+    if style.vertical_align == "superscript":
+        run.font.superscript = True
+    elif style.vertical_align == "subscript":
+        run.font.subscript = True
 
 
 def _rule(doc: Document, meta: dict[str, Any]) -> None:

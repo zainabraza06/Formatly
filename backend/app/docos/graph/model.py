@@ -68,6 +68,9 @@ class Style(BaseModel):
     color: Optional[str] = None          # hex, e.g. "#003366"
     highlight: Optional[str] = None      # hex or named
     alignment: Optional[str] = None      # left | center | right | justify
+    # Inline only: a citation marker or a chemical formula raises or lowers a
+    # few characters without disturbing the line they sit on.
+    vertical_align: Optional[str] = None  # superscript | subscript
 
     def merged(self, patch: "Style | dict[str, Any]") -> "Style":
         """Return a copy with non-None fields of `patch` overlaid."""
@@ -77,6 +80,41 @@ class Style(BaseModel):
             if v is not None and k in data:
                 data[k] = v
         return Style(**data)
+
+
+class Run(BaseModel):
+    """A stretch of text inside a paragraph that is formatted as one piece.
+
+    Word stores a paragraph as a sequence of these, and a paragraph whose words
+    are not all formatted alike cannot be described without them: a bold phrase
+    mid-sentence, an italic term, a superscript citation. `style` holds only what
+    the run itself states — None still means "inherit", here from the paragraph.
+    """
+
+    text: str = ""
+    style: Style = Field(default_factory=Style)
+
+    def same_formatting_as(self, other: "Run") -> bool:
+        return self.style.model_dump() == other.style.model_dump()
+
+
+def merge_runs(runs: Iterable[Run]) -> list[Run]:
+    """Join neighbours that are formatted alike, and drop empty ones.
+
+    Word splits runs wherever it likes — a spell-check boundary, a saved
+    revision — so the same sentence can arrive as a dozen identically formatted
+    pieces. Merging keeps the model describing the document rather than the
+    editing history that produced it.
+    """
+    out: list[Run] = []
+    for run in runs:
+        if not run.text:
+            continue
+        if out and out[-1].same_formatting_as(run):
+            out[-1] = Run(text=out[-1].text + run.text, style=out[-1].style)
+        else:
+            out.append(run.model_copy(deep=True))
+    return out
 
 
 def _new_node_id() -> str:
@@ -90,6 +128,10 @@ class Node(BaseModel):
     style: Style = Field(default_factory=Style)
     metadata: dict[str, Any] = Field(default_factory=dict)
     children: list["Node"] = Field(default_factory=list)
+    # How `content` is formatted piece by piece. Empty means the whole node is
+    # formatted alike, by `style` — which is every node that came from anywhere
+    # but a .docx, so nothing has to know about runs to work.
+    runs: list[Run] = Field(default_factory=list)
 
     def walk(self) -> Iterator["Node"]:
         """Depth-first pre-order traversal including self."""
@@ -97,8 +139,41 @@ class Node(BaseModel):
         for child in self.children:
             yield from child.walk()
 
+    # ── inline formatting ───────────────────────────────────────────────────
+    def runs_text(self) -> str:
+        return "".join(run.text for run in self.runs)
+
+    def runs_describe_content(self) -> bool:
+        """Do the runs still spell out `content`?
+
+        `content` is the text of record. Anything that rewrites it — an AI
+        rewrite, a replace action, a restored version — is describing new words,
+        and the old words' formatting no longer has anything to attach to.
+        Rather than require every such caller to remember the runs, the runs are
+        checked against the text and ignored when they have gone stale.
+        """
+        return bool(self.runs) and self.runs_text() == self.content
+
+    def inline_runs(self) -> list["Run"]:
+        """The node's text as formatted pieces — always safe to render.
+
+        Falls back to one unformatted run covering the whole content, which
+        renders exactly as the node did before runs existed.
+        """
+        if self.runs_describe_content():
+            return self.runs
+        return [Run(text=self.content)] if self.content else []
+
+    def set_text(self, text: str) -> None:
+        """Replace the words, dropping inline formatting that described the old
+        ones. The paragraph's own `style` survives, because that describes the
+        paragraph rather than any particular word in it."""
+        self.content = text
+        self.runs = []
+
 
 Node.model_rebuild()
+Run.model_rebuild()
 
 
 class DocumentGraph(BaseModel):
