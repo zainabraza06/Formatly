@@ -31,6 +31,10 @@ class ActionType(str, Enum):
     MERGE = "merge"
     SPLIT = "split"
     NORMALIZE = "normalize"
+    # Rewrite the text of the nodes in scope. Unlike replace, which needs a
+    # literal find/with, this carries an instruction and is resolved by a
+    # model that is shown the actual text.
+    REWRITE = "rewrite"
 
 
 TARGETS: frozenset[str] = frozenset(TARGET_TO_TYPES.keys())
@@ -40,7 +44,7 @@ _NEEDS_SCOPE = {
     ActionType.SELECT, ActionType.FORMAT, ActionType.DELETE, ActionType.HIGHLIGHT,
     ActionType.JUSTIFY, ActionType.ALIGN, ActionType.RESIZE, ActionType.MOVE,
     ActionType.COPY, ActionType.REPLACE, ActionType.MERGE, ActionType.SPLIT,
-    ActionType.NORMALIZE,
+    ActionType.NORMALIZE, ActionType.REWRITE,
 }
 
 

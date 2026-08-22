@@ -204,6 +204,33 @@ class ExecutionEngine:
         yield Event(name=EventName.FORMAT_FINISHED, payload={"count": len(nodes)})
         return [n.id for n in nodes]
 
+    def _h_rewrite(self, g, action, i, selection) -> Iterator[Event]:
+        """Apply the new text a rewrite resolved to.
+
+        The text itself comes from a model that had to be shown the document,
+        which is I/O the executor does not do — so the service resolves it first
+        and records the result in `params.edits`. Carrying the resolved text
+        rather than the instruction is what makes the action replayable: a
+        version is stored as its action log and replayed to materialise the
+        graph, and asking a model again would give different words every time.
+        """
+        edits = action.params.get("edits") or {}
+        if not isinstance(edits, dict):
+            edits = {}
+
+        yield Event(name=EventName.FORMAT_STARTED,
+                    payload={"rewrite": True, "total": len(edits)})
+        touched: list[str] = []
+        for node_id, text in edits.items():
+            node = g.get(node_id)
+            if node is not None and isinstance(text, str) and text.strip():
+                node.content = text
+                touched.append(node_id)
+                yield Event(name=EventName.FORMAT_PROGRESS,
+                            payload={"id": node_id, "index": len(touched) - 1})
+        yield Event(name=EventName.FORMAT_FINISHED, payload={"count": len(touched)})
+        return touched
+
     def _h_merge(self, g, action, i, selection) -> Iterator[Event]:
         nodes = self._scope(g, action, selection)
         if len(nodes) < 2:
@@ -266,6 +293,7 @@ class ExecutionEngine:
         ActionType.INSERT: _h_insert,
         ActionType.MOVE: _h_move,
         ActionType.NORMALIZE: _h_normalize,
+        ActionType.REWRITE: _h_rewrite,
         ActionType.MERGE: _h_merge,
         ActionType.SPLIT: _h_split,
         ActionType.COPY: _h_copy,

@@ -45,9 +45,18 @@ def build_user_message(command: str, graph: DocumentGraph) -> str:
         for n in graph.nodes()
         if n.type.value in {"heading", "subheading"}
     ][:40]
+    # A short sample of the document's own words. The planner does not rewrite
+    # anything, but without seeing any prose it cannot tell an instruction about
+    # the text from one about the layout.
+    sample = [
+        n.content[:200]
+        for n in graph.nodes()
+        if n.type.value in {"body", "paragraph"} and n.content.strip()
+    ][:6]
     context = {
         "instruction": command,
         "document_node_counts": counts,
         "headings": outline,
+        "text_sample": sample,
     }
     return "Produce the JSON action batch for:\n" + json.dumps(context, indent=2)
