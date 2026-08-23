@@ -6,7 +6,8 @@ from typing import Any
 
 from fastapi.responses import FileResponse
 from fastapi import (
-    APIRouter, Body, Depends, File, HTTPException, UploadFile, WebSocket, WebSocketDisconnect,
+    APIRouter, BackgroundTasks, Body, Depends, File, HTTPException, UploadFile, WebSocket,
+    WebSocketDisconnect,
 )
 
 from app.docos.auth import get_current_user, user_from_token
@@ -22,21 +23,46 @@ def list_documents(user: User = Depends(get_current_user)) -> list[dict[str, Any
     return get_service().list_documents(owner_id=user.id)
 
 
+async def _read_after_import(doc_id: str, owner_id: str) -> None:
+    """Read a freshly imported document through once, in the background.
+
+    The import answers straight away — nobody should wait on a model to see
+    their own document — and the reading follows, announcing itself page by page
+    to whoever is watching the document. By the time an instruction arrives, the
+    assistant has usually read the thing it is being asked about.
+    """
+    hub = get_hub()
+
+    async def emit(message: dict[str, Any]) -> None:
+        await hub.broadcast(doc_id, message)
+
+    try:
+        await get_service().read_document(doc_id, emit, owner_id=owner_id)
+    except Exception as exc:  # a reading is an improvement, never a requirement
+        await emit({"event": "reading_finished",
+                    "payload": {"read": 0, "warnings": [str(exc)]}})
+
+
 @router.post("/import")
 async def import_document(
+    background: BackgroundTasks,
     file: UploadFile = File(...),
     user: User = Depends(get_current_user),
 ) -> dict[str, Any]:
     data = await file.read()
     title = (file.filename or "document").rsplit(".", 1)[0]
     try:
-        return get_service().import_docx(data, title=title, owner_id=user.id)
+        result = get_service().import_docx(data, title=title, owner_id=user.id)
     except Exception as exc:  # parse failure
         raise HTTPException(status_code=400, detail=f"failed to parse DOCX: {exc}")
 
+    background.add_task(_read_after_import, result["document_id"], user.id)
+    return result
+
 
 @router.post("/import-spec")
-def import_spec(payload: dict[str, Any] = Body(...),
+def import_spec(background: BackgroundTasks,
+                payload: dict[str, Any] = Body(...),
                 user: User = Depends(get_current_user)) -> dict[str, Any]:
     """Open a composed document in the editor, straight from its spec.
 
@@ -55,9 +81,14 @@ def import_spec(payload: dict[str, Any] = Body(...),
 
     title = str(payload.get("title") or spec.meta.title or "Untitled")
     try:
-        return get_service().import_spec(spec, title=title, owner_id=user.id)
+        result = get_service().import_spec(spec, title=title, owner_id=user.id)
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"could not build the document: {exc}")
+
+    # A composed document is read too: the editor should know it as well as one
+    # that arrived as a file.
+    background.add_task(_read_after_import, result["document_id"], user.id)
+    return result
 
 
 @router.get("/{doc_id}")

@@ -155,6 +155,36 @@ export function useDocOS() {
         setActiveId(p.id)
         return ITEM_DELAY
 
+      case 'reading_started':
+        setPanel((s) => ({ ...s, currentAction: 'Reading the document…', progress: null }))
+        return STEP_DELAY
+      case 'reading_progress': {
+        // The same sweep a rewrite shows, so an import that is being read looks
+        // like work rather than a document that will not open.
+        const ids: string[] = Array.isArray(p.ids) ? p.ids : []
+        if (ids.length) setFocusId(ids[0])
+        setPanel((s) => ({
+          ...s,
+          currentAction: `Reading page ${p.page ?? '?'} of ${p.of ?? '?'}…`,
+          progress: { done: (p.page ?? 1) - 1, total: p.of ?? 0 },
+        }))
+        return STEP_DELAY
+      }
+      case 'reading_finished':
+        setFocusId(null)
+        setPanel((s) => ({
+          ...s,
+          currentAction: p.read ? `Read ${p.read} section(s)` : 'Idle',
+          progress: null,
+        }))
+        return STEP_DELAY
+
+      case 'section_located':
+        // Say which part of the document an instruction was taken to mean, so a
+        // wrong guess is visible rather than mysterious.
+        setPanel((s) => ({ ...s, currentAction: `Working on “${p.heading}”` }))
+        return STEP_DELAY
+
       case 'rewrite_progress': {
         // The assistant reads a long document a page at a time. Following it
         // there turns "nothing seems to be happening" into visible progress.

@@ -113,6 +113,8 @@ export type DocOSEventName =
   | 'action_error' | 'version_committed' | 'version_changed'
   // The assistant reading a long document, a page at a time.
   | 'rewrite_progress' | 'rewrite_finished' | 'rewrite_fallback' | 'command_noop'
+  // Reading a document through once, when it first arrives.
+  | 'reading_started' | 'reading_progress' | 'reading_finished' | 'section_located'
   | 'control_noop' | 'compare_result' | 'error'
 
 export interface DocOSEvent {

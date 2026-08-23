@@ -444,3 +444,49 @@ def test_one_word_in_common_is_a_coincidence_not_a_match():
     # "detection" alone should not carry a section: too thin to act on.
     assert locate_section("the section", _BRIEF) is None
     assert locate_section("the part with the thing", _BRIEF) is None
+
+
+# ── a watcher that arrives a moment late ────────────────────────────────────
+
+def test_the_hub_replays_what_a_late_watcher_missed():
+    """A document is read as soon as it is imported, and the editor's socket
+    opens only once the page has loaded — so the first pages are announced to
+    an empty room."""
+    import asyncio
+    from app.docos.events.hub import EventHub
+
+    class FakeSocket:
+        def __init__(self):
+            self.sent = []
+
+        async def accept(self):
+            pass
+
+        async def send_json(self, message):
+            self.sent.append(message)
+
+    async def scenario():
+        hub = EventHub()
+        for page in (1, 2, 3):
+            await hub.broadcast("doc", {"event": "reading_progress", "payload": {"page": page}})
+
+        watcher = FakeSocket()
+        await hub.connect("doc", watcher)
+        return watcher.sent
+
+    replayed = asyncio.run(scenario())
+    assert [m["payload"]["page"] for m in replayed] == [1, 2, 3]
+    assert all(m["replayed"] for m in replayed), "a replay is marked as one"
+
+
+def test_the_hub_does_not_buffer_every_document_forever():
+    import asyncio
+    from app.docos.events.hub import EventHub, _ROOMS_BUFFERED
+
+    async def scenario():
+        hub = EventHub()
+        for i in range(_ROOMS_BUFFERED + 10):
+            await hub.broadcast(f"doc{i}", {"event": "x"})
+        return len(hub._recent)
+
+    assert asyncio.run(scenario()) <= _ROOMS_BUFFERED
