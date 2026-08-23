@@ -175,6 +175,17 @@ class DocOSService:
 
         batch = result.batch
         assert batch is not None
+
+        # A request that names a part of the document is pinned to that part.
+        # The planner is given the sections and what each is about and still
+        # answers "the part about the results" with a target that happens to
+        # share a word with it, so the match is made here instead.
+        placed = self._place_in_section(command, graph, doc_id, batch)
+        if placed is not None:
+            await emit({"event": "section_located",
+                        "payload": {"heading": placed["heading"],
+                                    "about": placed.get("about"),
+                                    "nodes": len(placed["node_ids"])}})
         await emit({"event": "command_parsed",
                     "payload": {"source": result.source, "provider": result.provider,
                                 "reasoning": batch.reasoning,
@@ -330,6 +341,31 @@ class DocOSService:
         await emit({"event": "version_changed",
                     "payload": {"op": kind, "version": info.to_dict()}})
         return {"ok": True, "control": kind, "version": info.to_dict(), "graph": graph.to_dict()}
+
+    def _place_in_section(self, command: str, graph, doc_id: str,
+                          batch) -> Optional[dict[str, Any]]:
+        """Pin a plan to the section the request names, if it names one.
+
+        Only actions the planner left unplaced are pinned: one that already
+        names its nodes has been told where to work, and a plan of several
+        actions is not second-guessed.
+        """
+        from app.docos.command.locate import locate_section
+        from app.docos.command.reading import brief_with_reading
+
+        unplaced = [a for a in batch.actions if not a.node_ids]
+        if not unplaced or len(batch.actions) > 2:
+            return None
+
+        section = locate_section(
+            command, brief_with_reading(graph, self._readings.get(doc_id, {})))
+        if section is None:
+            return None
+
+        for action in unplaced:
+            action.node_ids = list(section["node_ids"])
+            action.target = None
+        return section
 
     # ── helpers ───────────────────────────────────────────────────────────
     def _version_by_seq(self, doc_id: str, seq: int) -> str:

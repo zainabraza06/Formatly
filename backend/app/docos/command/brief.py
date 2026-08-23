@@ -137,6 +137,11 @@ def _sections(graph: DocumentGraph, headings: list[Node]) -> list[dict[str, Any]
                          if any(_MATHS.search(x.content or "")
                                 for x in [n, *n.walk()])),
         }
+        # The ids of what is in the section, so an instruction about a part of
+        # the document can act on that part. Capped: a planner's prompt is not
+        # the place to list a thesis node by node, and a request that means more
+        # than thirty paragraphs is better served by a target.
+        contents = [head.id] + [n.id for n in body][:30]
         sections.append({
             "id": head.id,
             "level": 1 if head.type is NodeType.HEADING else 2,
@@ -144,5 +149,6 @@ def _sections(graph: DocumentGraph, headings: list[Node]) -> list[dict[str, Any]
             "page": _page_of(head),
             "words": words,
             "holds": {k: v for k, v in holds.items() if v},
+            "node_ids": contents,
         })
     return sections

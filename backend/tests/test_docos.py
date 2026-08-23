@@ -403,3 +403,44 @@ def test_the_planner_is_told_what_the_document_is():
     assert "research paper" in message
     assert "maths_appears_in" in message
     assert "table_cell" in message, "so a plan can reach the equations in the table"
+
+
+# ── placing an instruction in the document ──────────────────────────────────
+
+_BRIEF = {"sections": [
+    {"heading": "I. INTRODUCTION", "about": "motivates automated fall detection",
+     "node_ids": ["a", "b"]},
+    {"heading": "III. RESULTS", "about": "reports 89.01% accuracy on held-out subjects",
+     "node_ids": ["c", "d"]},
+    {"heading": "II. METHOD", "about": "describes feature extraction per bin",
+     "node_ids": ["e", "f"]},
+]}
+
+
+def test_a_request_is_matched_to_the_section_it_describes():
+    """The reading is what makes this work: "accuracy" appears nowhere in the
+    heading "III. RESULTS", only in what the section was read to be about."""
+    from app.docos.command.locate import locate_section
+
+    assert locate_section("Make the section that reports the accuracy bold",
+                          _BRIEF)["heading"] == "III. RESULTS"
+    assert locate_section("Rewrite the part about the results to be more concise",
+                          _BRIEF)["heading"] == "III. RESULTS"
+    assert locate_section("tighten the section on feature extraction",
+                          _BRIEF)["heading"] == "II. METHOD"
+
+
+def test_a_request_about_the_whole_document_names_no_section():
+    from app.docos.command.locate import locate_section
+
+    assert locate_section("make every heading bold", _BRIEF) is None
+    assert locate_section("convert all latex equations", _BRIEF) is None
+    assert locate_section("justify the body paragraphs", _BRIEF) is None
+
+
+def test_one_word_in_common_is_a_coincidence_not_a_match():
+    from app.docos.command.locate import locate_section
+
+    # "detection" alone should not carry a section: too thin to act on.
+    assert locate_section("the section", _BRIEF) is None
+    assert locate_section("the part with the thing", _BRIEF) is None
