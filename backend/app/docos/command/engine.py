@@ -32,6 +32,16 @@ class CommandResult:
     control: Optional[ControlOp] = None
     provider: str = ""              # which LLM answered (or "heuristic")
     source: str = ""                # llm | heuristic | rule
+    # Why the planner was not used, when it was not. Empty on the happy path.
+    fell_back_because: str = ""
+
+
+# Verbs that ask for different words rather than a different appearance. A
+# request built from these cannot be satisfied by any formatting action.
+_WANTS_NEW_WORDS = re.compile(
+    r"\b(rewrite|reword|rephrase|paraphrase|convert|change|turn|translate|"
+    r"simplify|clarify|shorten|tighten|condense|summari[sz]e|expand|"
+    r"proofread|correct|fix)\b", re.IGNORECASE)
 
 
 class CommandEngine:
@@ -48,14 +58,18 @@ class CommandEngine:
 
         # LLM path
         try:
-            batch, provider = self._llm_actions(command, graph)
+            batch, provider = self._llm_actions(command, graph, reading)
             return CommandResult(kind="actions", batch=batch, provider=provider, source="llm")
-        except Exception:
-            pass
+        except Exception as exc:
+            # Why the planner was not used travels with the result. Swallowing
+            # it turned a mistake in this file — a name that did not exist —
+            # into every command quietly dropping to the heuristic, which no
+            # one could see from the outside.
+            reason = f"{type(exc).__name__}: {exc}"
 
-        # deterministic fallback
         batch = self._heuristic_actions(command)
-        return CommandResult(kind="actions", batch=batch, provider="heuristic", source="heuristic")
+        return CommandResult(kind="actions", batch=batch, provider="heuristic",
+                             source="heuristic", fell_back_because=reason)
 
     # ── control intents ───────────────────────────────────────────────────
     def _detect_control(self, command: str) -> Optional[ControlOp]:
@@ -76,7 +90,8 @@ class CommandEngine:
         return None
 
     # ── LLM path ──────────────────────────────────────────────────────────
-    def _llm_actions(self, command: str, graph: DocumentGraph) -> tuple[ActionBatch, str]:
+    def _llm_actions(self, command: str, graph: DocumentGraph,
+                     reading: Optional[dict[str, str]] = None) -> tuple[ActionBatch, str]:
         router = self._router
         if router is None:
             from app.services.router import get_router
@@ -133,6 +148,17 @@ class CommandEngine:
             actions.append(a(type="format", target=target or "heading",
                              style={"bold": True}))
             reasoning = "bold"
+        elif _WANTS_NEW_WORDS.search(c):
+            # A request to change what the text says, which no amount of
+            # formatting can do. The instruction is carried through as the user
+            # wrote it and resolved against the real text later; selecting
+            # something instead is how "convert the equations" came back Done
+            # with every equation still in place.
+            # A target is required by the schema; the service widens it to the
+            # whole document anyway unless the request named a part of it.
+            actions.append(a(type="rewrite", target=target or "body",
+                             params={"instruction": command.strip()}))
+            reasoning = "rewrite the text as asked"
         else:
             # last resort: select whatever target we can infer
             actions.append(a(type="select", target=target or "heading"))

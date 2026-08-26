@@ -86,7 +86,11 @@ export function useDocOS() {
           provider: p.provider || '',
           source: p.source || '',
           upcoming: actions.map((a) => `${a.type}${a.target ? ` · ${a.target}` : ''}`),
-          error: null,
+          // A plan made without the planner is worth saying so, with the reason.
+          // "via heuristic" on its own looks like a choice rather than a failure.
+          error: p.fell_back_because
+            ? `The planner could not be used (${p.fell_back_because}); this plan is a fallback.`
+            : null,
         }))
         return STEP_DELAY
       }
@@ -218,6 +222,16 @@ export function useDocOS() {
         return STEP_DELAY
       case 'action_error':
         setPanel((s) => ({ ...s, error: p.detail || p.error || 'error' }))
+        return STEP_DELAY
+
+      case 'command_noop':
+        // Nothing matched, so nothing changed. Saying "Done" here is how an
+        // instruction that did nothing came to look like it had worked.
+        setPanel((s) => ({
+          ...s,
+          currentAction: 'Nothing changed',
+          error: p.reason || 'nothing matched, so nothing changed',
+        }))
         return STEP_DELAY
 
       case 'batch_finished':

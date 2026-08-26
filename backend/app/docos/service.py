@@ -189,6 +189,10 @@ class DocOSService:
         await emit({"event": "command_parsed",
                     "payload": {"source": result.source, "provider": result.provider,
                                 "reasoning": batch.reasoning,
+                                # Said out loud when the planner was not used, so
+                                # a downgrade to the heuristic is visible instead
+                                # of being read off the provider name.
+                                "fell_back_because": result.fell_back_because,
                                 "actions": [a.model_dump(exclude_none=True) for a in batch.actions]}})
 
         # A text instruction is resolved before the structural actions run: it

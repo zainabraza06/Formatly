@@ -490,3 +490,81 @@ def test_the_hub_does_not_buffer_every_document_forever():
         return len(hub._recent)
 
     assert asyncio.run(scenario()) <= _ROOMS_BUFFERED
+
+
+# ── the planner is actually used ────────────────────────────────────────────
+
+def test_the_llm_path_is_taken_when_the_model_answers():
+    """A mistake inside `_llm_actions` — a name that did not exist — was caught
+    by a bare `except` and turned every command into a heuristic guess, with
+    nothing on the outside to show for it but the word "heuristic"."""
+    from app.docos.command import CommandEngine
+
+    class Router:
+        def chat(self, messages, max_tokens=None, **_kw):
+            return ('{"reasoning": "bold the headings", "actions": '
+                    '[{"type": "format", "target": "heading", "style": {"bold": true}}]}'), "fake", 0.1
+
+    graph = DocumentGraph(root=Node(type=NodeType.DOCUMENT, children=[
+        Node(type=NodeType.HEADING, content="I. INTRODUCTION"),
+    ]))
+    result = CommandEngine(router=Router()).parse("make the headings bold", graph)
+
+    assert result.source == "llm", "the planner answered, so its plan is the one used"
+    assert not result.fell_back_because
+    assert result.batch.actions[0].type.value == "format"
+
+
+def test_a_reading_reaches_the_planner_without_breaking_it():
+    """The signature bug: `reading` was threaded into the call and not into the
+    function, so passing one raised NameError and fell back silently."""
+    from app.docos.command import CommandEngine
+
+    seen: dict[str, str] = {}
+
+    class Router:
+        def chat(self, messages, max_tokens=None, **_kw):
+            seen["message"] = messages[-1]["content"]
+            return '{"reasoning": "r", "actions": [{"type": "select", "target": "heading"}]}', "fake", 0.1
+
+    graph = DocumentGraph(root=Node(type=NodeType.DOCUMENT, children=[
+        Node(type=NodeType.HEADING, content="III. RESULTS"),
+    ]))
+    result = CommandEngine(router=Router()).parse(
+        "select the headings", graph, {"III. RESULTS": "reports the accuracy"})
+
+    assert result.source == "llm"
+    assert "reports the accuracy" in seen["message"], "the reading travelled with the request"
+
+
+def test_a_failed_planner_says_why_it_fell_back():
+    from app.docos.command import CommandEngine
+
+    class Router:
+        def chat(self, *_a, **_kw):
+            raise RuntimeError("no providers reachable")
+
+    graph = DocumentGraph(root=Node(type=NodeType.DOCUMENT, children=[
+        Node(type=NodeType.BODY, content="text"),
+    ]))
+    result = CommandEngine(router=Router()).parse("make the headings bold", graph)
+
+    assert result.source == "heuristic"
+    assert "no providers reachable" in result.fell_back_because
+
+
+def test_the_heuristic_asks_for_a_rewrite_rather_than_selecting_something():
+    """"Change all the latex equations" cannot be satisfied by selecting."""
+    from app.docos.command import CommandEngine
+
+    engine = CommandEngine()
+    for command in ("change all latex equations into readable maths",
+                    "convert the equations",
+                    "simplify the abstract"):
+        batch = engine._heuristic_actions(command)
+        assert batch.actions[0].type.value == "rewrite", command
+        assert batch.actions[0].params["instruction"] == command
+
+    # and the formatting requests it does understand are untouched
+    assert engine._heuristic_actions("make headings bold").actions[0].type.value == "format"
+    assert engine._heuristic_actions("highlight figures").actions[0].type.value == "highlight"
