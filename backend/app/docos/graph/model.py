@@ -245,6 +245,16 @@ class DocumentGraph(BaseModel):
 
     def resolve_target(self, target: str) -> list[Node]:
         """Resolve a high-level action target to concrete nodes, in doc order."""
+        if target == "table_header":
+            # Not a node type but a role: the cells of a row the table treats as
+            # its heading. "The headings in the table" means these, and it used
+            # to reach the document's own headings instead.
+            return [cell
+                    for row in self.find_by_types([NodeType.TABLE_ROW])
+                    if (row.metadata or {}).get("header_row")
+                    for cell in row.children
+                    if cell.type is NodeType.TABLE_CELL]
+
         types = TARGET_TO_TYPES.get(target)
         if not types:
             return []

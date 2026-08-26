@@ -568,3 +568,69 @@ def test_the_heuristic_asks_for_a_rewrite_rather_than_selecting_something():
     # and the formatting requests it does understand are untouched
     assert engine._heuristic_actions("make headings bold").actions[0].type.value == "format"
     assert engine._heuristic_actions("highlight figures").actions[0].type.value == "highlight"
+
+
+# ── the headings in a table are not the document's headings ─────────────────
+
+def _table_docx() -> bytes:
+    import io
+    from docx import Document
+
+    d = Document()
+    d.add_heading("III. RESULTS", 1)
+    table = d.add_table(rows=3, cols=2)
+    for col, text in enumerate(["Activity", "Precision"]):
+        cell = table.cell(0, col)
+        cell.text = ""
+        cell.paragraphs[0].add_run(text).bold = True
+    for row, values in enumerate([["Walking", "0.94"], ["Falling", "0.89"]], start=1):
+        for col, value in enumerate(values):
+            table.cell(row, col).text = value
+
+    buf = io.BytesIO(); d.save(buf); return buf.getvalue()
+
+
+def test_a_tables_header_row_is_recognised():
+    graph = parse_docx_bytes(_table_docx(), title="T")
+    rows = [n for n in graph.nodes() if n.type is NodeType.TABLE_ROW]
+
+    assert rows[0].metadata.get("header_row") is True
+    assert not rows[1].metadata.get("header_row")
+
+
+def test_table_headers_and_document_headings_are_different_targets():
+    """"Make the headings in the table bold" used to bold every section title
+    in the paper and no table at all."""
+    graph = parse_docx_bytes(_table_docx(), title="T")
+
+    assert [c.content for c in graph.resolve_target("table_header")] == ["Activity", "Precision"]
+    assert [n.content for n in graph.resolve_target("heading")] == ["III. RESULTS"]
+
+
+def test_a_request_about_headings_in_a_table_finds_the_table():
+    from app.docos.command.engine import _guess_target
+
+    assert _guess_target("make all headings inside the table bold") == "table_header"
+    assert _guess_target("bold the table headers") == "table_header"
+    # and a request about the document's headings still means those
+    assert _guess_target("make every heading bold") == "heading"
+    assert _guess_target("make the table borders thicker") == "table"
+
+
+def test_formatting_the_table_headers_leaves_the_document_headings_alone():
+    from app.docos.actions import validate_batch
+
+    graph = parse_docx_bytes(_table_docx(), title="T")
+    batch = validate_batch({"actions": [
+        {"type": "format", "target": "table_header", "style": {"bold": True}}]})
+    result = ExecutionEngine().execute(graph, batch)
+
+    def bold_of(g):
+        return {n.content: n.style.bold for n in g.nodes() if n.content}
+
+    before, after = bold_of(graph), bold_of(result.graph)
+    assert after["Activity"] is True and after["Precision"] is True
+    assert before["Activity"] is not True, "the cells were not already bold in the model"
+    # Word's Heading 1 style is bold, so the point is that the action did not
+    # touch it — not that it is unbold.
+    assert after["III. RESULTS"] == before["III. RESULTS"], "the paper's own heading was left alone"

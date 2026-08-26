@@ -618,9 +618,31 @@ def _paragraph_style(para: _Paragraph) -> Style:
     )
 
 
+def _is_header_row(row, index: int) -> bool:
+    """Is this the table's header row?
+
+    Word says so outright when the row is set to repeat across pages
+    (`w:tblHeader`). Most tables never set it and simply bold the first row, so
+    that counts too. Either way it is a distinct thing from a document heading,
+    and "the headings in the table" means these.
+    """
+    try:
+        properties = row._tr.find(qn("w:trPr"))
+        if properties is not None and properties.find(qn("w:tblHeader")) is not None:
+            return True
+    except Exception:
+        pass
+
+    if index != 0:
+        return False
+    runs = [run for cell in row.cells for para in cell.paragraphs for run in para.runs
+            if (run.text or "").strip()]
+    return bool(runs) and all(run.bold for run in runs)
+
+
 def _table_node(table: _Table, doc: _Doc) -> Node:
     rows: list[Node] = []
-    for r in table.rows:
+    for row_index, r in enumerate(table.rows):
         cells: list[Node] = []
         for c in r.cells:
             # A cell's pictures come with it. Reading only c.text dropped any
@@ -638,7 +660,10 @@ def _table_node(table: _Table, doc: _Doc) -> Node:
                     metadata={},
                 )
             )
-        rows.append(Node(type=NodeType.TABLE_ROW, children=cells))
+        row_meta: dict = {}
+        if _is_header_row(r, row_index):
+            row_meta["header_row"] = True
+        rows.append(Node(type=NodeType.TABLE_ROW, children=cells, metadata=row_meta))
     meta: dict = {"rows": len(table.rows), "cols": len(table.columns)}
     # A long table Word split across pages carries lastRenderedPageBreak markers
     # inside its cells; count them so the total page count stays accurate.

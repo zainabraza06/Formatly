@@ -37,7 +37,10 @@ class ActionType(str, Enum):
     REWRITE = "rewrite"
 
 
-TARGETS: frozenset[str] = frozenset(TARGET_TO_TYPES.keys())
+# Targets that name a role rather than a node type, resolved by the graph.
+ROLE_TARGETS: frozenset[str] = frozenset({"table_header"})
+
+TARGETS: frozenset[str] = frozenset(TARGET_TO_TYPES.keys()) | ROLE_TARGETS
 
 # Operations that must name a target or explicit node ids to run.
 _NEEDS_SCOPE = {

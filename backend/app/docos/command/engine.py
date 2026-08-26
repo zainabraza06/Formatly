@@ -182,6 +182,13 @@ _TARGET_WORDS = {
 
 
 def _guess_target(text: str) -> Optional[str]:
+    # "the headings in the table" is about the table, not about the document's
+    # headings — which is what a plain word-by-word match returned, so the request
+    # bolded every section title in the paper and no table at all.
+    if (re.search(r"\b(headings?|headers?|titles?)\b", text)
+            and re.search(r"\b(tables?)\b", text)):
+        return "table_header"
+
     for word, target in _TARGET_WORDS.items():
         if re.search(rf"\b{re.escape(word)}\b", text):
             return target
