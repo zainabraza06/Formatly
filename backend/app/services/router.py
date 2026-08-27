@@ -46,11 +46,18 @@ _HANDSHAKE_SECONDS    = 30.0
 _TIMEOUT_OVERRIDE     = float(os.environ.get("LLM_TIMEOUT", "0")) or None
 
 
-def _timeout_for(max_tokens: int) -> float:
-    """Seconds to allow for a request budgeted at `max_tokens` of output."""
+def _timeout_for(max_tokens: int, requested: Optional[float] = None) -> float:
+    """Seconds to allow for a request budgeted at `max_tokens` of output.
+
+    A caller may ask for less. Deriving the deadline from the token budget is
+    right for a long reply and wrong for a short interactive one: a plan is a
+    few hundred bytes of JSON, and waiting the better part of a minute for it
+    before falling back to a rule leaves someone watching a still screen.
+    """
     if _TIMEOUT_OVERRIDE:
         return _TIMEOUT_OVERRIDE
-    return _HANDSHAKE_SECONDS + max(0, max_tokens) / _TOKENS_PER_SEC_FLOOR
+    derived = _HANDSHAKE_SECONDS + max(0, max_tokens) / _TOKENS_PER_SEC_FLOOR
+    return min(derived, requested) if requested else derived
 
 
 # ── Custom exceptions ─────────────────────────────────────────────────────────
@@ -152,14 +159,15 @@ class ProviderRouter:
 
     # ── per-provider callers ──────────────────────────────────────────────────
     def _call_mistral(self, messages: list[dict[str, str]], max_tokens: int,
-                      cancel: Optional[threading.Event] = None) -> str:
+                      cancel: Optional[threading.Event] = None,
+                      timeout: Optional[float] = None) -> str:
         import httpx
 
         # The request is synchronous and most of its life is spent waiting for
         # the first byte, so there is no loop to check a flag in. Closing the
         # client from a watcher thread tears down the connection underneath it,
         # which is what actually stops the wait.
-        client = httpx.Client(timeout=_timeout_for(max_tokens))
+        client = httpx.Client(timeout=_timeout_for(max_tokens, timeout))
         watcher = _CancelWatcher(cancel, client.close)
         try:
             with watcher:
@@ -202,6 +210,7 @@ class ProviderRouter:
         max_tokens: int = 1500,
         order: list[str] | None = None,
         cancel: Optional[threading.Event] = None,
+        timeout: Optional[float] = None,
     ) -> tuple[str, str, float]:
         """
         Send `messages` to the configured provider.
@@ -234,7 +243,7 @@ class ProviderRouter:
 
             try:
                 t0 = time.time()
-                text = _callers[provider](messages, max_tokens, cancel)
+                text = _callers[provider](messages, max_tokens, cancel, timeout)
                 return text, provider, round(time.time() - t0, 3)
 
             except GenerationCancelled:
@@ -247,7 +256,7 @@ class ProviderRouter:
             except ProviderTimeout:
                 self._cool(provider, _COOLDOWN_TIMEOUT)
                 errors[provider] = (
-                    f"timed out after {_timeout_for(max_tokens):.0f}s "
+                    f"timed out after {_timeout_for(max_tokens, timeout):.0f}s "
                     "(30s cooldown)"
                 )
 

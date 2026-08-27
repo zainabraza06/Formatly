@@ -43,6 +43,15 @@ export function AIPanel({ panel, running, disabled, onRun }: Props) {
  </div>
  </div>
 
+ {panel.reading && (
+ <div className="flex items-center gap-2 rounded-lg border border-line bg-surface-2 px-2.5 py-1.5 text-[11px] text-muted">
+ <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent" />
+ {panel.reading.of
+ ? `Reading the document — page ${panel.reading.page} of ${panel.reading.of}…`
+ : 'Reading the document…'}
+ </div>
+ )}
+
  <div className="flex gap-2">
  <input
  value={input}
@@ -82,7 +91,7 @@ export function AIPanel({ panel, running, disabled, onRun }: Props) {
  </div>
  ) : null}
 
- <div className="flex items-center gap-2 text-sm font-medium text-ink">
+ <div data-testid="current-action" className="flex items-center gap-2 text-sm font-medium text-ink">
  {running && <span className="h-2 w-2 animate-pulse rounded-full bg-ink" />}
  {panel.currentAction}
  </div>

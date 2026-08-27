@@ -24,11 +24,16 @@ export interface PanelState {
   history: HistoryEntry[]
   upcoming: string[]
   error: string | null
+  /** The assistant reading the document through, which happens on import and
+   *  runs alongside anything else. Its own line, so it cannot overwrite a
+   *  command's progress. */
+  reading: { page: number; of: number } | null
 }
 
 const EMPTY_PANEL: PanelState = {
   task: '', reasoning: '', provider: '', source: '',
   currentAction: 'Idle', progress: null, history: [], upcoming: [], error: null,
+  reading: null,
 }
 
 // pacing (ms) so operations animate one-by-one rather than instantly
@@ -40,6 +45,12 @@ export function useDocOS() {
   const [title, setTitle] = useState('')
   const [graph, setGraph] = useState<DocumentGraph | null>(null)
   const [status, setStatus] = useState<'idle' | 'ready' | 'running'>('idle')
+  // Read inside the event handler, which is created once and would otherwise
+  // close over the first render's status forever.
+  const statusRef = useRef(status)
+  useEffect(() => {
+    statusRef.current = status
+  }, [status])
   const [connected, setConnected] = useState(false)
 
   const [selectedIds, setSelectedIds] = useState<string[]>([])
@@ -160,27 +171,23 @@ export function useDocOS() {
         return ITEM_DELAY
 
       case 'reading_started':
-        setPanel((s) => ({ ...s, currentAction: 'Reading the document…', progress: null }))
+        setPanel((s) => ({ ...s, reading: { page: 0, of: 0 } }))
         return STEP_DELAY
       case 'reading_progress': {
-        // The same sweep a rewrite shows, so an import that is being read looks
-        // like work rather than a document that will not open.
+        // The assistant reads a long document a page at a time. It has its own
+        // line in the panel because it runs on its own schedule: writing it
+        // into the line a command uses meant a reading that finished mid-command
+        // replaced "Deleting…" with "Idle", and the command looked dead.
         const ids: string[] = Array.isArray(p.ids) ? p.ids : []
-        if (ids.length) setFocusId(ids[0])
-        setPanel((s) => ({
-          ...s,
-          currentAction: `Reading page ${p.page ?? '?'} of ${p.of ?? '?'}…`,
-          progress: { done: (p.page ?? 1) - 1, total: p.of ?? 0 },
-        }))
+        // Only follow the reading around the document when nothing else is
+        // using the page; a command's own focus outranks it.
+        if (ids.length && statusRef.current !== 'running') setFocusId(ids[0])
+        setPanel((s) => ({ ...s, reading: { page: p.page ?? 0, of: p.of ?? 0 } }))
         return STEP_DELAY
       }
       case 'reading_finished':
-        setFocusId(null)
-        setPanel((s) => ({
-          ...s,
-          currentAction: p.read ? `Read ${p.read} section(s)` : 'Idle',
-          progress: null,
-        }))
+        if (statusRef.current !== 'running') setFocusId(null)
+        setPanel((s) => ({ ...s, reading: null }))
         return STEP_DELAY
 
       case 'section_located':
@@ -322,16 +329,33 @@ export function useDocOS() {
 
   const runCommand = useCallback((command: string) => {
     if (!docId) return
-    setPanel((s) => ({ ...EMPTY_PANEL, task: command, history: s.history }))
+    // Say so immediately. The first event cannot arrive until the planner has
+    // answered, and a planner can take a minute or time out — during which the
+    // panel used to read "Idle", so a command that was working looked dead.
+    setPanel((s) => ({
+      ...EMPTY_PANEL, task: command, currentAction: 'Planning…', history: s.history,
+    }))
+    setStatus('running')
     setDiff(null)
+
+    const failed = (detail: string) => {
+      setStatus('ready')
+      setPanel((s) => ({ ...s, currentAction: 'Could not run', error: detail }))
+    }
+
     const ws = wsRef.current
     if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ command }))
+      try {
+        ws.send(JSON.stringify({ command }))
+      } catch (e) {
+        failed(e instanceof Error ? e.message : 'the connection dropped')
+      }
     } else {
       // REST fallback: replay collected events through the same paced queue
-      docosApi.command(docId, command).then((r) => {
-        ;(r.events || []).forEach((ev) => enqueue(ev as DocOSEvent))
-      })
+      docosApi.command(docId, command)
+        .then((r) => { (r.events || []).forEach((ev) => enqueue(ev as DocOSEvent)) })
+        // Without this a failed request left the panel saying "Planning…" for ever.
+        .catch((e) => failed(e instanceof Error ? e.message : 'the request failed'))
     }
   }, [docId, enqueue])
 

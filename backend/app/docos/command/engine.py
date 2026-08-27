@@ -103,6 +103,11 @@ class CommandEngine:
                 {"role": "user", "content": build_user_message(command, graph, reading)},
             ],
             max_tokens=900,
+            # A plan is a few hundred bytes of JSON. If it has not arrived in
+            # twenty seconds it is not coming, and the heuristic — which answers
+            # instantly and handles most requests — is a better use of the wait
+            # than another half minute of a still screen.
+            timeout=20,
         )
         raw = _extract_json(text)
         if raw is None:
