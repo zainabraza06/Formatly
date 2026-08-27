@@ -51,6 +51,12 @@ export function useDocOS() {
   useEffect(() => {
     statusRef.current = status
   }, [status])
+  // The same, for the graph: the event handler is created once, and needs to
+  // know what the document currently is without being rebuilt for every edit.
+  const graphRef = useRef(graph)
+  useEffect(() => {
+    graphRef.current = graph
+  }, [graph])
   const [connected, setConnected] = useState(false)
 
   const [selectedIds, setSelectedIds] = useState<string[]>([])
@@ -186,7 +192,13 @@ export function useDocOS() {
         return STEP_DELAY
       }
       case 'reading_finished':
-        if (statusRef.current !== 'running') setFocusId(null)
+        // Put the reader back where they started. Following the assistant
+        // through the document is the point of the sweep, but leaving someone
+        // on page five of a report they have not read a word of is not.
+        if (statusRef.current !== 'running') {
+          const first = graphRef.current?.root?.children?.[0]?.id
+          setFocusId(first ?? null)
+        }
         setPanel((s) => ({ ...s, reading: null }))
         return STEP_DELAY
 

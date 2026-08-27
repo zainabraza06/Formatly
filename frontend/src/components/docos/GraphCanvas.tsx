@@ -286,14 +286,20 @@ export function GraphCanvas({ graph, selectedIds, activeId, removingIds, marks, 
         <span className="pointer-events-none absolute right-3 top-1.5 text-[9px] font-medium uppercase tracking-wide text-neutral-300">
           Page {page + 1}
         </span>
-        <AnimatePresence mode="wait" initial={false}>
+        {/* `mode="wait"` empties the sheet between pages: the outgoing page has
+            to finish leaving before the incoming one is mounted, so every turn
+            shows blank paper for the length of the animation. On a forty-page
+            document that is most of what paging through it looks like. The
+            pages cross-fade in place instead, and briskly. */}
+        <AnimatePresence initial={false}>
           <motion.div
             key={page}
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -20 }}
-            transition={{ duration: 0.2 }}
-            className="h-full"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.12 }}
+            className="absolute inset-0 h-full"
+            style={{ padding: `${m.top}in ${m.right}in ${m.bottom}in ${m.left}in` }}
           >
             {currentPage.map((n) => (
               <NodeView
