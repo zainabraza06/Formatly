@@ -65,6 +65,11 @@ class ExecutionEngine:
         yield Event(name=EventName.BATCH_FINISHED, payload={"count": len(batch.actions)})
 
     # ── scope resolution ────────────────────────────────────────────────────
+    def scope_of(self, g: DocumentGraph, action: Action) -> list[Node]:
+        """What an action would work on. Lets a caller tell "found nothing to do"
+        from "found nothing", which read the same to anyone watching."""
+        return self._scope(g, action, [])
+
     @staticmethod
     def _scope(g: DocumentGraph, action: Action, selection: list[str]) -> list[Node]:
         if action.node_ids:

@@ -23,7 +23,19 @@ Progress = Callable[[dict[str, Any]], None]
 
 # A reading is a sentence per section, so the reply is short whatever the pass
 # holds. Small enough that a page never overruns it.
-_MAX_TOKENS = 700
+_MAX_TOKENS = 900
+
+# How much text to read at once. A rewrite has to send every word back, so its
+# passes must stay small; a reading sends back a sentence per section however
+# much it was given. Borrowing the rewrite's budget meant a forty-page report
+# took thirty-seven model calls to read, each one another chance for a busy
+# provider to fail.
+_READ_CHARS = 15000
+
+# The longest a single pass may take. Generous next to the few seconds a healthy
+# provider needs, and short enough that a struggling one cannot hold a long
+# document hostage.
+_PASS_SECONDS = 30
 
 SYSTEM = """You are reading one page of a document so that someone can act on it later.
 
@@ -32,7 +44,7 @@ Return ONLY JSON:
             "about": "<one sentence: what this part of the document says>"}]}
 
 Rules:
-- One note per distinct part of the page. Two or three is usual; never more than six.
+- One note per distinct part of the text. One per heading is usual; never more than ten.
 - Describe what the text says, not what it looks like. No formatting talk.
 - Quote the heading exactly as it appears so it can be matched.
 - Be specific: "reports 89% accuracy on held-out subjects" beats "presents results".
@@ -59,7 +71,7 @@ def read_document(
 
     about: dict[str, str] = {}
     failures: list[str] = []
-    batches = passes(nodes)
+    batches = passes(nodes, budget=_READ_CHARS)
 
     for index, batch in enumerate(batches, start=1):
         if cancel is not None and cancel.is_set():
@@ -77,6 +89,10 @@ def read_document(
                  {"role": "user", "content": json.dumps(payload, ensure_ascii=False)}],
                 max_tokens=_MAX_TOKENS,
                 cancel=cancel,
+                # Twelve passes at the derived deadline is ten minutes of a
+                # document not being understood. A reading is worth waiting for,
+                # but not that long, and a pass that misses is reported.
+                timeout=_PASS_SECONDS,
             )
         except Exception as exc:
             failures.append(f"page {index} of {len(batches)}: {exc}")

@@ -251,8 +251,15 @@ class DocOSService:
 
         if not changed and not rewrite_edits:
             # Nothing moved. Saying "done" here is how an instruction that
-            # matched nothing came to look like it had worked.
-            message = "nothing matched, so nothing changed"
+            # matched nothing came to look like it had worked. But "nothing
+            # matched" is only true when nothing was in scope: an instruction
+            # that found its nodes and had nothing to do — every heading already
+            # bold — has been carried out, and saying it failed is its own kind
+            # of lie.
+            reached = sum(len(self.executor.scope_of(graph, action))
+                          for action in batch.actions)
+            message = ("the document already looks that way" if reached
+                       else "nothing matched, so nothing changed")
             if rewrite_failures:
                 message += " (" + "; ".join(rewrite_failures[:3]) + ")"
             await emit({"event": "command_noop", "payload": {"reason": message}})

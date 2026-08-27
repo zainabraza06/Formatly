@@ -634,3 +634,27 @@ def test_formatting_the_table_headers_leaves_the_document_headings_alone():
     # Word's Heading 1 style is bold, so the point is that the action did not
     # touch it — not that it is unbold.
     assert after["III. RESULTS"] == before["III. RESULTS"], "the paper's own heading was left alone"
+
+
+# ── "nothing changed" is two different things ───────────────────────────────
+
+def test_a_request_the_document_already_satisfies_says_so():
+    """Every heading already bold is not the same as no headings at all, and
+    reporting both as "nothing matched" made a carried-out instruction look
+    like a failed one."""
+    from app.docos.execution import ExecutionEngine
+
+    graph = DocumentGraph(root=Node(type=NodeType.DOCUMENT, children=[
+        Node(type=NodeType.HEADING, content="I. INTRODUCTION", style=Style(bold=True)),
+        Node(type=NodeType.BODY, content="Some prose."),
+    ]))
+    batch = validate_batch({"actions": [
+        {"type": "format", "target": "heading", "style": {"bold": True}}]})
+
+    reached = ExecutionEngine().scope_of(graph, batch.actions[0])
+    assert reached, "the heading was found; there was simply nothing to do to it"
+
+    empty = DocumentGraph(root=Node(type=NodeType.DOCUMENT, children=[
+        Node(type=NodeType.BODY, content="No headings here."),
+    ]))
+    assert not ExecutionEngine().scope_of(empty, batch.actions[0]), "nothing matched"
