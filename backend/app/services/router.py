@@ -333,6 +333,24 @@ class ProviderRouter:
                 self._cool(provider, _COOLDOWN_ERROR)
                 errors[provider] = str(exc)[:120]
 
+        # Everything is cooling and nothing was tried. A cooldown exists to stop
+        # a failing provider being hammered, which is the right instinct when
+        # there is another provider to ask — and the wrong one when the only
+        # alternative is answering with a rule. The provider that recovers
+        # soonest gets one attempt, no retries, before that happens.
+        if errors and all(reason.startswith("cooldown") for reason in errors.values()):
+            soonest = min(errors, key=lambda name: self._cooldowns.get(name, 0))
+            if cancel is None or not cancel.is_set():
+                try:
+                    t0 = time.time()
+                    text = self._call_mistral(messages, max_tokens, cancel, timeout)
+                    self._cooldowns.pop(soonest, None)     # it answered; it is well
+                    return text, soonest, round(time.time() - t0, 3)
+                except GenerationCancelled:
+                    raise
+                except Exception as exc:
+                    errors[soonest] = f"{errors[soonest]}, then {str(exc)[:60]}"
+
         raise AllProvidersFailed(errors)
 
     def status(self) -> dict[str, Any]:

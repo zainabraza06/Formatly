@@ -113,3 +113,26 @@ def test_a_caller_may_ask_for_a_shorter_deadline():
     assert _timeout_for(900) == pytest.approx(52.5), "derived from the token budget"
     assert _timeout_for(900, 20) == 20, "a caller may ask for less"
     assert _timeout_for(200, 120) == pytest.approx(35.0), "but asking for more does not grant it"
+
+
+def test_a_cooling_provider_is_still_tried_when_it_is_the_only_one(monkeypatch):
+    """A cooldown means "ask someone else first". With no one else to ask, it
+    should not mean "answer with a rule instead of trying"."""
+    router, sent = _router(monkeypatch, [FakeResponse(200, "planned")])
+    router._cool("mistral", 30)
+
+    text, provider, _elapsed = router.chat([{"role": "user", "content": "hi"}])
+
+    assert text == "planned"
+    assert provider == "mistral"
+    assert len(sent) == 1, "one attempt, not the whole retry ladder"
+    assert "mistral" not in router._cooldowns, "it answered, so it is no longer cooling"
+
+
+def test_a_cooling_provider_that_is_still_broken_reports_both(monkeypatch):
+    router, _sent = _router(monkeypatch, [FakeResponse(503)])
+    router._cool("mistral", 30)
+
+    with pytest.raises(Exception) as caught:
+        router.chat([{"role": "user", "content": "hi"}])
+    assert "cooldown" in str(caught.value)

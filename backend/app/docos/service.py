@@ -20,6 +20,11 @@ from app.services.storage import new_id
 
 Emit = Callable[[dict[str, Any]], Awaitable[None]]
 
+# Above this many top-level nodes, exact pagination is skipped at import: the
+# cost grows with the document and what it produces is superseded by the
+# editor's own measurement. Roughly a fifteen-page report.
+_REPAGINATE_MAX_NODES = 150
+
 
 class DocOSService:
     def __init__(
@@ -113,11 +118,20 @@ class DocOSService:
         graph.title = title or "Untitled"
         # Exact pagination via LibreOffice when available; silently keeps the
         # marker heuristic otherwise.
+        #
+        # Only for documents short enough that it is not felt. Converting a
+        # forty-page report to PDF and reading every page back takes half a
+        # minute, and the import cannot answer until it finishes — half a minute
+        # of staring at nothing before your own document appears. What it buys
+        # is a page count and a rough node-to-page map, both of which the editor
+        # replaces within a frame of opening the document by measuring the real
+        # layout. So the long case pays for something it is about to discard.
         exact_pages: Optional[int] = None
-        try:
-            exact_pages = repaginate(graph, data)
-        except Exception:
-            exact_pages = None
+        if len(graph.root.children) <= _REPAGINATE_MAX_NODES:
+            try:
+                exact_pages = repaginate(graph, data)
+            except Exception:
+                exact_pages = None
         info = self.versions.init_document(doc_id, graph.title, graph, user=user, owner_id=owner_id)
         return {"document_id": doc_id, "title": graph.title,
                 "version": info.to_dict(), "graph": graph.to_dict(),

@@ -76,9 +76,37 @@ def build_user_message(command: str, graph: DocumentGraph,
     # section a request is about.
     context = {
         "instruction": command,
-        "document": brief_with_reading(graph, reading or {}),
+        "document": _for_prompt(brief_with_reading(graph, reading or {})),
         "document_node_counts": counts,
         "headings": outline,
         "text_sample": sample,
     }
-    return "Produce the JSON action batch for:\n" + json.dumps(context, indent=2)
+    # Compact rather than indented: the indentation of a fifty-section brief
+    # is a thousand tokens of whitespace.
+    return ("Produce the JSON action batch for:\n"
+            + json.dumps(context, separators=(",", ":")))
+
+
+# How much of a document's structure is worth sending. A long report has fifty
+# sections, and listing them all — each with the ids of everything inside it —
+# put thirty thousand characters in front of the planner, which is slow, costly,
+# and the difference between an answer and a timeout.
+_MAX_SECTIONS_IN_PROMPT = 25
+
+
+def _for_prompt(brief: dict) -> dict:
+    """The brief trimmed to what the planner can actually use.
+
+    Node ids are dropped. The planner is no longer what places an instruction
+    in a section — `locate.py` does that afterwards, deterministically — so the
+    ids were thousands of tokens spent telling it something it is not asked to
+    decide.
+    """
+    sections = brief.get("sections") or []
+    trimmed = [{k: v for k, v in section.items() if k != "node_ids"}
+               for section in sections[:_MAX_SECTIONS_IN_PROMPT]]
+
+    out = {**brief, "sections": trimmed}
+    if len(sections) > len(trimmed):
+        out["sections_omitted"] = len(sections) - len(trimmed)
+    return out
