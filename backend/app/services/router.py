@@ -20,6 +20,8 @@ import threading
 import time
 from typing import Any, Optional
 
+import httpx
+
 # ── Provider IDs ──────────────────────────────────────────────────────────────
 MISTRAL = "mistral"
 
@@ -30,10 +32,25 @@ _DEFAULT_MODELS: dict[str, str] = {
     MISTRAL: "mistral-large-latest",
 }
 
+# The stand-in when the model above is too busy to answer. Set the matching
+# MISTRAL_LIGHT_MODEL to change it, or to "" to turn it off.
+_LIGHT_MODELS: dict[str, str] = {
+    MISTRAL: "mistral-small-latest",
+}
+
 # ── Cooldown durations (seconds) ─────────────────────────────────────────────
 _COOLDOWN_RATE_LIMIT = 60
 _COOLDOWN_TIMEOUT    = 30
 _COOLDOWN_ERROR      = 10
+
+# "Service temporarily unavailable due to high load, please retry" is what the
+# API says when it is busy, and it often means it: a request that fails this way
+# frequently succeeds a second later. Spending the whole attempt on it — and
+# then cooling the provider off for ten seconds — turned a blip into two
+# commands planned by the heuristic.
+_RETRY_STATUSES = (500, 502, 503, 504)
+_RETRY_ATTEMPTS = 3
+_RETRY_BACKOFF  = 0.7
 
 # ── Request timeout ───────────────────────────────────────────────────────────
 # A fixed deadline cannot be right for both a 500-token edit and an 8000-token
@@ -149,6 +166,18 @@ class ProviderRouter:
         return os.environ.get({MISTRAL: "MISTRAL_MODEL"}[provider],
                               _DEFAULT_MODELS[provider])
 
+    def _lighter_model(self, provider: str) -> Optional[str]:
+        """A smaller model of the same family, for when the big one is busy.
+
+        The large models are the ones that run out of capacity under load. A
+        smaller one is usually still answering, and for a short structured reply
+        — a plan, a classification — it is a far better outcome than falling
+        back to a rule. Empty disables it.
+        """
+        lighter = os.environ.get({MISTRAL: "MISTRAL_LIGHT_MODEL"}[provider],
+                                 _LIGHT_MODELS.get(provider, ""))
+        return lighter if lighter and lighter != self._model(provider) else None
+
     def _in_cooldown(self, provider: str) -> tuple[bool, int]:
         exp = self._cooldowns.get(provider, 0)
         remaining = int(exp - time.time())
@@ -160,7 +189,8 @@ class ProviderRouter:
     # ── per-provider callers ──────────────────────────────────────────────────
     def _call_mistral(self, messages: list[dict[str, str]], max_tokens: int,
                       cancel: Optional[threading.Event] = None,
-                      timeout: Optional[float] = None) -> str:
+                      timeout: Optional[float] = None,
+                      model: Optional[str] = None) -> str:
         import httpx
 
         # The request is synchronous and most of its life is spent waiting for
@@ -179,7 +209,7 @@ class ProviderRouter:
                         "Accept":        "application/json",
                     },
                     json={
-                        "model":      self._model(MISTRAL),
+                        "model":      model or self._model(MISTRAL),
                         "messages":   messages,
                         "max_tokens": max_tokens,
                     },
@@ -201,6 +231,45 @@ class ProviderRouter:
             raise RateLimitExceeded(MISTRAL)
         resp.raise_for_status()
         return resp.json()["choices"][0]["message"]["content"]
+
+    def _call_mistral_with_retry(self, messages: list[dict[str, str]], max_tokens: int,
+                                 cancel: Optional[threading.Event] = None,
+                                 timeout: Optional[float] = None) -> str:
+        """`_call_mistral`, but a busy upstream is given another chance.
+
+        Only the statuses that mean "try again" are retried; a bad key or a
+        rate limit is answered once and reported. The wait grows a little each
+        time and the whole ladder stays inside the caller's patience.
+        """
+        last: Exception | None = None
+        for attempt in range(_RETRY_ATTEMPTS):
+            if cancel is not None and cancel.is_set():
+                raise GenerationCancelled()
+            try:
+                return self._call_mistral(messages, max_tokens, cancel, timeout)
+            except httpx.HTTPStatusError as exc:
+                if exc.response.status_code not in _RETRY_STATUSES:
+                    raise
+                last = exc
+            except ProviderTimeout:
+                # The deadline is the deadline; waiting again only spends more
+                # of it. The heuristic is a better use of the remaining time.
+                raise
+
+            if attempt + 1 < _RETRY_ATTEMPTS:
+                time.sleep(_RETRY_BACKOFF * (attempt + 1))
+
+        # Still busy. The large models are the ones that run short of capacity,
+        # so ask a smaller one rather than giving up on the model entirely.
+        lighter = self._lighter_model(MISTRAL)
+        if lighter is not None and (cancel is None or not cancel.is_set()):
+            try:
+                return self._call_mistral(messages, max_tokens, cancel, timeout, lighter)
+            except Exception:
+                pass
+
+        assert last is not None
+        raise last
 
     # ── public interface ──────────────────────────────────────────────────────
     def chat(
@@ -227,7 +296,7 @@ class ProviderRouter:
         AllProvidersFailed — when every configured provider fails.
         GenerationCancelled — when `cancel` was set.
         """
-        _callers = {MISTRAL: self._call_mistral}
+        _callers = {MISTRAL: self._call_mistral_with_retry}
         errors: dict[str, str] = {}
 
         for provider in (order or DEFAULT_ORDER):
