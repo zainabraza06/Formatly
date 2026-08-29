@@ -30,7 +30,14 @@ class FakeResponse:
 
 
 def _router(monkeypatch, responses: list, *, key: str = "k") -> tuple[ProviderRouter, list[dict]]:
-    """A router whose HTTP calls return `responses` in turn, recording each one."""
+    """A router whose HTTP calls return `responses` in turn, recording each one.
+
+    The models are pinned here rather than inherited: a developer whose own .env
+    names the small model as primary would otherwise see these tests fail for a
+    reason that has nothing to do with the code.
+    """
+    monkeypatch.setenv("MISTRAL_MODEL", "mistral-large-latest")
+    monkeypatch.setenv("MISTRAL_LIGHT_MODEL", "mistral-small-latest")
     router = ProviderRouter()
     monkeypatch.setattr(router, "_key", lambda _p: key)
     monkeypatch.setattr("app.services.router.time.sleep", lambda _s: None)
@@ -136,3 +143,17 @@ def test_a_cooling_provider_that_is_still_broken_reports_both(monkeypatch):
     with pytest.raises(Exception) as caught:
         router.chat([{"role": "user", "content": "hi"}])
     assert "cooldown" in str(caught.value)
+
+
+def test_a_model_the_account_cannot_use_is_swapped_not_retried(monkeypatch):
+    """403 "not available in your subscription tier" is permanent for that
+    model and irrelevant to the next one. Retrying it wastes the request; the
+    lighter model is usually the one a tier includes."""
+    router, sent = _router(monkeypatch, [FakeResponse(403), FakeResponse(200, "planned")])
+
+    text, _provider, _elapsed = router.chat([{"role": "user", "content": "hi"}])
+
+    assert text == "planned"
+    assert len(sent) == 2, "asked once, then asked a different model"
+    assert sent[0]["model"] == "mistral-large-latest"
+    assert sent[1]["model"] == "mistral-small-latest"

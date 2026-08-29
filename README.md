@@ -312,7 +312,7 @@ Copy from `backend/.env.example` and `frontend/.env.example`. Real `.env` files 
 | Name | Default | Meaning |
 |------|---------|---------|
 | `MISTRAL_API_KEY` | empty | Required for LLM. Empty: generation errors; editor uses heuristics |
-| `MISTRAL_MODEL` | `mistral-large-latest` | Chat model id |
+| `MISTRAL_MODEL` | `mistral-large-latest` | Chat model id. If the API answers `403 "This model is not available in your subscription tier"`, the account's plan does not include this model — set `mistral-small-latest`. The router falls back to it by itself (`MISTRAL_LIGHT_MODEL`), but naming it here saves a wasted request on every call. |
 | `LLM_TIMEOUT` | unset | Seconds. Unset: `30 + max_tokens / 40` (measured ~60 tok/s; floor is conservative) |
 | `DOCOS_SECRET` | generated file | Signs auth tokens. Unset: random key written to `<data>/secret.key` so restarts keep tokens |
 | `DOCPILOT_DATA_DIR` | `backend/.data` | Documents, charts, SQLite, users, secret |

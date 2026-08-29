@@ -52,6 +52,13 @@ _RETRY_STATUSES = (500, 502, 503, 504)
 _RETRY_ATTEMPTS = 3
 _RETRY_BACKOFF  = 0.7
 
+# "This model is not available in your subscription tier", and its cousin, a
+# model name the account cannot see. Asking again changes nothing — the account
+# will not have grown a subscription in seven tenths of a second — but asking a
+# *different* model is exactly the right move, and the lighter one is usually
+# the one a tier includes.
+_WRONG_MODEL_STATUSES = (403, 404)
+
 # ── Request timeout ───────────────────────────────────────────────────────────
 # A fixed deadline cannot be right for both a 500-token edit and an 8000-token
 # document: measured throughput is ~60 tok/s, so a full-length reply needs over
@@ -248,7 +255,11 @@ class ProviderRouter:
             try:
                 return self._call_mistral(messages, max_tokens, cancel, timeout)
             except httpx.HTTPStatusError as exc:
-                if exc.response.status_code not in _RETRY_STATUSES:
+                status = exc.response.status_code
+                if status in _WRONG_MODEL_STATUSES:
+                    last = exc
+                    break          # not a wait; a different model is needed
+                if status not in _RETRY_STATUSES:
                     raise
                 last = exc
             except ProviderTimeout:
