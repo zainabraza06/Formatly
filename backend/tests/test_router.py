@@ -220,3 +220,50 @@ def test_the_server_is_believed_about_how_long_to_wait(monkeypatch):
 
     router.chat([{"role": "user", "content": "hi"}], wait_on_rate_limit=True)
     assert 7 in waited, "it waited what the server asked for, not a guess"
+
+
+def test_a_sustained_rate_limit_is_out_waited_not_given_up_on(monkeypatch):
+    """Three quick retries are no answer to a limit measured over a minute.
+    The pass that tripped it lost four passages behind it."""
+    waited: list[float] = []
+    monkeypatch.setattr("app.services.router.time.sleep", waited.append)
+    router, sent = _router(
+        monkeypatch, [FakeResponse(429)] * 4 + [FakeResponse(200, "rewritten")])
+    monkeypatch.setattr("app.services.router.time.sleep", waited.append)
+
+    text, _provider, _elapsed = router.chat(
+        [{"role": "user", "content": "hi"}], wait_on_rate_limit=True)
+
+    assert text == "rewritten"
+    assert len(sent) == 5, "it kept asking"
+    assert waited == sorted(waited), "and waited longer each time"
+    assert max(waited) >= 10, "long enough to outlast a per-minute window"
+
+
+def test_a_patient_caller_sits_out_a_cooldown_rather_than_being_refused(monkeypatch):
+    """The pass that tripped the limit cools the provider; every pass behind it
+    used to be refused without being tried."""
+    slept: list[float] = []
+    router, sent = _router(monkeypatch, [FakeResponse(200, "rewritten")])
+    monkeypatch.setattr("app.services.router.time.sleep", slept.append)
+    router._cool("mistral", 60)
+
+    text, _provider, _elapsed = router.chat(
+        [{"role": "user", "content": "hi"}], wait_on_rate_limit=True)
+
+    assert text == "rewritten"
+    assert slept and slept[0] >= 55, "it waited the cooldown out"
+    assert len(sent) == 1
+    assert "mistral" not in router._cooldowns
+
+
+def test_an_impatient_caller_still_will_not_sit_out_a_cooldown(monkeypatch):
+    """Planning answers now, with the heuristic, rather than making someone
+    watch a still screen for a minute."""
+    router, sent = _router(monkeypatch, [FakeResponse(200, "planned")])
+    router._cool("mistral", 60)
+
+    # No wait_on_rate_limit: the one attempt is the cooldown bypass, not a wait.
+    text, _provider, _elapsed = router.chat([{"role": "user", "content": "hi"}])
+    assert text == "planned"
+    assert len(sent) == 1

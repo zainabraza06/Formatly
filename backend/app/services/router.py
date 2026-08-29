@@ -60,6 +60,15 @@ _RETRY_BACKOFF  = 0.7
 # finished, so this is usually all it takes.
 _RATE_LIMIT_PAUSE = 2.5
 
+# How many times a patient caller re-asks a provider that is rate limiting it.
+# More than the busy-server ladder, because a limit measured per minute needs
+# outwaiting rather than out-persisting.
+_RATE_LIMIT_ATTEMPTS = 5
+
+# The longest a patient caller will sit out a cooldown rather than give up on
+# the pass. Long enough to cover the minute a rate limit costs.
+_MAX_COOLDOWN_WAIT = 70
+
 # "This model is not available in your subscription tier", and its cousin, a
 # model name the account cannot see. Asking again changes nothing — the account
 # will not have grown a subscription in seven tenths of a second — but asking a
@@ -270,7 +279,12 @@ class ProviderRouter:
         is answered once, because asking again with it is pointless.
         """
         last: Exception | None = None
-        for attempt in range(_RETRY_ATTEMPTS):
+        rate_limited = 0
+        # A rate limit is waited out rather than counted against the busy-server
+        # ladder, so a provider that is only throttling does not exhaust it.
+        for attempt in range(_RETRY_ATTEMPTS + _RATE_LIMIT_ATTEMPTS):
+            if attempt - rate_limited >= _RETRY_ATTEMPTS:
+                break
             if cancel is not None and cancel.is_set():
                 raise GenerationCancelled()
             try:
@@ -280,10 +294,13 @@ class ProviderRouter:
                 # A plan has a heuristic to fall back on and a person watching,
                 # so it answers now; a rewrite pass has neither, and losing the
                 # passage is worse for everyone than a few seconds' pause.
-                if not wait_on_rate_limit or attempt + 1 >= _RETRY_ATTEMPTS:
+                if not wait_on_rate_limit or rate_limited + 1 >= _RATE_LIMIT_ATTEMPTS:
                     raise
                 last = exc
-                time.sleep(exc.retry_after or _RATE_LIMIT_PAUSE * (attempt + 1))
+                rate_limited += 1
+                # Doubling, because a limit that is still refusing after two
+                # seconds is measured over a longer window than two seconds.
+                time.sleep(exc.retry_after or _RATE_LIMIT_PAUSE * (2 ** rate_limited))
                 continue
 
             except httpx.HTTPStatusError as exc:
@@ -352,8 +369,19 @@ class ProviderRouter:
 
             in_cd, remaining = self._in_cooldown(provider)
             if in_cd:
-                errors[provider] = f"cooldown {remaining}s"
-                continue
+                # A caller that can wait, waits. Skipping here is what turned
+                # one rate-limited pass into four lost passages: the pass that
+                # tripped the limit cooled the provider for a minute, and every
+                # pass behind it was refused without being tried. A rewrite has
+                # nothing to fall back on, so a minute is a price worth paying.
+                if wait_on_rate_limit and remaining <= _MAX_COOLDOWN_WAIT:
+                    if cancel is not None and cancel.is_set():
+                        raise GenerationCancelled()
+                    time.sleep(remaining)
+                    self._cooldowns.pop(provider, None)
+                else:
+                    errors[provider] = f"cooldown {remaining}s"
+                    continue
 
             try:
                 t0 = time.time()
