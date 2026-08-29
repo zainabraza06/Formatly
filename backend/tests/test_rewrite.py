@@ -141,14 +141,30 @@ def test_a_failed_pass_is_reported_not_swallowed():
 
 
 def test_one_failed_pass_does_not_lose_the_others():
+    """A pass whose replies never parse is reported, and the rest still apply."""
     # comfortably over the pass budget, so there really are two passes
     graph = build(*["y" * 400 for _ in range(30)])
     nodes = rewritable(graph, [], "body")
     assert len(passes(nodes)) > 1
-    good = '{"edits": [{"id": "%s", "text": "edited"}]}' % nodes[-1].id
-    router = FakeRouter("garbage", good)
-    edits, failures = rewrite_nodes(graph, nodes, "x", router=router)
-    assert len(failures) >= 1
+    doomed = passes(nodes)[0][0].id
+
+    class Router:
+        """Nothing usable for the first pass, however often it is asked."""
+
+        def __init__(self):
+            self.sent = []
+
+        def chat(self, messages, max_tokens=None, **_kw):
+            body = messages[-1]["content"]
+            self.sent.append(body)
+            if doomed in body:
+                return "garbage", "fake", 0.1
+            nid = next(n.id for n in nodes if n.id in body)
+            return '{"edits": [{"id": "%s", "text": "edited"}]}' % nid, "fake", 0.1
+
+    edits, failures = rewrite_nodes(graph, nodes, "x", router=Router())
+
+    assert failures, "the pass that never answered usefully is reported"
     assert edits, "a later pass must still be applied"
 
 
@@ -229,22 +245,25 @@ def test_a_node_that_never_comes_back_is_reported_not_silently_skipped():
     assert failures, "the caller has to be able to say what was not edited"
 
 
-def test_a_retry_only_asks_about_the_nodes_it_missed():
+def test_a_retry_only_asks_about_the_nodes_a_broken_reply_missed():
+    """Retries are for a reply that arrived damaged. A whole reply is final,
+    however few nodes it mentions."""
     graph = build("alpha", "beta", "gamma", "delta")
     nodes = rewritable(graph, [], "body")
     ids = [n.id for n in nodes]
 
-    first = '{"edits": [{"id": "%s", "text": "ALPHA"}]}' % ids[0]
+    # Cut mid-string: the first edit is complete, the rest never arrived.
+    cut = '{"edits": [{"id": "%s", "text": "ALPHA"}, {"id": "%s", "text": "BET' % (ids[0], ids[1])
     rest = '{"edits": [%s]}' % ", ".join(
         '{"id": "%s", "text": "X"}' % nid for nid in ids[1:])
-    router = FakeRouter(first, rest, rest)
+    router = FakeRouter(cut, rest, rest, rest)
 
     rewrite_nodes(graph, nodes, "shout", router=router)
 
     retries = " ".join(router.sent[1:])
     assert ids[0] not in retries, "a node already edited is not asked about again"
     for nid in ids[1:]:
-        assert nid in retries, "every node it missed is asked about again"
+        assert nid in retries, "every node the broken reply missed is asked about again"
 
 
 # ── reading a document once ─────────────────────────────────────────────────
@@ -295,3 +314,31 @@ def test_a_reading_that_was_never_taken_leaves_the_brief_as_it_was():
         Node(type=NodeType.HEADING, content="I. INTRODUCTION"),
     ]))
     assert brief_with_reading(graph, {}) == document_brief(graph)
+
+
+def test_a_passage_the_instruction_does_not_touch_is_not_a_failure():
+    """"Convert the equations" over a document mostly without equations gets
+    {"edits": []} for most passes. Those paragraphs were considered and left
+    alone; re-asking cannot change that, and calling it a failure is a lie."""
+    graph = build("alpha", "beta")
+    nodes = rewritable(graph, [], "body")
+    router = FakeRouter('{"edits": []}')
+
+    edits, failures = rewrite_nodes(graph, nodes, "convert the equations", router=router)
+
+    assert edits == {}
+    assert not failures, "nothing failed; there was nothing to do"
+    assert len(router.sent) == 1, "and nothing was asked twice"
+
+
+def test_a_reply_that_covers_only_some_nodes_leaves_the_rest_alone():
+    graph = build("alpha", "beta", "gamma")
+    nodes = rewritable(graph, [], "body")
+    ids = [n.id for n in nodes]
+    router = FakeRouter('{"edits": [{"id": "%s", "text": "ALPHA"}]}' % ids[0])
+
+    edits, failures = rewrite_nodes(graph, nodes, "shout at alpha", router=router)
+
+    assert edits == {ids[0]: "ALPHA"}
+    assert not failures
+    assert len(router.sent) == 1, "beta and gamma were skipped on purpose"

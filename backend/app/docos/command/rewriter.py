@@ -213,9 +213,19 @@ def rewrite_nodes(
         else:
             error = None
 
-        covered = collect(_strict_json(text) or salvage_edits(text), batch) if text else set()
-        missed = [n for n in batch if n.id not in covered]
+        # A reply that parsed whole is the model's final word on this pass. The
+        # passages it left out are passages it decided the instruction does not
+        # touch — "no LaTeX in this paragraph" is the commonest — and asking
+        # again cannot change that. Treating them as missed re-asked every
+        # unchanged paragraph until the batch was a single node, and then
+        # reported each one as a failure that had never happened.
+        whole = _strict_json(text) if text else None
+        data = whole if whole is not None else (salvage_edits(text) if text else None)
+        covered = collect(data, batch)
+        if whole is not None:
+            return
 
+        missed = [n for n in batch if n.id not in covered]
         if not missed:
             return
         if len(batch) == 1 or not text:
