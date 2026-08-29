@@ -157,3 +157,31 @@ def test_a_model_the_account_cannot_use_is_swapped_not_retried(monkeypatch):
     assert len(sent) == 2, "asked once, then asked a different model"
     assert sent[0]["model"] == "mistral-large-latest"
     assert sent[1]["model"] == "mistral-small-latest"
+
+
+def test_the_ladder_walks_down_the_family(monkeypatch):
+    """A tier that excludes the large model usually includes the medium one, so
+    the next thing asked should be the next thing down — not the smallest."""
+    router, sent = _router(monkeypatch, [FakeResponse(403), FakeResponse(200, "planned")])
+    monkeypatch.setenv("MISTRAL_LIGHT_MODEL", "mistral-medium-latest,mistral-small-latest")
+
+    text, _provider, _elapsed = router.chat([{"role": "user", "content": "hi"}])
+
+    assert text == "planned"
+    assert [s["model"] for s in sent] == ["mistral-large-latest", "mistral-medium-latest"]
+
+
+def test_the_ladder_keeps_going_if_the_next_one_also_refuses(monkeypatch):
+    router, sent = _router(monkeypatch, [FakeResponse(403), FakeResponse(403), FakeResponse(200, "planned")])
+    monkeypatch.setenv("MISTRAL_LIGHT_MODEL", "mistral-medium-latest,mistral-small-latest")
+
+    router.chat([{"role": "user", "content": "hi"}])
+
+    assert [s["model"] for s in sent] == [
+        "mistral-large-latest", "mistral-medium-latest", "mistral-small-latest"]
+
+
+def test_the_model_in_use_is_not_offered_back_to_itself(monkeypatch):
+    monkeypatch.setenv("MISTRAL_MODEL", "mistral-medium-latest")
+    monkeypatch.setenv("MISTRAL_LIGHT_MODEL", "mistral-medium-latest,mistral-small-latest")
+    assert ProviderRouter()._lighter_models("mistral") == ["mistral-small-latest"]

@@ -32,10 +32,13 @@ _DEFAULT_MODELS: dict[str, str] = {
     MISTRAL: "mistral-large-latest",
 }
 
-# The stand-in when the model above is too busy to answer. Set the matching
-# MISTRAL_LIGHT_MODEL to change it, or to "" to turn it off.
-_LIGHT_MODELS: dict[str, str] = {
-    MISTRAL: "mistral-small-latest",
+# What to ask when the model above will not answer — busy, or not included in
+# the account's plan. Tried in order, largest first, because the reason to leave
+# a model is rarely a reason to leave its whole family. Set the matching
+# MISTRAL_LIGHT_MODEL to override with a comma-separated list, or "" to turn the
+# ladder off.
+_LIGHT_MODELS: dict[str, tuple[str, ...]] = {
+    MISTRAL: ("mistral-medium-latest", "mistral-small-latest"),
 }
 
 # ── Cooldown durations (seconds) ─────────────────────────────────────────────
@@ -173,17 +176,21 @@ class ProviderRouter:
         return os.environ.get({MISTRAL: "MISTRAL_MODEL"}[provider],
                               _DEFAULT_MODELS[provider])
 
-    def _lighter_model(self, provider: str) -> Optional[str]:
-        """A smaller model of the same family, for when the big one is busy.
+    def _lighter_models(self, provider: str) -> list[str]:
+        """Smaller models of the same family, largest first.
 
-        The large models are the ones that run out of capacity under load. A
-        smaller one is usually still answering, and for a short structured reply
-        — a plan, a classification — it is a far better outcome than falling
-        back to a rule. Empty disables it.
+        The big models are the ones that run out of capacity under load, and
+        the ones a cheaper plan leaves out. A smaller one is usually still
+        answering, and for a short structured reply — a plan, a classification
+        — it is a far better outcome than falling back to a rule. The model
+        already in use is not offered back. MISTRAL_LIGHT_MODEL overrides the
+        ladder with a comma-separated list; empty turns it off.
         """
-        lighter = os.environ.get({MISTRAL: "MISTRAL_LIGHT_MODEL"}[provider],
-                                 _LIGHT_MODELS.get(provider, ""))
-        return lighter if lighter and lighter != self._model(provider) else None
+        override = os.environ.get({MISTRAL: "MISTRAL_LIGHT_MODEL"}[provider])
+        ladder = (tuple(m.strip() for m in override.split(",") if m.strip())
+                  if override is not None else _LIGHT_MODELS.get(provider, ()))
+        current = self._model(provider)
+        return [m for m in ladder if m != current]
 
     def _in_cooldown(self, provider: str) -> tuple[bool, int]:
         exp = self._cooldowns.get(provider, 0)
@@ -270,14 +277,15 @@ class ProviderRouter:
             if attempt + 1 < _RETRY_ATTEMPTS:
                 time.sleep(_RETRY_BACKOFF * (attempt + 1))
 
-        # Still busy. The large models are the ones that run short of capacity,
-        # so ask a smaller one rather than giving up on the model entirely.
-        lighter = self._lighter_model(MISTRAL)
-        if lighter is not None and (cancel is None or not cancel.is_set()):
+        # The model would not answer. Work down the family rather than giving up
+        # on the provider: a plan from a smaller model beats a plan from a rule.
+        for lighter in self._lighter_models(MISTRAL):
+            if cancel is not None and cancel.is_set():
+                break
             try:
                 return self._call_mistral(messages, max_tokens, cancel, timeout, lighter)
             except Exception:
-                pass
+                continue
 
         assert last is not None
         raise last
