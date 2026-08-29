@@ -20,6 +20,7 @@ from docx.table import Table as _Table
 from docx.text.paragraph import Paragraph as _Paragraph
 
 from app.docos.graph import DocumentGraph, Node, NodeType, Run, Style, merge_runs
+from app.docos.parser.omml import paragraph_parts
 
 _W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 
@@ -129,7 +130,18 @@ def _paragraph_node(para: _Paragraph, in_references: bool,
                     default_size: Optional[float] = None) -> Optional[Node]:
     style_name = (para.style.name if para.style else "") or ""
     lname = style_name.lower()
-    text = para.text or ""
+
+    # `para.text` returns the w:t runs and nothing else, so a Word equation —
+    # stored as OMML beside them — was invisible. A paragraph holding only one
+    # looked empty and was dropped, taking the equation out of the document.
+    # The parts are read in order and the maths written as LaTeX between
+    # dollars, which is how the rest of the document writes maths and what an
+    # instruction about "the equations" already means.
+    parts = paragraph_parts(para)
+    maths = [(latex, element) for kind, latex, element in parts if kind == "maths"]
+    text = ("".join(latex if kind == "text" else f"${latex}$"
+                    for kind, latex, _element in parts)
+            if maths else (para.text or ""))
 
     # Page-boundary signals. `lastRenderedPageBreak` markers are written by Word
     # and record where each page actually broke on the last render — we use them
@@ -189,6 +201,12 @@ def _paragraph_node(para: _Paragraph, in_references: bool,
         if inferred is not None:
             node_type = inferred
     meta: dict = {"style_name": style_name, "level": _heading_level(lname)}
+    if maths:
+        from lxml import etree
+        meta["equations"] = [
+            {"latex": latex, "xml": etree.tostring(element, encoding="unicode")}
+            for latex, element in maths
+        ]
     meta.update(_spacing(para, spacing_defaults))
     _apply_breaks(meta, breaks_before)
     return Node(

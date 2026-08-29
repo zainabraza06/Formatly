@@ -359,3 +359,117 @@ def test_a_declared_heading_style_still_wins():
     graph = parse_docx_bytes(buf.getvalue(), title="D")
     kinds = [n.type.value for n in graph.nodes() if n.content]
     assert kinds == ["heading", "subheading"]
+
+
+# ── Word's own equations ────────────────────────────────────────────────────
+
+_MATH_NS = 'xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"'
+
+
+def _omml(inner: str) -> str:
+    return f"<m:oMath {_MATH_NS}>{inner}</m:oMath>"
+
+
+def _equation_docx(inline: bool = False) -> bytes:
+    """A document with a real Word equation, the way Word stores one."""
+    import io
+    from docx import Document
+    from docx.oxml import parse_xml
+
+    fraction = ("<m:f><m:num><m:r><m:t>a</m:t></m:r></m:num>"
+                "<m:den><m:r><m:t>b</m:t></m:r></m:den></m:f>")
+    d = Document()
+    if inline:
+        p = d.add_paragraph()
+        p.add_run("We minimise ")
+        p._p.append(parse_xml(_omml(fraction)))
+        p.add_run(" over the training set.")
+    else:
+        d.add_paragraph("The objective is defined below.")
+        p = d.add_paragraph()
+        p._p.append(parse_xml(_omml(fraction)))
+        d.add_paragraph("It is minimised over the set.")
+
+    buf = io.BytesIO(); d.save(buf); return buf.getvalue()
+
+
+def test_a_word_equation_is_read_rather_than_dropped():
+    """A paragraph holding only an equation used to look empty and be skipped,
+    so the equation left the document entirely."""
+    graph = parse_docx_bytes(_equation_docx(), title="E")
+    equation = next((n for n in graph.nodes() if n.metadata.get("equations")), None)
+
+    assert equation is not None, "the equation's paragraph survived"
+    assert equation.content == r"$\frac{a}{b}$"
+
+
+def test_an_inline_equation_keeps_its_place_in_the_sentence():
+    """Reading the runs and then the equations would put every equation at the
+    end of its own paragraph."""
+    graph = parse_docx_bytes(_equation_docx(inline=True), title="E")
+    para = next(n for n in graph.nodes() if n.content)
+
+    assert para.content == r"We minimise $\frac{a}{b}$ over the training set."
+
+
+def test_an_untouched_equation_is_written_back_as_word_wrote_it():
+    from docx.oxml.ns import qn
+    from app.docos.export import graph_to_docx_bytes
+
+    original = _equation_docx()
+    graph = parse_docx_bytes(original, title="E")
+    exported = graph_to_docx_bytes(graph)
+
+    def equations(data: bytes) -> int:
+        import io
+        from docx import Document
+        return len(Document(io.BytesIO(data)).element.body.findall(".//" + qn("m:oMath")))
+
+    assert equations(original) == 1
+    assert equations(exported) == 1, "the equation came back as OMML, not as text"
+
+
+def test_a_rewritten_equation_is_written_as_the_words_it_became():
+    """Asked to turn the equations into something readable, the assistant
+    replaces the LaTeX — and then there is no equation left to restore."""
+    import io
+    from docx import Document
+    from docx.oxml.ns import qn
+    from app.docos.export import graph_to_docx_bytes
+
+    graph = parse_docx_bytes(_equation_docx(), title="E")
+    node = next(n for n in graph.nodes() if n.metadata.get("equations"))
+    node.set_text("a over b")
+
+    exported = Document(io.BytesIO(graph_to_docx_bytes(graph)))
+    assert not exported.element.body.findall(".//" + qn("m:oMath"))
+    assert any("a over b" in p.text for p in exported.paragraphs)
+
+
+def test_the_converter_handles_the_shapes_maths_actually_takes():
+    from docx.oxml import parse_xml
+    from app.docos.parser.omml import omml_to_latex
+
+    cases = {
+        "<m:f><m:num><m:f><m:num><m:r><m:t>a</m:t></m:r></m:num>"
+        "<m:den><m:r><m:t>b</m:t></m:r></m:den></m:f></m:num>"
+        "<m:den><m:r><m:t>c</m:t></m:r></m:den></m:f>": r"\frac{\frac{a}{b}}{c}",
+
+        '<m:nary><m:naryPr><m:chr m:val="∑"/></m:naryPr>'
+        "<m:sub><m:r><m:t>i=1</m:t></m:r></m:sub><m:sup><m:r><m:t>N</m:t></m:r></m:sup>"
+        "<m:e><m:r><m:t>x</m:t></m:r></m:e></m:nary>": r"\sum_{i=1}^N x",
+
+        "<m:rad><m:deg/><m:e><m:r><m:t>x</m:t></m:r></m:e></m:rad>": r"\sqrt{x}",
+
+        '<m:acc><m:accPr><m:chr m:val="̂"/></m:accPr>'
+        "<m:e><m:r><m:t>y</m:t></m:r></m:e></m:acc>": r"\hat{y}",
+
+        "<m:sSubSup><m:e><m:r><m:t>x</m:t></m:r></m:e>"
+        "<m:sub><m:r><m:t>i</m:t></m:r></m:sub>"
+        "<m:sup><m:r><m:t>2</m:t></m:r></m:sup></m:sSubSup>": "x_i^2",
+
+        # Something the converter does not know: keep the words, lose the shape.
+        "<m:groupChr><m:e><m:r><m:t>abc</m:t></m:r></m:e></m:groupChr>": "abc",
+    }
+    for inner, expected in cases.items():
+        assert omml_to_latex(parse_xml(_omml(inner))) == expected, inner[:40]

@@ -137,10 +137,59 @@ def _paragraph(doc: Document, node: Node, page: dict[str, Any]):
     _apply_paragraph_format(paragraph, node)
     # One Word run per formatted piece, so a bold phrase or a superscript
     # citation comes back out of the file the way it went in.
+    if _write_with_equations(paragraph, node, page, bool(level)):
+        return paragraph
+
     for piece in node.inline_runs():
         _apply_run(paragraph.add_run(piece.text), node, page,
                    heading=bool(level), inline=piece.style)
     return paragraph
+
+
+def _write_with_equations(paragraph, node: Node, page: dict[str, Any],
+                          heading: bool) -> bool:
+    """Write a paragraph whose equations are still Word's own. True if it did.
+
+    An equation read from the file kept its original XML, so an equation nobody
+    edited goes back exactly as Word wrote it rather than as our reading of it.
+    Once the text no longer contains the LaTeX we produced — the assistant was
+    asked to turn the equations into something readable, and did — there is no
+    equation left to restore and the words are written as words.
+
+    Inline run formatting is not applied to these paragraphs: an equation and a
+    run of bold in the same paragraph is rare, and losing the emphasis is a far
+    smaller loss than dropping the equation.
+    """
+    equations = (node.metadata or {}).get("equations") or []
+    if not equations:
+        return False
+
+    remaining = node.content
+    segments: list[tuple[str, Any]] = []
+    for equation in equations:
+        marker = f"${equation.get('latex', '')}$"
+        before, found, after = remaining.partition(marker)
+        if not found:
+            return False                     # rewritten: no equation to put back
+        segments.append(("text", before))
+        segments.append(("maths", equation.get("xml", "")))
+        remaining = after
+    segments.append(("text", remaining))
+
+    from docx.oxml import parse_xml
+
+    for kind, value in segments:
+        if kind == "text":
+            if value:
+                _apply_run(paragraph.add_run(value), node, page, heading=heading)
+        else:
+            try:
+                paragraph._p.append(parse_xml(value))
+            except Exception:
+                # Unparseable for any reason: the words are better than nothing.
+                _apply_run(paragraph.add_run(node.content), node, page, heading=heading)
+                return True
+    return True
 
 
 def _apply_paragraph_format(paragraph, node: Node) -> None:
