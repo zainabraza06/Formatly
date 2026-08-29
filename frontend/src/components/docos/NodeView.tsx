@@ -3,6 +3,8 @@ import clsx from 'clsx'
 import type { CSSProperties } from 'react'
 import type { GraphNode, Run, Style } from '../../types/docos'
 import { inlineRuns } from '../../types/docos'
+import { Maths } from './Maths'
+import { hasMaths, splitMaths } from '../../lib/maths'
 import type { DiffMark } from '../../lib/diffMarks'
 import { NODE_LABEL } from '../../lib/graphUtils'
 
@@ -172,6 +174,29 @@ function Text({ node, mark }: { node: GraphNode; mark?: DiffMark }) {
             <ins key={i} className="rounded bg-emerald-200 text-emerald-900 no-underline">{seg.text}</ins>
           ) : (
             <del key={i} className="rounded bg-rose-200 text-rose-900">{seg.text}</del>
+          ),
+        )}
+      </>
+    )
+  }
+
+  // Equations are set as equations. A paragraph carrying one gives up its
+  // inline run formatting to do it — an equation and a bold phrase in the same
+  // paragraph is rare, and reading raw LaTeX is a worse loss
+  // than reading it unemphasised.
+  if (hasMaths(node.content)) {
+    const pieces = splitMaths(node.content)
+    // A paragraph that is nothing but an equation is a display equation, which
+    // a paper sets on its own centred line — not tucked against the text above
+    // it as though it were a phrase.
+    const alone = pieces.length === 1 && pieces[0].kind !== 'text'
+    return (
+      <>
+        {pieces.map((piece, i) =>
+          piece.kind === 'text' ? (
+            <span key={i}>{piece.value}</span>
+          ) : (
+            <Maths key={i} latex={piece.value} display={alone || piece.kind === 'display'} />
           ),
         )}
       </>

@@ -12,12 +12,14 @@
   "dependencies": {
     "clsx": "^2.1.1",
     "framer-motion": "^12.38.0",
+    "katex": "^0.18.4",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
     "react-router-dom": "^7.15.1"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@types/katex": "^0.16.8",
     "@types/node": "^24.12.3",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
