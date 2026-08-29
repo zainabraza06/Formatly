@@ -55,6 +55,11 @@ _RETRY_STATUSES = (500, 502, 503, 504)
 _RETRY_ATTEMPTS = 3
 _RETRY_BACKOFF  = 0.7
 
+# How long to wait out a rate limit when the caller can afford to. Free tiers
+# meter by the second, and a long rewrite fires a pass as fast as the last one
+# finished, so this is usually all it takes.
+_RATE_LIMIT_PAUSE = 2.5
+
 # "This model is not available in your subscription tier", and its cousin, a
 # model name the account cannot see. Asking again changes nothing — the account
 # will not have grown a subscription in seven tenths of a second — but asking a
@@ -89,9 +94,12 @@ def _timeout_for(max_tokens: int, requested: Optional[float] = None) -> float:
 
 # ── Custom exceptions ─────────────────────────────────────────────────────────
 class RateLimitExceeded(Exception):
-    def __init__(self, provider: str):
+    def __init__(self, provider: str, retry_after: Optional[float] = None):
         super().__init__(f"{provider}: rate limit / quota exceeded")
         self.provider = provider
+        # What the server said to wait, when it says. Guessing is worse than
+        # being told.
+        self.retry_after = retry_after
 
 
 class ProviderTimeout(Exception):
@@ -242,18 +250,24 @@ class ProviderRouter:
             client.close()
 
         if resp.status_code == 429:
-            raise RateLimitExceeded(MISTRAL)
+            header = resp.headers.get("retry-after")
+            try:
+                after = float(header) if header else None
+            except ValueError:
+                after = None
+            raise RateLimitExceeded(MISTRAL, after)
         resp.raise_for_status()
         return resp.json()["choices"][0]["message"]["content"]
 
     def _call_mistral_with_retry(self, messages: list[dict[str, str]], max_tokens: int,
                                  cancel: Optional[threading.Event] = None,
-                                 timeout: Optional[float] = None) -> str:
-        """`_call_mistral`, but a busy upstream is given another chance.
+                                 timeout: Optional[float] = None,
+                                 wait_on_rate_limit: bool = False) -> str:
+        """`_call_mistral`, but a struggling upstream is given another chance.
 
-        Only the statuses that mean "try again" are retried; a bad key or a
-        rate limit is answered once and reported. The wait grows a little each
-        time and the whole ladder stays inside the caller's patience.
+        Only the failures that another attempt could change are retried: a busy
+        server, and — when the caller says it can wait — a rate limit. A bad key
+        is answered once, because asking again with it is pointless.
         """
         last: Exception | None = None
         for attempt in range(_RETRY_ATTEMPTS):
@@ -261,6 +275,17 @@ class ProviderRouter:
                 raise GenerationCancelled()
             try:
                 return self._call_mistral(messages, max_tokens, cancel, timeout)
+            except RateLimitExceeded as exc:
+                # Whether to wait depends on what the caller would do instead.
+                # A plan has a heuristic to fall back on and a person watching,
+                # so it answers now; a rewrite pass has neither, and losing the
+                # passage is worse for everyone than a few seconds' pause.
+                if not wait_on_rate_limit or attempt + 1 >= _RETRY_ATTEMPTS:
+                    raise
+                last = exc
+                time.sleep(exc.retry_after or _RATE_LIMIT_PAUSE * (attempt + 1))
+                continue
+
             except httpx.HTTPStatusError as exc:
                 status = exc.response.status_code
                 if status in _WRONG_MODEL_STATUSES:
@@ -299,6 +324,7 @@ class ProviderRouter:
         order: list[str] | None = None,
         cancel: Optional[threading.Event] = None,
         timeout: Optional[float] = None,
+        wait_on_rate_limit: bool = False,
     ) -> tuple[str, str, float]:
         """
         Send `messages` to the configured provider.
@@ -331,7 +357,8 @@ class ProviderRouter:
 
             try:
                 t0 = time.time()
-                text = _callers[provider](messages, max_tokens, cancel, timeout)
+                text = _callers[provider](messages, max_tokens, cancel, timeout,
+                                          wait_on_rate_limit)
                 return text, provider, round(time.time() - t0, 3)
 
             except GenerationCancelled:

@@ -205,6 +205,8 @@ def rewrite_nodes(
                 [{"role": "system", "content": SYSTEM},
                  {"role": "user", "content": json.dumps(payload, ensure_ascii=False)}],
                 max_tokens=_MAX_TOKENS,
+                # Losing a passage is worse than pausing for one.
+                wait_on_rate_limit=True,
                 cancel=cancel,
             )
         except Exception as exc:

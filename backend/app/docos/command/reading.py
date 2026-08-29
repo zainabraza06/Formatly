@@ -88,6 +88,8 @@ def read_document(
                 [{"role": "system", "content": SYSTEM},
                  {"role": "user", "content": json.dumps(payload, ensure_ascii=False)}],
                 max_tokens=_MAX_TOKENS,
+                # A reading is background work; it can wait its turn.
+                wait_on_rate_limit=True,
                 cancel=cancel,
                 # Twelve passes at the derived deadline is ten minutes of a
                 # document not being understood. A reading is worth waiting for,

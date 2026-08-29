@@ -15,9 +15,10 @@ from app.services.router import ProviderRouter, ProviderTimeout, RateLimitExceed
 
 
 class FakeResponse:
-    def __init__(self, status: int, text: str = "ok"):
+    def __init__(self, status: int, text: str = "ok", headers: dict | None = None):
         self.status_code = status
         self._text = text
+        self.headers = headers or {}
 
     def json(self) -> dict:
         return {"choices": [{"message": {"content": self._text}}]}
@@ -185,3 +186,37 @@ def test_the_model_in_use_is_not_offered_back_to_itself(monkeypatch):
     monkeypatch.setenv("MISTRAL_MODEL", "mistral-medium-latest")
     monkeypatch.setenv("MISTRAL_LIGHT_MODEL", "mistral-medium-latest,mistral-small-latest")
     assert ProviderRouter()._lighter_models("mistral") == ["mistral-small-latest"]
+
+
+def test_a_rate_limit_is_waited_out_when_the_caller_can_afford_to(monkeypatch):
+    """A long rewrite fires a pass as fast as the last one finished, and a free
+    tier meters by the second. Losing the passage is worse than pausing."""
+    router, sent = _router(monkeypatch, [FakeResponse(429), FakeResponse(200, "rewritten")])
+
+    text, _provider, _elapsed = router.chat(
+        [{"role": "user", "content": "hi"}], wait_on_rate_limit=True)
+
+    assert text == "rewritten"
+    assert len(sent) == 2
+
+
+def test_a_rate_limit_still_answers_at_once_for_a_caller_that_cannot_wait(monkeypatch):
+    """Planning has a heuristic and a person watching it; it does not queue."""
+    router, sent = _router(monkeypatch, [FakeResponse(429), FakeResponse(200, "planned")])
+
+    with pytest.raises(Exception):
+        router.chat([{"role": "user", "content": "hi"}])
+    assert len(sent) == 1
+
+
+def test_the_server_is_believed_about_how_long_to_wait(monkeypatch):
+    waited: list[float] = []
+    monkeypatch.setattr("app.services.router.time.sleep", waited.append)
+
+    router, _sent = _router(
+        monkeypatch,
+        [FakeResponse(429, headers={"retry-after": "7"}), FakeResponse(200, "ok")])
+    monkeypatch.setattr("app.services.router.time.sleep", waited.append)
+
+    router.chat([{"role": "user", "content": "hi"}], wait_on_rate_limit=True)
+    assert 7 in waited, "it waited what the server asked for, not a guess"
