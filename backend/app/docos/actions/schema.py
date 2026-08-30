@@ -35,6 +35,10 @@ class ActionType(str, Enum):
     # literal find/with, this carries an instruction and is resolved by a
     # model that is shown the actual text.
     REWRITE = "rewrite"
+    # Draw the document's LaTeX as mathematics. A display change: it asks no
+    # model, rewrites no words, and turning it off gives back exactly the text
+    # the author typed. Converting the words instead is lossy and irreversible.
+    RENDER_MATHS = "render_maths"
 
 
 # Targets that name a role rather than a node type, resolved by the graph.

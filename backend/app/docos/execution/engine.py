@@ -198,6 +198,24 @@ class ExecutionEngine:
         yield Event(name=EventName.MOVE_FINISHED, payload={"count": moved})
         return [n.id for n in nodes]
 
+    def _h_render_maths(self, g, action, i, selection) -> Iterator[Event]:
+        """Draw the document's LaTeX as mathematics, or stop drawing it.
+
+        Nothing about the words changes: the same characters are still there,
+        and turning this off gives back exactly what the author typed. That is
+        the whole point of doing it this way — asking a model to convert the
+        equations rewrote them into prose, which cannot be undone by looking
+        at the result.
+        """
+        on = action.params.get("on", True) is not False
+        page = g.root.metadata.setdefault("page", {})
+        if isinstance(page, dict):
+            page["render_maths"] = on
+        g.root.metadata["render_maths"] = on
+        yield Event(name=EventName.FORMAT_FINISHED,
+                    payload={"render_maths": on, "count": 1})
+        return []
+
     def _h_normalize(self, g, action, i, selection) -> Iterator[Event]:
         # Clear highlight and unify to a base style across the scope.
         nodes = self._scope(g, action, selection)
@@ -300,6 +318,7 @@ class ExecutionEngine:
         ActionType.INSERT: _h_insert,
         ActionType.MOVE: _h_move,
         ActionType.NORMALIZE: _h_normalize,
+        ActionType.RENDER_MATHS: _h_render_maths,
         ActionType.REWRITE: _h_rewrite,
         ActionType.MERGE: _h_merge,
         ActionType.SPLIT: _h_split,

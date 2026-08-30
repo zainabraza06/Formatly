@@ -190,6 +190,17 @@ class DocOSService:
         batch = result.batch
         assert batch is not None
 
+        # "Show the equations as equations" is a display change, and doing it by
+        # rewriting the words was the wrong shape all along: it asked a model,
+        # cost a call per page, turned notation into prose, and could not be
+        # undone by looking at the result. Recognised here rather than left to
+        # the planner, which answered the same request four different ways.
+        if _wants_maths_drawn(command):
+            from app.docos.actions import Action, ActionType
+
+            batch.actions = [Action(type=ActionType.RENDER_MATHS, params={"on": True})]
+            batch.reasoning = "draw the document's equations as mathematics"
+
         # A request that names a part of the document is pinned to that part.
         # The planner is given the sections and what each is about and still
         # answers "the part about the results" with a target that happens to
@@ -249,7 +260,13 @@ class DocOSService:
                     await emit(ev.to_message())
                 changed = _changed_node_ids(graph, exec_result.graph)
 
-        if not changed and not rewrite_edits:
+        # Not everything a command changes is a node. Asking to see the maths
+        # drawn changes how the document is displayed and no word in it, and
+        # comparing nodes alone called that "nothing changed" and threw the
+        # result away.
+        document_changed = graph.root.metadata != exec_result.graph.root.metadata
+
+        if not changed and not rewrite_edits and not document_changed:
             # Nothing moved. Saying "done" here is how an instruction that
             # matched nothing came to look like it had worked. But "nothing
             # matched" is only true when nothing was in scope: an instruction
@@ -430,6 +447,26 @@ _SCOPE_WORDS = (
     "bibliography", "footnote", "table", "figure", "abstract", "header", "footer",
     "selected", "selection", "this section",
 )
+
+
+# A request about how the maths should *look*. "Convert the equations into
+# readable mathematics" is asking to see them set properly, not asking for the
+# notation to be replaced by a description of itself.
+_MATHS_WORDS = ("equation", "equations", "formula", "formulae", "formulas",
+                "latex", "math", "maths", "mathematical", "mathematics", "notation")
+_DRAW_WORDS = ("render", "display", "show", "convert", "format", "formatted",
+               "readable", "proper", "properly", "typeset", "rendered")
+
+
+def _wants_maths_drawn(command: str) -> bool:
+    """Is this asking to see the maths as maths?"""
+    lowered = (command or "").lower()
+    if not any(word in lowered for word in _MATHS_WORDS):
+        return False
+    if not any(word in lowered for word in _DRAW_WORDS):
+        return False
+    # "Delete every equation" mentions both and means neither.
+    return not any(word in lowered for word in ("delete", "remove", "strip", "number"))
 
 
 def _names_a_scope(command: str) -> bool:

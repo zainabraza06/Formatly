@@ -326,6 +326,10 @@ _SUB_NUMBER = re.compile(
     r"^(?:\d+\.\d+|[ABCDEFGHJKLMNOPQRSTUWYZ][.)]\s|[IVXLCDM]+-[A-Z0-9])", re.ASCII)
 _TOP_NUMBER = re.compile(r"^(?:[IVXLCDM]+|\d+)[.)]\s", re.ASCII)
 
+# The shapes mathematics takes: LaTeX, or the symbols it is written with.
+_LOOKS_LIKE_MATHS = re.compile(
+    r"\$|\[a-zA-Z]{2,}|[=≈≤≥±×÷∑∏∫√∞]|\|\||_\{|\^\{|[a-zA-Z]_[a-z0-9]")
+
 # Things that begin like a heading and are not one.
 _NOT_A_HEADING = re.compile(r"^(fig\.|figure|table|eq\.|equation|algorithm|appendix\s+\w+\s*[:.]?\s*\S)",
                             re.IGNORECASE)
@@ -347,6 +351,11 @@ def _infer_structure(text: str, style: Style, default_size: Optional[float]) -> 
     if not line or len(line) > 90 or len(line.split()) > 14:
         return None
     if _NOT_A_HEADING.match(line):
+        return None
+    # An equation on its own line is short, unpunctuated and set apart from the
+    # text — every signal a heading gives. It is not a heading, and calling it
+    # one puts "m_i = ||a_i||_2" in the document's outline.
+    if _LOOKS_LIKE_MATHS.search(line):
         return None
 
     sub = bool(_SUB_NUMBER.match(line))

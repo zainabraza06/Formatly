@@ -694,3 +694,50 @@ def test_a_chance_word_in_a_summary_is_not_a_place():
     assert locate_section("improve the detection wording", brief) is None
     # ...but saying "the part about" does name one.
     assert locate_section("improve the part about detection", brief) is not None
+
+
+# ── showing the maths, rather than rewriting it ─────────────────────────────
+
+def test_asking_to_see_the_equations_is_a_display_change():
+    """"Convert the equations into readable mathematics" asks to see them set
+    properly. Rewriting the words instead cost a model call a page, turned
+    notation into prose, and could not be undone by looking at the result."""
+    from app.docos.service import _wants_maths_drawn
+
+    assert _wants_maths_drawn("convert all latex equations into readable formatted mathematics")
+    assert _wants_maths_drawn("render the equations properly")
+    assert _wants_maths_drawn("show the maths as maths")
+
+    # Mentioning equations is not the same as asking to look at them.
+    assert not _wants_maths_drawn("delete every equation")
+    assert not _wants_maths_drawn("number all the equations")
+    assert not _wants_maths_drawn("make every heading bold")
+
+
+def test_drawing_the_maths_changes_no_words():
+    from app.docos.actions import validate_batch
+
+    graph = DocumentGraph(root=Node(type=NodeType.DOCUMENT, children=[
+        Node(type=NodeType.BODY, content=r"Let $m_i = \|a_i\|_2$ denote the magnitude."),
+    ]))
+    original = graph.root.children[0].content
+
+    batch = validate_batch({"actions": [{"type": "render_maths", "params": {"on": True}}]})
+    result = ExecutionEngine().execute(graph, batch)
+
+    assert result.graph.root.metadata["render_maths"] is True
+    assert result.graph.root.children[0].content == original, "the LaTeX is still the LaTeX"
+
+
+def test_an_equation_on_its_own_line_is_not_a_heading():
+    """It is short, unpunctuated and set apart from the text — every signal a
+    heading gives — so the outline gained entries like "m_i = ||a_i||_2"."""
+    from app.docos.parser.docx_parser import _infer_structure
+
+    emphatic = Style(bold=True, font_size=11)
+    assert _infer_structure(r"m_i = ||a_i||_2 = sqrt(a_{i,x}^2)", emphatic, 10) is None
+    assert _infer_structure(r"$m_i = \|\mathbf{a}_i\|_2$", emphatic, 10) is None
+
+    # and the headings around it are still headings
+    assert _infer_structure("B. Feature Extraction", emphatic, 10) is NodeType.SUBHEADING
+    assert _infer_structure("I. INTRODUCTION", Style(bold=True, font_size=12), 10) is NodeType.HEADING

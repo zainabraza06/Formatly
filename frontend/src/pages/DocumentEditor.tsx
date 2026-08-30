@@ -147,7 +147,9 @@ document stores as equations are always drawn."
               removingIds={doc.removingIds}
               marks={marks}
               focusId={doc.focusId}
-              renderMaths={renderMaths}
+              // Either the reader pressed the button, or they asked the
+              // assistant for the same thing and it is now part of the document.
+              renderMaths={renderMaths || Boolean(doc.graph?.root?.metadata?.render_maths)}
             />
           )}
         </div>
