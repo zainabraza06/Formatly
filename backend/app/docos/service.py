@@ -201,6 +201,9 @@ class DocOSService:
             batch.actions = [Action(type=ActionType.RENDER_MATHS, params={"on": True})]
             batch.reasoning = "draw the document's equations as mathematics"
 
+        # A request may describe the words to format rather than quote them.
+        await self._resolve_described_spans(graph, batch, emit)
+
         # A request that names a part of the document is pinned to that part.
         # The planner is given the sections and what each is about and still
         # answers "the part about the results" with a target that happens to
@@ -383,6 +386,37 @@ class DocOSService:
         await emit({"event": "version_changed",
                     "payload": {"op": kind, "version": info.to_dict()}})
         return {"ok": True, "control": kind, "version": info.to_dict(), "graph": graph.to_dict()}
+
+    async def _resolve_described_spans(self, graph, batch, emit: Emit) -> None:
+        """Turn "the results" into the exact words that are the results.
+
+        A quoted phrase is found by searching, which is faster and cannot be
+        wrong. A description has to be read, so the passage goes to a model, and
+        what comes back is checked against the text before it is used. The answer
+        is recorded on the action, so replaying the version formats the same
+        words without asking again.
+        """
+        from app.docos.actions import ActionType
+        from app.docos.command.spans import find_spans
+        from app.services.router import get_router
+
+        for action in batch.actions:
+            if action.type is not ActionType.FORMAT:
+                continue
+            description = str(action.params.get("describe") or "").strip()
+            if not description or action.params.get("spans"):
+                continue
+
+            nodes = self.executor.scope_of(graph, action)
+            if not nodes:
+                continue
+
+            spans = await anyio.to_thread.run_sync(
+                lambda: find_spans(nodes, description, router=get_router()))
+            action.params["spans"] = spans
+            await emit({"event": "spans_resolved",
+                        "payload": {"describe": description, "found": len(spans),
+                                    "text": [s["text"][:60] for s in spans[:6]]}})
 
     def _place_in_section(self, command: str, graph, doc_id: str,
                           batch) -> Optional[dict[str, Any]]:

@@ -955,3 +955,61 @@ def test_rewind_moves_the_pointer_without_writing(tmp_path):
         assert engine.current_graph("d").get("p").content == expected
 
     assert [v.seq for v in engine.history("d")] == before, "rewinding writes nothing"
+
+
+# ── formatting words a request describes rather than quotes ─────────────────
+
+_ABSTRACT = ("Abstract— The Fusion model achieves 89.01% ± 0.47% accuracy on held-out "
+             "subjects, about 1.1 percentage points below the 90.10% obtained when "
+             "selection and evaluation share a subject pool.")
+
+
+def test_a_span_the_model_invents_is_not_formatted():
+    """Formatting text that is not there is worse than formatting nothing, and
+    a model that retypes a figure instead of copying it produces exactly that."""
+    import json
+    from app.docos.command.spans import find_spans
+
+    node = Node(type=NodeType.BODY, content=_ABSTRACT)
+
+    class Router:
+        def chat(self, messages, **_kw):
+            return json.dumps({"spans": [
+                {"id": node.id, "text": "89.01% ± 0.47% accuracy"},
+                {"id": node.id, "text": "a figure that is not in the passage"},
+            ]}), "fake", 0.1
+
+    spans = find_spans([node], "the reported results", router=Router())
+    assert [s["text"] for s in spans] == ["89.01% ± 0.47% accuracy"]
+
+
+def test_described_spans_format_only_those_words():
+    graph = DocumentGraph(root=Node(type=NodeType.DOCUMENT, children=[
+        Node(id="a", type=NodeType.BODY, content=_ABSTRACT),
+    ]))
+    batch = validate_batch({"actions": [{
+        "type": "format", "target": "body", "style": {"bold": True},
+        "params": {"describe": "the reported results",
+                   "spans": [{"id": "a", "text": "89.01% ± 0.47% accuracy"},
+                             {"id": "a", "text": "90.10%"}]},
+    }]})
+
+    node = ExecutionEngine().execute(graph, batch).graph.get("a")
+
+    assert node.style.bold is None, "the abstract itself is not bold"
+    assert [r.text for r in node.inline_runs() if r.style.bold] == [
+        "89.01% ± 0.47% accuracy", "90.10%"]
+
+
+def test_a_quoted_phrase_still_takes_the_literal_route():
+    """Searching for text somebody named is faster than asking, and cannot be
+    wrong about what they meant."""
+    graph = DocumentGraph(root=Node(type=NodeType.DOCUMENT, children=[
+        Node(id="a", type=NodeType.BODY, content="We report results here."),
+    ]))
+    batch = validate_batch({"actions": [{
+        "type": "format", "target": "body", "style": {"bold": True},
+        "params": {"find": "results"}}]})
+
+    node = ExecutionEngine().execute(graph, batch).graph.get("a")
+    assert [r.text for r in node.inline_runs() if r.style.bold] == ["results"]

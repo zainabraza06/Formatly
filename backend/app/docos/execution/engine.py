@@ -123,9 +123,20 @@ class ExecutionEngine:
         # the word; styling the node was all an action could do, so it bolded
         # the paragraph the word sits in and everything else in it.
         find = str(action.params.get("find") or "").strip()
+        # Spans a model picked out for a description the request gave instead of
+        # a quotation — "the results", rather than "the word results". Resolved
+        # before execution and recorded on the action, so replaying this version
+        # formats the same words without asking again.
+        described: dict[str, list[str]] = {}
+        for span in action.params.get("spans") or []:
+            if isinstance(span, dict) and span.get("id") and span.get("text"):
+                described.setdefault(str(span["id"]), []).append(str(span["text"]))
 
         for k, n in enumerate(nodes):
-            if find:
+            if described:
+                if not sum(n.style_span(text, patch) for text in described.get(n.id, [])):
+                    continue
+            elif find:
                 if not n.style_span(find, patch):
                     continue
             else:
