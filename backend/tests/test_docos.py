@@ -822,3 +822,66 @@ def test_a_one_row_table_has_no_header():
 
     graph = parse_docx_bytes(buf.getvalue(), title="T")
     assert graph.resolve_target("table_header") == []
+
+
+# ── formatting words, not the paragraph around them ─────────────────────────
+
+def test_bolding_a_word_bolds_the_word():
+    """"Bold results in the abstract" means the word. Styling the node was all
+    an action could do, so it bolded the whole abstract."""
+    node = Node(type=NodeType.BODY,
+                content="We report results for all subjects; the results are consistent.")
+
+    assert node.style_span("results", Style(bold=True)) == 2
+    assert node.style.bold is None, "the paragraph itself is not bold"
+    assert node.content == "We report results for all subjects; the results are consistent."
+
+    bolded = [r.text for r in node.inline_runs() if r.style.bold]
+    assert bolded == ["results", "results"]
+
+
+def test_formatting_a_phrase_keeps_the_formatting_around_it():
+    node = Node(type=NodeType.BODY, content="A bold lead and results after it",
+                runs=[Run(text="A bold lead", style=Style(bold=True)),
+                      Run(text=" and results after it")])
+
+    node.style_span("results", Style(italic=True))
+
+    kept = {(r.text, r.style.bold, r.style.italic) for r in node.inline_runs()}
+    assert ("A bold lead", True, None) in kept, "the bold lead is still bold"
+    assert ("results", None, True) in kept
+
+
+def test_a_phrase_that_is_not_there_changes_nothing():
+    node = Node(type=NodeType.BODY, content="No mention of it here.")
+    assert node.style_span("results", Style(bold=True)) == 0
+    assert node.runs == []
+
+
+def test_the_format_action_can_name_the_words_to_format():
+    graph = DocumentGraph(root=Node(type=NodeType.DOCUMENT, children=[
+        Node(type=NodeType.BODY, content="Abstract— We report results for all subjects."),
+    ]))
+    batch = validate_batch({"actions": [
+        {"type": "format", "target": "body", "style": {"bold": True},
+         "params": {"find": "results"}}]})
+
+    node = ExecutionEngine().execute(graph, batch).graph.root.children[0]
+
+    assert node.style.bold is None, "the paragraph was not bolded"
+    assert [r.text for r in node.inline_runs() if r.style.bold] == ["results"]
+
+
+def test_bolding_one_word_counts_as_a_change():
+    """It changes neither the paragraph's text nor the paragraph's own style,
+    only how its pieces are formatted — and comparing those two alone called a
+    real edit "nothing changed" and threw it away."""
+    from app.docos.service import _changed_node_ids
+
+    before = DocumentGraph(root=Node(type=NodeType.DOCUMENT, children=[
+        Node(id="p1", type=NodeType.BODY, content="We report results here."),
+    ]))
+    after = before.model_copy(deep=True)
+    after.root.children[0].style_span("results", Style(bold=True))
+
+    assert _changed_node_ids(before, after) == {"p1"}

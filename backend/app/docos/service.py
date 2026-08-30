@@ -428,13 +428,21 @@ def get_service() -> DocOSService:
 
 
 def _changed_node_ids(before: DocumentGraph, after: DocumentGraph) -> set[str]:
-    """Ids whose content, style or presence differs between two graphs."""
+    """Ids whose content, formatting or presence differs between two graphs.
+
+    Formatting includes the runs. Bolding one word in a paragraph changes
+    neither the paragraph's text nor the paragraph's own style — only how its
+    pieces are formatted — so comparing those two alone called a real edit
+    "nothing changed" and threw it away.
+    """
     a = {n.id: n for n in before.nodes()}
     b = {n.id: n for n in after.nodes()}
     changed = set(a) ^ set(b)
     for nid in set(a) & set(b):
         if (a[nid].content != b[nid].content
-                or a[nid].style.model_dump() != b[nid].style.model_dump()):
+                or a[nid].style.model_dump() != b[nid].style.model_dump()
+                or [r.model_dump() for r in a[nid].runs]
+                != [r.model_dump() for r in b[nid].runs]):
             changed.add(nid)
     return changed
 

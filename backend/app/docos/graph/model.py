@@ -199,6 +199,49 @@ class Node(BaseModel):
             self.runs = merge_runs(candidate)                 if "".join(r.text for r in candidate) == self.content else []
         return True
 
+    def style_span(self, find: str, patch: "Style") -> int:
+        """Format just the words `find`, wherever they appear. Returns how many.
+
+        "Bold results in the abstract" means the word, not the paragraph it sits
+        in. Styling the node was the only thing an action could do, so a request
+        about a phrase bolded everything around it too. The text is split into
+        runs at the edges of each match and the patch applied to the matches
+        alone; everything else keeps the formatting it had.
+        """
+        needle = (find or "").strip()
+        if not needle or not self.content:
+            return 0
+
+        lowered, target = self.content.lower(), needle.lower()
+        spans: list[tuple[int, int]] = []
+        at = lowered.find(target)
+        while at >= 0:
+            spans.append((at, at + len(target)))
+            at = lowered.find(target, at + len(target))
+        if not spans:
+            return 0
+
+        pieces: list[Run] = []
+        offset = 0
+        for run in self.inline_runs():
+            start, end = offset, offset + len(run.text)
+            cut = start
+            for span_start, span_end in spans:
+                if span_end <= start or span_start >= end:
+                    continue                      # this match is elsewhere
+                hit_start, hit_end = max(span_start, start), min(span_end, end)
+                if hit_start > cut:
+                    pieces.append(Run(text=self.content[cut:hit_start], style=run.style))
+                pieces.append(Run(text=self.content[hit_start:hit_end],
+                                  style=run.style.merged(patch)))
+                cut = hit_end
+            if cut < end:
+                pieces.append(Run(text=self.content[cut:end], style=run.style))
+            offset = end
+
+        self.runs = merge_runs(pieces)
+        return len(spans)
+
     def set_text(self, text: str) -> None:
         """Replace the words, dropping inline formatting that described the old
         ones. The paragraph's own `style` survives, because that describes the

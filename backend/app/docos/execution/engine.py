@@ -28,6 +28,25 @@ class ExecutionResult:
         self.error = error
 
 
+def _style_of(action: Action) -> Style:
+    """The formatting an action asks for, wherever the planner put it.
+
+    The schema has a `style` field, and a planner that has just been told to
+    put the words in `params.find` will cheerfully put `bold` next to them.
+    Reading only `style` meant a correct plan applied an empty patch and
+    reported that nothing changed.
+    """
+    if action.style and action.style.model_dump(exclude_none=True):
+        return action.style
+
+    loose = {key: value for key, value in (action.params or {}).items()
+             if key in Style.model_fields}
+    nested = (action.params or {}).get("style") or {}
+    if isinstance(nested, dict):
+        loose.update({k: v for k, v in nested.items() if k in Style.model_fields})
+    return Style.model_validate(loose)
+
+
 class ExecutionEngine:
     """Stateless. `stream` yields events lazily; `execute` collects them."""
 
@@ -96,12 +115,21 @@ class ExecutionEngine:
 
     def _h_format(self, g, action, i, selection) -> Iterator[Event]:
         nodes = self._scope(g, action, selection)
-        patch = action.style or Style.model_validate(action.params.get("style", {}))
+        patch = _style_of(action)
         yield Event(name=EventName.FORMAT_STARTED,
                     payload={"target": action.target, "total": len(nodes),
                              "style": patch.model_dump(exclude_none=True)})
+        # A phrase, or the whole paragraph. "Bold results in the abstract" means
+        # the word; styling the node was all an action could do, so it bolded
+        # the paragraph the word sits in and everything else in it.
+        find = str(action.params.get("find") or "").strip()
+
         for k, n in enumerate(nodes):
-            n.apply_style(patch)
+            if find:
+                if not n.style_span(find, patch):
+                    continue
+            else:
+                n.apply_style(patch)
             yield Event(name=EventName.FORMAT_PROGRESS,
                         payload={"id": n.id, "index": k, "total": len(nodes),
                                  "style": n.style.model_dump(exclude_none=True)})
