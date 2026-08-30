@@ -208,6 +208,9 @@ def _paragraph_node(para: _Paragraph, in_references: bool,
     role = _named_part(text)
     if role:
         meta["role"] = role
+    bullet = _list_of(para, style_name)
+    if bullet:
+        meta["list"] = bullet
     if maths:
         from lxml import etree
         meta["equations"] = [
@@ -329,7 +332,7 @@ def _apply_breaks(meta: dict, breaks_before: int) -> None:
 # section numeral. "I." opens a paper; a section numbered C would be the
 # hundredth, so the letters that read both ways are given to the numerals.
 _SUB_NUMBER = re.compile(
-    r"^(?:\d+\.\d+|[ABCDEFGHJKLMNOPQRSTUWYZ][.)]\s|[IVXLCDM]+-[A-Z0-9])", re.ASCII)
+    r"^(?:\d+\.\d+|[ABCDEFGHJKLMNOPQRSTUWYZ][.)]\s|[IVXLCDM]+-[A-Z0-9]\b)", re.ASCII)
 _TOP_NUMBER = re.compile(r"^(?:[IVXLCDM]+|\d+)[.)]\s", re.ASCII)
 
 # Parts a paper names inside the paragraph rather than above it. An abstract
@@ -349,6 +352,40 @@ def _named_part(text: str) -> Optional[str]:
         if pattern.match(line):
             return name
     return None
+
+
+def _list_of(para: _Paragraph, style_name: str) -> Optional[dict]:
+    """Is this paragraph a list item, and of what kind?
+
+    Word says so two ways and documents use both: a List Bullet or List Number
+    style, or an inline numbering reference. Reading only one of them misses
+    half the lists in the world.
+    """
+    lname = (style_name or "").lower()
+    kind: Optional[str] = None
+    if "list number" in lname or "numbered" in lname:
+        kind = "number"
+    elif "list bullet" in lname or "bullet" in lname:
+        kind = "bullet"
+
+    level = 0
+    properties = para._p.find(qn("w:pPr"))
+    numbering = properties.find(qn("w:numPr")) if properties is not None else None
+    if numbering is not None:
+        ilvl = numbering.find(qn("w:ilvl"))
+        if ilvl is not None:
+            try:
+                level = int(ilvl.get(qn("w:val")) or 0)
+            except ValueError:
+                level = 0
+        # A numbering reference without a style to name it: bullet is the
+        # commoner of the two and the safer guess, since a wrong bullet reads
+        # as a bullet and a wrong number implies an order that is not there.
+        kind = kind or "bullet"
+    elif "list paragraph" in lname:
+        kind = kind or "bullet"
+
+    return {"kind": kind, "level": level} if kind else None
 
 
 # How a caption announces itself: the thing it captions, its number, and a
@@ -378,7 +415,7 @@ def _looks_like_caption(text: str) -> bool:
 
 # The shapes mathematics takes: LaTeX, or the symbols it is written with.
 _LOOKS_LIKE_MATHS = re.compile(
-    r"\$|\[a-zA-Z]{2,}|[=≈≤≥±×÷∑∏∫√∞]|\|\||_\{|\^\{|[a-zA-Z]_[a-z0-9]")
+    r"\$|\[a-zA-Z]{2,}|[=≈≤≥±×÷∑∏∫√∞]|\|\||_\{|\^\{|[a-zA-Z]_[a-z0-9]\b")
 
 # Things that begin like a heading and are not one.
 _NOT_A_HEADING = re.compile(r"^(fig\.|figure|table|eq\.|equation|algorithm|appendix\s+\w+\s*[:.]?\s*\S)",

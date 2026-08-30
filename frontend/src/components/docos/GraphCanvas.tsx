@@ -105,6 +105,24 @@ export function GraphCanvas({
   // only the starting point: the content is laid out once off screen at the real
   // text width and the measured heights decide where the pages actually break.
   const markerPages = useMemo(() => paginate(nodes, geo.count), [nodes, geo.count])
+
+  // A numbered item's number is its place in its own run of items, counted in
+  // document order. It has to be worked out here, over the whole document, and
+  // not inside the page: a list that crosses a page boundary would otherwise
+  // start again at 1 on the next sheet.
+  const listOrdinals = useMemo(() => {
+    const out = new Map<string, number>()
+    let run = 0
+    let kind = ''
+    for (const n of nodes) {
+      const listing = (n.metadata ?? {})['list'] as { kind?: string } | undefined
+      const k = listing ? String(listing.kind ?? 'bullet') : ''
+      run = k && k === kind ? run + 1 : k ? 1 : 0
+      kind = k
+      if (k === 'number') out.set(n.id, run)
+    }
+    return out
+  }, [nodes])
   const [measuredPages, setMeasuredPages] = useState<GraphNode[][] | null>(null)
   const sheetRef = useRef<HTMLDivElement>(null)
   const proofRef = useRef<HTMLDivElement>(null)
@@ -254,6 +272,7 @@ export function GraphCanvas({
             mark={marks?.get(n.id)}
             naturalLineHeight={naturalLineHeight}
             renderMaths={renderMaths}
+            listIndex={listOrdinals.get(n.id)}
           />
         ))}
       </div>
@@ -316,6 +335,7 @@ export function GraphCanvas({
                 mark={marks?.get(n.id)}
                 naturalLineHeight={naturalLineHeight}
                 renderMaths={renderMaths}
+                listIndex={listOrdinals.get(n.id)}
               />
             ))}
           </motion.div>

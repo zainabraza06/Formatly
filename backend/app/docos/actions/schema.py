@@ -39,6 +39,10 @@ class ActionType(str, Enum):
     # model, rewrites no words, and turning it off gives back exactly the text
     # the author typed. Converting the words instead is lossy and irreversible.
     RENDER_MATHS = "render_maths"
+    # Turn the paragraphs in scope into list items, or take them back out of a
+    # list. Bullets are a property of the paragraph in Word, not punctuation
+    # typed into it, so this sets that property rather than editing the text.
+    LIST = "list"
 
 
 # Targets that name a role rather than a node type, resolved by the graph.

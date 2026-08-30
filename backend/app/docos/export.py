@@ -134,6 +134,7 @@ def _paragraph(doc: Document, node: Node, page: dict[str, Any]):
         except KeyError:
             pass
 
+    _apply_list(paragraph, doc, meta.get("list"))
     _apply_paragraph_format(paragraph, node)
     # One Word run per formatted piece, so a bold phrase or a superscript
     # citation comes back out of the file the way it went in.
@@ -144,6 +145,28 @@ def _paragraph(doc: Document, node: Node, page: dict[str, Any]):
         _apply_run(paragraph.add_run(piece.text), node, page,
                    heading=bool(level), inline=piece.style)
     return paragraph
+
+
+def _apply_list(paragraph, doc: Document, listing: Any) -> None:
+    """Give a list item Word's own list style, so it exports as a real list.
+
+    Word numbers its list styles from the second level up ("List Bullet 2"),
+    and a document that nests deeper than the built-in styles go simply sits at
+    the deepest one rather than losing its bullet.
+    """
+    if not isinstance(listing, dict):
+        return
+    base = "List Number" if listing.get("kind") == "number" else "List Bullet"
+    try:
+        level = max(0, min(int(listing.get("level") or 0), 2))
+    except (TypeError, ValueError):
+        level = 0
+    for name in (f"{base} {level + 1}" if level else base, base):
+        try:
+            paragraph.style = doc.styles[name]
+            return
+        except KeyError:
+            continue
 
 
 def _write_with_equations(paragraph, node: Node, page: dict[str, Any],

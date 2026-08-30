@@ -62,10 +62,25 @@ interface Props {
   naturalLineHeight?: number
   /** Draw typed-out LaTeX as mathematics too. */
   renderMaths?: boolean
+  /** This item's place in its numbered list, counted across the document. */
+  listIndex?: number
+}
+
+/** What a list item is marked with. Word's own sequence for nested levels. */
+const BULLETS = ['•', '◦', '▪']
+
+type Listing = { kind: string; level: number }
+
+function listingOf(node: GraphNode): Listing | null {
+  const raw = (node.metadata ?? {})['list'] as Record<string, unknown> | undefined
+  if (!raw || typeof raw !== 'object') return null
+  const kind = String(raw.kind ?? 'bullet')
+  const level = Math.max(0, Math.min(Number(raw.level ?? 0) || 0, 8))
+  return { kind, level }
 }
 
 export function NodeView({
-  node, selected, active, removing, mark, naturalLineHeight, renderMaths,
+  node, selected, active, removing, mark, naturalLineHeight, renderMaths, listIndex,
 }: Props) {
   const css = { ...styleToCss(node.style), ...spacingToCss(node, naturalLineHeight) }
 
@@ -110,7 +125,7 @@ export function NodeView({
       >
         {NODE_LABEL[node.type]}
       </span>
-      {renderBody(node, css, mark, renderMaths)}
+      {withBullet(node, css, renderBody(node, css, mark, renderMaths), listIndex)}
     </motion.div>
   )
 }
@@ -118,6 +133,36 @@ export function NodeView({
 // The page is always a white sheet (see GraphCanvas), so text colours are fixed
 // dark-on-white like Word — never inverted by the app's dark theme. Explicit
 // colours parsed from the DOCX still win via inline `css`.
+/**
+ * A list item, with its marker.
+ *
+ * The bullet is drawn beside the paragraph rather than typed into it, which is
+ * what Word does and what makes "take these out of the list" possible: the
+ * words are untouched, so removing the marker leaves the original sentence and
+ * not a stray dash. The marker carries no `data-node-text`, so the pagination
+ * pass measures the text and not the bullet.
+ */
+function withBullet(node: GraphNode, css: CSSProperties,
+                    body: React.ReactNode, listIndex?: number) {
+  const listing = listingOf(node)
+  if (!listing) return body
+  const marker = listing.kind === 'number'
+    ? `${listIndex ?? 1}.`
+    : BULLETS[Math.min(listing.level, BULLETS.length - 1)]
+  return (
+    <div className="flex" style={{ paddingLeft: `${listing.level * 1.6}em` }}>
+      <span
+        aria-hidden
+        className="select-none"
+        style={{ flex: '0 0 1.6em', color: css.color ?? '#1a1a1a', lineHeight: css.lineHeight }}
+      >
+        {marker}
+      </span>
+      <div className="min-w-0 flex-1">{body}</div>
+    </div>
+  )
+}
+
 function renderBody(node: GraphNode, css: CSSProperties, mark?: DiffMark,
                     renderMaths?: boolean) {
   // The words themselves, marked up when a compare result knows how they changed.

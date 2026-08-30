@@ -476,7 +476,11 @@ def _changed_node_ids(before: DocumentGraph, after: DocumentGraph) -> set[str]:
         if (a[nid].content != b[nid].content
                 or a[nid].style.model_dump() != b[nid].style.model_dump()
                 or [r.model_dump() for r in a[nid].runs]
-                != [r.model_dump() for r in b[nid].runs]):
+                != [r.model_dump() for r in b[nid].runs]
+                # Not every change is to the words or their style: a bullet is
+                # a property of the paragraph, and comparing only text and
+                # formatting called "put these in bullets" nothing at all.
+                or a[nid].metadata != b[nid].metadata):
             changed.add(nid)
     return changed
 

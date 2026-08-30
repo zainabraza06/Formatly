@@ -10,6 +10,7 @@ from typing import Iterator
 
 from app.docos.actions import Action, ActionBatch, ActionType
 from app.docos.execution.events import Event, EventName
+from app.docos.execution.lists import split_items
 from app.docos.graph import DocumentGraph, Node, NodeType, Style
 
 
@@ -169,6 +170,86 @@ class ExecutionEngine:
     def _h_resize(self, g, action, i, selection) -> Iterator[Event]:
         size = action.params.get("font_size") or (action.style.font_size if action.style else None)
         return (yield from self._apply_style(g, action, selection, Style(font_size=size)))
+
+    def _h_list(self, g, action, i, selection) -> Iterator[Event]:
+        """Make the paragraphs in scope a bulleted or numbered list.
+
+        A bullet is a property of the paragraph, so nothing about the words
+        changes: the same instruction run twice leaves the same list, and
+        `kind: none` gives the plain paragraphs back.
+        """
+        params = action.params or {}
+        kind = str(params.get("kind") or params.get("list") or "bullet").lower()
+        if kind in ("number", "numbered", "ordered", "numeric"):
+            kind = "number"
+        elif kind in ("none", "off", "remove", "plain", "paragraph"):
+            kind = ""
+        else:
+            kind = "bullet"
+        try:
+            level = max(0, min(int(params.get("level") or 0), 8))
+        except (TypeError, ValueError):
+            level = 0
+
+        nodes = [n for n in self._scope(g, action, selection)
+                 if n.type not in (NodeType.TABLE, NodeType.TABLE_ROW)]
+
+        # A request to bullet something is usually aimed at a paragraph that
+        # already enumerates — "the contributions are: (i) … (ii) …". Bulleting
+        # it as it stands makes a list of one. Where the author marked the items
+        # themselves, the paragraph is cut into them; and when any paragraph in
+        # scope enumerates, only those paragraphs are the list, so bulleting the
+        # contributions does not bullet the whole introduction around them.
+        splits: dict[str, tuple[str, list[str]]] = {}
+        if kind:
+            for n in nodes:
+                if n.type in (NodeType.BODY, NodeType.PARAGRAPH):
+                    lead, items = split_items(n.runs_text() or n.content)
+                    if items:
+                        splits[n.id] = (lead, items)
+            if splits:
+                nodes = [n for n in nodes if n.id in splits]
+
+        yield Event(name=EventName.FORMAT_STARTED,
+                    payload={"target": action.target, "total": len(nodes),
+                             "list": kind or "none"})
+        changed: list[str] = []
+        for k, n in enumerate(nodes):
+            if not kind:
+                if not n.metadata.pop("list", None):
+                    continue
+                changed.append(n.id)
+                yield Event(name=EventName.FORMAT_PROGRESS, payload={"id": n.id, "index": k})
+                continue
+
+            listing = {"kind": kind, "level": level}
+            lead, items = splits.get(n.id, ("", []))
+            if items:
+                after_id = n.id
+                if lead:
+                    n.set_text(lead)          # the sentence that introduces the list
+                    n.metadata.pop("list", None)
+                else:
+                    n.set_text(items.pop(0))
+                    n.metadata["list"] = dict(listing)
+                changed.append(n.id)
+                for text in items:
+                    item = Node(type=NodeType.BODY, content=text,
+                                style=n.style.model_copy(deep=True),
+                                metadata={"list": dict(listing)})
+                    item.set_text(text)
+                    if not g.insert_after(after_id, item):
+                        break
+                    after_id = item.id
+                    changed.append(item.id)
+                    yield Event(name=EventName.INSERT_ITEM,
+                                payload={"id": item.id, "type": item.type.value})
+            else:
+                n.metadata["list"] = dict(listing)
+                changed.append(n.id)
+            yield Event(name=EventName.FORMAT_PROGRESS, payload={"id": n.id, "index": k})
+        yield Event(name=EventName.FORMAT_FINISHED, payload={"count": len(changed)})
+        return changed
 
     def _apply_style(self, g, action, selection, patch: Style) -> Iterator[Event]:
         nodes = self._scope(g, action, selection)
@@ -358,6 +439,7 @@ class ExecutionEngine:
         ActionType.MOVE: _h_move,
         ActionType.NORMALIZE: _h_normalize,
         ActionType.RENDER_MATHS: _h_render_maths,
+        ActionType.LIST: _h_list,
         ActionType.REWRITE: _h_rewrite,
         ActionType.MERGE: _h_merge,
         ActionType.SPLIT: _h_split,

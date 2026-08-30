@@ -38,6 +38,15 @@ class CommandResult:
 
 # Verbs that ask for different words rather than a different appearance. A
 # request built from these cannot be satisfied by any formatting action.
+# Asking for a list, in the several ways people ask for one.
+_WANTS_A_LIST = re.compile(
+    r"\bbullet(?:s|ed|ted|-?point(?:s|ed)?)?\b"
+    r"|\b(?:numbered|ordered|unordered|bulleted)\s+list\b"
+    r"|\b(?:as|in|into)\s+(?:a\s+)?(?:numbered\s+|bulleted\s+)?list\b"
+    r"|\blist(?:ed)?\s+(?:them|these|it|form|format)\b"
+    r"|\bitemi[sz]e[ds]?\b|\bdot\s?points?\b|\bpoint\s+form\b",
+    re.IGNORECASE)
+
 _WANTS_NEW_WORDS = re.compile(
     r"\b(rewrite|reword|rephrase|paraphrase|convert|change|turn|translate|"
     r"simplify|clarify|shorten|tighten|condense|summari[sz]e|expand|"
@@ -126,7 +135,16 @@ class CommandEngine:
         actions: list[dict[str, Any]] = []
         reasoning = "heuristic interpretation"
 
-        if _has(c, "select", "find", "show", "list"):
+        if _WANTS_A_LIST.search(c):
+            # Checked before "select", which claims the word "list" and so used
+            # to answer "put these in bullets" by selecting something.
+            numbered = bool(re.search(r"\bnumber(ed)?\b|\bordered\b|\b1[.)]\s", c))
+            kind = ("none" if _has(c, "remove", "delete", "un-bullet", "unbullet")
+                    else "number" if numbered else "bullet")
+            actions.append(a(type="list", target=target or "body",
+                             params={"kind": kind}))
+            reasoning = f"{kind} list"
+        elif _has(c, "select", "find", "show", "list"):
             actions.append(a(type="select", target=target or "heading"))
             reasoning = f"select {target or 'heading'}"
         elif _has(c, "highlight"):
