@@ -198,9 +198,12 @@ def _paragraph_node(para: _Paragraph, in_references: bool,
     # plain paragraph — the line's own shape is read, so a paper that never
     # applied Word's Heading styles still has headings.
     if node_type is NodeType.BODY and not in_references:
-        inferred = _infer_structure(text, style, default_size)
-        if inferred is not None:
-            node_type = inferred
+        if _looks_like_caption(text):
+            node_type = NodeType.CAPTION
+        else:
+            inferred = _infer_structure(text, style, default_size)
+            if inferred is not None:
+                node_type = inferred
     meta: dict = {"style_name": style_name, "level": _heading_level(lname)}
     role = _named_part(text)
     if role:
@@ -346,6 +349,31 @@ def _named_part(text: str) -> Optional[str]:
         if pattern.match(line):
             return name
     return None
+
+
+# How a caption announces itself: the thing it captions, its number, and a
+# separator. Most authors type a caption as an ordinary paragraph rather than
+# applying Word's Caption style, so a document full of captions could contain
+# none as far as an instruction about them was concerned.
+#
+# The separator is what keeps "Figure 1 shows a clear trend" out: that is a
+# sentence about a figure, not the caption of one. A caption says "Figure 1."
+# or "Fig. 2:" and then describes it.
+_CAPTION_LINE = re.compile(
+    # An optional bracketed lead-in, because a draft often carries one:
+    # "[PLACEHOLDER — Fig. 1: …]".
+    r"^\s*(?:[\[(][^\])]{0,40}?[—–:-]\s*)?"
+    r"(figure|fig|table|tbl|chart|algorithm|listing|scheme|plate)\.?\s*"
+    r"(\d+(?:\.\d+)*|[IVXLCDM]+)\s*[.:—–)-]",
+    re.IGNORECASE)
+
+
+def _looks_like_caption(text: str) -> bool:
+    """Is this paragraph a caption, whatever style it was given?"""
+    line = (text or "").strip()
+    # A caption is a label, not a section of prose. The cap is generous: some
+    # journals write a paragraph-long one.
+    return bool(line) and len(line) <= 400 and bool(_CAPTION_LINE.match(line))
 
 
 # The shapes mathematics takes: LaTeX, or the symbols it is written with.

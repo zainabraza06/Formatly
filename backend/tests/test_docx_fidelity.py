@@ -519,3 +519,26 @@ def test_an_equation_in_a_table_cell_survives_a_round_trip():
 
     assert equations(original) == 1
     assert equations(exported) == 1
+
+
+def test_a_caption_typed_as_a_paragraph_is_still_a_caption():
+    """Most authors type a caption rather than applying Word's Caption style,
+    so a document full of captions contained none as far as an instruction
+    about captions was concerned."""
+    from app.docos.parser.docx_parser import _looks_like_caption
+
+    assert _looks_like_caption("Figure 2. Per-subject accuracy across folds.")
+    assert _looks_like_caption("Fig. 1: Example accelerometer traces.")
+    assert _looks_like_caption("[PLACEHOLDER — Fig. 1: Example traces.]")
+    assert _looks_like_caption("TABLE III. Per-class precision and recall.")
+    assert _looks_like_caption("Algorithm 1. Greedy forward selection.")
+
+
+def test_a_sentence_about_a_figure_is_not_a_caption():
+    """The separator is what tells them apart: a caption says "Figure 1." and
+    then describes it; a sentence says "Figure 1 shows"."""
+    from app.docos.parser.docx_parser import _looks_like_caption
+
+    assert not _looks_like_caption("Figure 1 shows a clear downward trend.")
+    assert not _looks_like_caption("Table stakes for this comparison are high.")
+    assert not _looks_like_caption("The pipeline is shown below.")
