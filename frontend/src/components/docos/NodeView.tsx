@@ -301,7 +301,15 @@ function TableView({ node, renderMaths }: { node: GraphNode; renderMaths?: boole
           {node.children.map((row) => (
             <tr key={row.id}>
               {row.children.map((cell) => (
-                <td key={cell.id} className="border border-neutral-400 px-3 py-1.5 align-top text-neutral-900">
+                <td
+                  key={cell.id}
+                  // A cell's own formatting was never drawn, so making the
+                  // header row bold changed the model and the exported file
+                  // and nothing a reader could see — which looks like the
+                  // command failing rather than the page not saying so.
+                  style={styleToCss(cell.style)}
+                  className="border border-neutral-400 px-3 py-1.5 align-top text-neutral-900"
+                >
                   {/* A display equation is very often laid out as a one-row
                       table with its number in the next cell, so a cell is one
                       of the likeliest places in a paper to find mathematics. */}

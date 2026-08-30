@@ -66,15 +66,22 @@ class VersionEngine:
         return VersionInfo.from_row(row, row.id)
 
     def commit(self, doc_id: str, batch: ActionBatch, result_graph: DocumentGraph,
-               *, user: str = "user", label: str = "", parent_id: Optional[str] = None) -> VersionInfo:
+               *, user: str = "user", label: str = "", parent_id: Optional[str] = None,
+               snapshot: bool = False) -> VersionInfo:
         """Record a new version. `parent_id` defaults to the document's current version
-        (pass an older id to branch). Clears the redo pointer."""
+        (pass an older id to branch). Clears the redo pointer.
+
+        A version is normally stored as the actions that made it and replayed
+        from the nearest snapshot, which is why `snapshot` exists: a version
+        whose content does *not* follow from its actions has to carry its own
+        copy, or replaying it gives back whatever its parent held.
+        """
         doc = self.store.get_document(doc_id)
         if not doc:
             raise KeyError(f"unknown document {doc_id}")
         parent = parent_id or doc["current_version"]
         seq = self.store.next_seq(doc_id)
-        checkpoint = (seq % SNAPSHOT_EVERY == 0)
+        checkpoint = snapshot or (seq % SNAPSHOT_EVERY == 0)
         row = VersionRow(
             id=new_id("v"), document_id=doc_id, parent_id=parent, seq=seq, timestamp=_now(),
             user=user, label=label or (batch.reasoning[:60] if batch.reasoning else "edit"),
@@ -146,10 +153,17 @@ class VersionEngine:
         return self._info(doc_id, version_id)
 
     def restore(self, doc_id: str, version_id: str, *, user: str = "user") -> VersionInfo:
-        """Create a NEW version whose content equals an old version (keeps history)."""
+        """Create a NEW version whose content equals an old version (keeps history).
+
+        Stored as a snapshot, not as actions. A restore's batch is empty — there
+        is no edit that turns the current document into an older one — so
+        replaying it returned the document it was meant to replace, and restore
+        quietly did nothing while reporting a new version.
+        """
         graph = self.materialize(version_id)
         batch = ActionBatch(reasoning=f"restore {version_id}")
-        return self.commit(doc_id, batch, graph, user=user, label=f"restore→{version_id[:8]}")
+        return self.commit(doc_id, batch, graph, user=user,
+                           label=f"restore→{version_id[:8]}", snapshot=True)
 
     # ── inspection ──────────────────────────────────────────────────────────
     def history(self, doc_id: str) -> list[VersionInfo]:

@@ -885,3 +885,73 @@ def test_bolding_one_word_counts_as_a_change():
     after.root.children[0].style_span("results", Style(bold=True))
 
     assert _changed_node_ids(before, after) == {"p1"}
+
+
+# ── restoring an old version actually restores it ───────────────────────────
+
+def _versions_with_three_edits(tmp_path):
+    from app.docos.versioning import VersionEngine
+    from app.docos.versioning.store import VersionStore
+
+    engine = VersionEngine(store=VersionStore(db_path=tmp_path / "v.db"))
+    graph = DocumentGraph(root=Node(type=NodeType.DOCUMENT, children=[
+        Node(id="p", type=NodeType.BODY, content="v0 text"),
+    ]))
+    engine.init_document("d", "T", graph)
+
+    for text in ("v1 text", "v2 text", "v3 text"):
+        current = engine.current_graph("d")
+        batch = validate_batch({"actions": [
+            {"type": "replace", "target": "body",
+             "params": {"find": current.get("p").content, "with": text}}]})
+        engine.commit("d", batch, ExecutionEngine().execute(current, batch).graph)
+    return engine
+
+
+def _seq_id(engine, seq: int) -> str:
+    return next(v.id for v in engine.store.list_versions("d") if v.seq == seq)
+
+
+def test_restore_brings_back_the_version_it_names(tmp_path):
+    """A version is normally stored as the actions that made it and replayed
+    from the nearest snapshot. A restore has no actions — there is no edit that
+    turns a document into an older one — so replaying it gave back the document
+    it was meant to replace, and restore reported a new version having changed
+    nothing."""
+    engine = _versions_with_three_edits(tmp_path)
+    assert engine.current_graph("d").get("p").content == "v3 text"
+
+    engine.restore("d", _seq_id(engine, 1))
+    assert engine.current_graph("d").get("p").content == "v1 text"
+
+
+def test_restore_keeps_the_history_and_can_be_undone(tmp_path):
+    engine = _versions_with_three_edits(tmp_path)
+    before = [v.seq for v in engine.history("d")]
+
+    engine.restore("d", _seq_id(engine, 1))
+
+    assert [v.seq for v in engine.history("d")] == before + [4], "history grew, nothing was lost"
+    engine.undo("d")
+    assert engine.current_graph("d").get("p").content == "v3 text", "and the restore itself undoes"
+
+
+def test_restore_works_from_a_rewound_pointer(tmp_path):
+    """The case that hid the bug: after rewinding to the version being restored,
+    committing the current graph happens to give the right answer."""
+    engine = _versions_with_three_edits(tmp_path)
+    engine.rewind("d", _seq_id(engine, 3))
+
+    engine.restore("d", _seq_id(engine, 1))
+    assert engine.current_graph("d").get("p").content == "v1 text"
+
+
+def test_rewind_moves_the_pointer_without_writing(tmp_path):
+    engine = _versions_with_three_edits(tmp_path)
+    before = [v.seq for v in engine.history("d")]
+
+    for seq, expected in ((1, "v1 text"), (2, "v2 text"), (0, "v0 text")):
+        engine.rewind("d", _seq_id(engine, seq))
+        assert engine.current_graph("d").get("p").content == expected
+
+    assert [v.seq for v in engine.history("d")] == before, "rewinding writes nothing"
