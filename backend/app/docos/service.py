@@ -269,15 +269,36 @@ class DocOSService:
         # result away.
         document_changed = graph.root.metadata != exec_result.graph.root.metadata
 
+        # Nothing moved. Saying "done" here is how an instruction that matched
+        # nothing came to look like it had worked. But "nothing matched" is only
+        # true when nothing was in scope: an instruction that found its nodes
+        # and had nothing to do — every heading already bold — has been carried
+        # out, and saying it failed is its own kind of lie.
+        reached = 0
         if not changed and not rewrite_edits and not document_changed:
-            # Nothing moved. Saying "done" here is how an instruction that
-            # matched nothing came to look like it had worked. But "nothing
-            # matched" is only true when nothing was in scope: an instruction
-            # that found its nodes and had nothing to do — every heading already
-            # bold — has been carried out, and saying it failed is its own kind
-            # of lie.
             reached = sum(len(self.executor.scope_of(graph, action))
                           for action in batch.actions)
+
+            # Nothing was in scope, which means the rules did not recognise what
+            # the request was about — not that the document has nothing of the
+            # kind. Rather than fixing that one request at a time, the document
+            # is read and asked directly which parts the instruction is about,
+            # and the same plan runs against those.
+            if not reached:
+                found = await self._resolve_scope_by_reading(command, graph, emit)
+                if found:
+                    for action in batch.actions:
+                        action.node_ids = list(found)
+                        action.target = None
+                    exec_result = self.executor.execute(graph, batch)
+                    for ev in exec_result.events:
+                        await emit(ev.to_message())
+                    changed = _changed_node_ids(graph, exec_result.graph)
+                    document_changed = (graph.root.metadata
+                                        != exec_result.graph.root.metadata)
+                    reached = len(found)
+
+        if not changed and not rewrite_edits and not document_changed:
             message = ("the document already looks that way" if reached
                        else "nothing matched, so nothing changed")
             if rewrite_failures:
@@ -417,6 +438,34 @@ class DocOSService:
             await emit({"event": "spans_resolved",
                         "payload": {"describe": description, "found": len(spans),
                                     "text": [s["text"][:60] for s in spans[:6]]}})
+
+    async def _resolve_scope_by_reading(self, command: str, graph,
+                                        emit: Emit) -> list[str]:
+        """Which parts of the document a request is about, read from it.
+
+        The rules — node classes, named sections, quoted phrases — cover the
+        requests they were written for, and people write requests they were not
+        written for. This runs only after a plan has reached nothing, so a
+        request no rule recognised is answered by looking rather than by a
+        report that nothing matched.
+        """
+        from app.docos.command.scope import resolve_nodes
+        from app.services.router import get_router
+
+        await emit({"event": "scope_search_started", "payload": {"command": command}})
+        try:
+            found = await anyio.to_thread.run_sync(
+                lambda: resolve_nodes(command, graph, router=get_router()))
+        except Exception as exc:
+            await emit({"event": "scope_search_failed",
+                        "payload": {"error": f"{type(exc).__name__}: {exc}"}})
+            return []
+
+        await emit({"event": "scope_search_finished",
+                    "payload": {"found": len(found),
+                                "preview": [(graph.get(i).content or "")[:60]
+                                            for i in found[:6] if graph.get(i)]}})
+        return found
 
     def _place_in_section(self, command: str, graph, doc_id: str,
                           batch) -> Optional[dict[str, Any]]:

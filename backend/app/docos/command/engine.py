@@ -50,7 +50,12 @@ _WANTS_A_LIST = re.compile(
 _WANTS_NEW_WORDS = re.compile(
     r"\b(rewrite|reword|rephrase|paraphrase|convert|change|turn|translate|"
     r"simplify|clarify|shorten|tighten|condense|summari[sz]e|expand|"
-    r"proofread|correct|fix)\b", re.IGNORECASE)
+    r"proofread|correct|fix|"
+    # Case and wording changes are changes to the text, not to its style. A
+    # request to capitalise something used to fall past every branch and be
+    # answered with a selection.
+    r"capitali[sz](?:e[sd]?|ing)|uppercase|lowercase|title\s?case|sentence\s?case|"
+    r"abbreviate|spell\s+out|renumber|reorder|number)\b", re.IGNORECASE)
 
 
 class CommandEngine:
@@ -167,10 +172,20 @@ class CommandEngine:
             actions.append(a(type="resize", target=target or "reference",
                              params={"font_size": size}))
             reasoning = f"resize {target or 'reference'} to {size}"
-        elif _has(c, "bold"):
-            actions.append(a(type="format", target=target or "heading",
-                             style={"bold": True}))
-            reasoning = "bold"
+        elif _has(c, "bold", "italic", "italicis", "italiciz", "underlin"):
+            # Several at once is an ordinary request — "bold and italic" — and
+            # answering only the first of them was answering half the question.
+            style = {}
+            if _has(c, "bold"):
+                style["bold"] = True
+            if _has(c, "italic", "italicis", "italiciz"):
+                style["italic"] = True
+            if _has(c, "underlin"):
+                style["underline"] = True
+            if _has(c, "not bold", "unbold", "remove bold"):
+                style["bold"] = False
+            actions.append(a(type="format", target=target or "heading", style=style))
+            reasoning = " and ".join(k for k, v in style.items() if v) or "format"
         elif _WANTS_NEW_WORDS.search(c):
             # A request to change what the text says, which no amount of
             # formatting can do. The instruction is carried through as the user
@@ -183,9 +198,15 @@ class CommandEngine:
                              params={"instruction": command.strip()}))
             reasoning = "rewrite the text as asked"
         else:
-            # last resort: select whatever target we can infer
-            actions.append(a(type="select", target=target or "heading"))
-            reasoning = "select (fallback)"
+            # An instruction this file has no rule for. It is still an
+            # instruction: the user asked for something to change, and answering
+            # with a selection changes nothing while looking like success. The
+            # request goes to the rewriter instead, which is shown the real text
+            # and told to leave alone whatever the instruction does not cover —
+            # so an unrecognised request is attempted rather than dismissed.
+            actions.append(a(type="rewrite", target=target or "body",
+                             params={"instruction": command.strip()}))
+            reasoning = "carry out the request against the text"
 
         return validate_batch({"reasoning": reasoning, "actions": actions})
 
