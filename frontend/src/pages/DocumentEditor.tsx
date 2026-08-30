@@ -7,6 +7,7 @@ import { ExactView } from '../components/docos/ExactView'
 import { GraphCanvas } from '../components/docos/GraphCanvas'
 import { VersionTimeline } from '../components/docos/VersionTimeline'
 import { useDocOS } from '../hooks/useDocOS'
+import { docosApi } from '../lib/docosApi'
 import { diffMarks } from '../lib/diffMarks'
 import { btnPrimary } from '../lib/ui'
 
@@ -19,6 +20,21 @@ export function DocumentEditor() {
   // Off by default: an imported document should look like itself. A paper that
   // types its maths as LaTeX shows the characters it typed, until asked.
   const [renderMaths, setRenderMaths] = useState(false)
+  const [saving, setSaving] = useState<'docx' | 'pdf' | null>(null)
+
+  const download = async (format: 'docx' | 'pdf') => {
+    if (!doc.docId) return
+    setSaving(format)
+    try {
+      await docosApi.download(doc.docId, format)
+    } catch (e) {
+      // A PDF needs LibreOffice, which may not be there; say so rather than
+      // leaving a button that quietly does nothing.
+      window.alert(e instanceof Error ? e.message : 'Could not export')
+    } finally {
+      setSaving(null)
+    }
+  }
   const [error, setError] = useState<string | null>(null)
 
   // open a document passed via ?doc=<id> (from My Uploads / after import)
@@ -80,6 +96,20 @@ export function DocumentEditor() {
                   )}
                 >
                   {m === 'edit' ? 'Edit' : 'Exact'}
+                </button>
+              ))}
+            </div>
+          )}
+          {!noDoc && (
+            <div className="flex rounded-lg border border-line bg-surface p-0.5 text-xs">
+              {(['docx', 'pdf'] as const).map((format) => (
+                <button
+                  key={format}
+                  onClick={() => download(format)}
+                  disabled={saving !== null}
+                  className="rounded-md px-2.5 py-1 font-medium text-muted transition-colors hover:text-ink disabled:opacity-50"
+                >
+                  {saving === format ? 'Saving…' : `↓ ${format.toUpperCase()}`}
                 </button>
               ))}
             </div>

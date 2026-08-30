@@ -741,3 +741,84 @@ def test_an_equation_on_its_own_line_is_not_a_heading():
     # and the headings around it are still headings
     assert _infer_structure("B. Feature Extraction", emphatic, 10) is NodeType.SUBHEADING
     assert _infer_structure("I. INTRODUCTION", Style(bold=True, font_size=12), 10) is NodeType.HEADING
+
+
+# ── the parts a paper names inside the paragraph ────────────────────────────
+
+def _paper_with_an_abstract() -> DocumentGraph:
+    return DocumentGraph(title="A Study", root=Node(type=NodeType.DOCUMENT, children=[
+        Node(type=NodeType.BODY, content="A Lightweight Classifier for Fall Detection"),
+        Node(type=NodeType.BODY, content="Abstract— This study evaluates subject-independent protocols.",
+             metadata={"role": "abstract"}),
+        Node(type=NodeType.BODY, content="Index Terms— fall detection, evaluation.",
+             metadata={"role": "keywords"}),
+        Node(type=NodeType.HEADING, content="I. INTRODUCTION"),
+        Node(type=NodeType.BODY, content="Falls are a major cause of injury."),
+    ]))
+
+
+def test_an_abstract_is_a_part_of_the_document_even_without_a_heading():
+    """An abstract announces itself with its first word rather than with a
+    heading above it, so a document cut only at headings had no abstract in it
+    and "rewrite the abstract" had nothing to aim at."""
+    from app.docos.command.brief import document_brief
+
+    headings = [s["heading"] for s in document_brief(_paper_with_an_abstract())["sections"]]
+    assert "Abstract" in headings
+    assert "Keywords" in headings
+    assert "I. INTRODUCTION" in headings
+
+
+def test_an_instruction_about_the_abstract_reaches_it():
+    from app.docos.command.brief import document_brief
+    from app.docos.command.locate import locate_section
+
+    brief = document_brief(_paper_with_an_abstract())
+    found = locate_section("rewrite the abstract to be more concise", brief)
+
+    assert found and found["heading"] == "Abstract"
+    assert found["node_ids"], "and it knows which paragraph that is"
+
+
+def test_the_abstract_is_its_own_first_paragraph():
+    """It is not a heading with content beneath it — the paragraph that names
+    it is the content."""
+    from app.docos.command.brief import document_brief
+
+    brief = document_brief(_paper_with_an_abstract())
+    abstract = next(s for s in brief["sections"] if s["heading"] == "Abstract")
+    assert abstract["holds"].get("paragraphs") == 1
+
+
+def test_a_first_row_is_a_table_header_even_before_anyone_bolds_it():
+    """Requiring the row to be bold already made it undetectable in the one
+    case someone asks about it: when they want it made bold."""
+    import io
+    from docx import Document
+
+    d = Document()
+    table = d.add_table(rows=2, cols=2)
+    for col, text in enumerate(["Activity", "Precision"]):
+        table.cell(0, col).text = text          # plain text, not bold
+    table.cell(1, 0).text = "Walking"
+    table.cell(1, 1).text = "0.94"
+    buf = io.BytesIO(); d.save(buf)
+
+    graph = parse_docx_bytes(buf.getvalue(), title="T")
+    assert [c.content for c in graph.resolve_target("table_header")] == ["Activity", "Precision"]
+
+
+def test_a_one_row_table_has_no_header():
+    """A single-row table is a layout device — usually an equation with its
+    number beside it — and its cells are not column headings."""
+    import io
+    from docx import Document
+
+    d = Document()
+    table = d.add_table(rows=1, cols=2)
+    table.cell(0, 0).text = "x = y + 1"
+    table.cell(0, 1).text = "(3)"
+    buf = io.BytesIO(); d.save(buf)
+
+    graph = parse_docx_bytes(buf.getvalue(), title="T")
+    assert graph.resolve_target("table_header") == []

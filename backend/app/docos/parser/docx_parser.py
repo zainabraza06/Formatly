@@ -202,6 +202,9 @@ def _paragraph_node(para: _Paragraph, in_references: bool,
         if inferred is not None:
             node_type = inferred
     meta: dict = {"style_name": style_name, "level": _heading_level(lname)}
+    role = _named_part(text)
+    if role:
+        meta["role"] = role
     if maths:
         from lxml import etree
         meta["equations"] = [
@@ -325,6 +328,25 @@ def _apply_breaks(meta: dict, breaks_before: int) -> None:
 _SUB_NUMBER = re.compile(
     r"^(?:\d+\.\d+|[ABCDEFGHJKLMNOPQRSTUWYZ][.)]\s|[IVXLCDM]+-[A-Z0-9])", re.ASCII)
 _TOP_NUMBER = re.compile(r"^(?:[IVXLCDM]+|\d+)[.)]\s", re.ASCII)
+
+# Parts a paper names inside the paragraph rather than above it. An abstract
+# rarely gets a heading of its own — it announces itself with its first word —
+# so a document cut only at its headings has no abstract in it anywhere, and an
+# instruction about "the abstract" has nothing to reach.
+_NAMED_PARTS = (
+    ("abstract", re.compile(r"^abstract\s*[-—–:.]", re.IGNORECASE)),
+    ("keywords", re.compile(r"^(index\s+terms|keywords?)\s*[-—–:.]", re.IGNORECASE)),
+)
+
+
+def _named_part(text: str) -> Optional[str]:
+    """The part of a paper this paragraph announces itself as, if any."""
+    line = (text or "").strip()
+    for name, pattern in _NAMED_PARTS:
+        if pattern.match(line):
+            return name
+    return None
+
 
 # The shapes mathematics takes: LaTeX, or the symbols it is written with.
 _LOOKS_LIKE_MATHS = re.compile(
@@ -663,9 +685,19 @@ def _is_header_row(row, index: int) -> bool:
 
     if index != 0:
         return False
-    runs = [run for cell in row.cells for para in cell.paragraphs for run in para.runs
-            if (run.text or "").strip()]
-    return bool(runs) and all(run.bold for run in runs)
+
+    # The first row of a table is its header, which is the convention papers
+    # follow and the reason "the headings in the table" means anything at all.
+    # Requiring it to be bold already was exactly backwards: it made the row
+    # undetectable in the one case someone asks about it — when they want it
+    # made bold — so the request found nothing and reported success.
+    #
+    # Two things disqualify it. A single-row table is a layout device, usually
+    # an equation with its number beside it, and has no header. A first row
+    # with an empty cell is a table that starts with data.
+    if len(row.table.rows) < 2:
+        return False
+    return all((cell.text or "").strip() for cell in row.cells)
 
 
 def _table_node(table: _Table, doc: _Doc) -> Node:

@@ -118,13 +118,23 @@ def _sections(graph: DocumentGraph, headings: list[Node]) -> list[dict[str, Any]
     """The document cut at its headings, each part described by what it holds."""
     top_level = list(graph.root.children)
     starts = {n.id: i for i, n in enumerate(top_level)}
-    boundaries = [starts[h.id] for h in headings if h.id in starts]
+
+    # A section starts at a heading — or at a paragraph that names itself. An
+    # abstract seldom has a heading above it; it says "Abstract—" and carries
+    # on, so a document cut only at headings contains no abstract anywhere and
+    # "rewrite the abstract" has nothing to aim at.
+    named = {starts[n.id]: str(n.metadata.get("role")).title()
+             for n in top_level if (n.metadata or {}).get("role") and n.id in starts}
+    boundaries = sorted(set([starts[h.id] for h in headings if h.id in starts]) | set(named))
 
     sections: list[dict[str, Any]] = []
     for position, start in enumerate(boundaries):
         end = boundaries[position + 1] if position + 1 < len(boundaries) else len(top_level)
         head = top_level[start]
-        body = top_level[start + 1:end]
+        # A part that names itself is its own first paragraph, so it counts as
+        # its own content rather than as a heading above it.
+        titled = named.get(start)
+        body = top_level[start:end] if titled else top_level[start + 1:end]
 
         words = sum(len((n.content or "").split()) for n in body)
         holds = {
@@ -144,8 +154,8 @@ def _sections(graph: DocumentGraph, headings: list[Node]) -> list[dict[str, Any]
         contents = [head.id] + [n.id for n in body][:30]
         sections.append({
             "id": head.id,
-            "level": 1 if head.type is NodeType.HEADING else 2,
-            "heading": head.content[:80],
+            "level": 1 if titled or head.type is NodeType.HEADING else 2,
+            "heading": titled or head.content[:80],
             "page": _page_of(head),
             "words": words,
             "holds": {k: v for k, v in holds.items() if v},

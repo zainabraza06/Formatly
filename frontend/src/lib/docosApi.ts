@@ -18,6 +18,18 @@ function authHeaders(extra?: Record<string, string>): Record<string, string> {
   return { ...(extra || {}), ...(token ? { Authorization: `Bearer ${token}` } : {}) }
 }
 
+/** The server's `detail`, so a failure reads as a sentence. */
+async function failure(res: Response): Promise<string> {
+  try {
+    const body = await res.clone().json()
+    if (typeof body?.detail === 'string') return body.detail
+  } catch {
+    /* not JSON — fall through to the text */
+  }
+  return (await res.text().catch(() => '')) || `Request failed: ${res.status}`
+}
+
+
 async function json<T>(res: Response): Promise<T> {
   if (!res.ok) {
     let detail = ''
@@ -44,6 +56,25 @@ export const docosApi = {
 
   listDocuments: async (): Promise<DocumentSummary[]> =>
     json(await fetch(`${API_URL}/docos`, { headers: authHeaders() })),
+
+  /** Save the edited document. The current graph, so every change is in it. */
+  download: async (id: string, format: 'docx' | 'pdf'): Promise<void> => {
+    const res = await fetch(`${API_URL}/docos/${id}/download.${format}`, { headers: authHeaders() })
+    if (!res.ok) {
+      throw new Error(await failure(res) || `Could not export the ${format.toUpperCase()}`)
+    }
+    // A protected route cannot be reached by a plain link, so the bytes are
+    // fetched with the token and handed to the browser to save.
+    const match = /filename="?([^";]+)"?/i.exec(res.headers.get('content-disposition') || '')
+    const url = URL.createObjectURL(await res.blob())
+    const a = document.createElement('a')
+    a.href = url
+    a.download = match ? match[1] : `document.${format}`
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
+  },
 
   /** Delete an upload and its whole version history. Not undoable. */
   deleteDocument: async (id: string): Promise<{ deleted: boolean }> =>

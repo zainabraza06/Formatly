@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from fastapi import (
     APIRouter, BackgroundTasks, Body, Depends, File, HTTPException, UploadFile, WebSocket,
     WebSocketDisconnect,
@@ -14,6 +14,15 @@ from app.docos.auth import get_current_user, user_from_token
 from app.docos.auth.store import User
 from app.docos.events import get_hub
 from app.docos.service import get_service
+
+_DOCX_MIME = ("application/vnd.openxmlformats-officedocument"
+              ".wordprocessingml.document")
+
+
+def _safe_name(title: str) -> str:
+    """A filename a browser and a file system will both accept."""
+    cleaned = "".join(c for c in (title or "document") if c.isalnum() or c in " -_").strip()
+    return (cleaned or "document")[:80]
 
 router = APIRouter(prefix="/docos", tags=["docos"])
 
@@ -99,6 +108,64 @@ def get_document(doc_id: str, user: User = Depends(get_current_user)) -> dict[st
         raise HTTPException(status_code=404, detail="document not found")
     except PermissionError:
         raise HTTPException(status_code=403, detail="not your document")
+
+
+@router.get("/{doc_id}/download.docx")
+def download_docx(doc_id: str, user: User = Depends(get_current_user)) -> Response:
+    """The edited document as a .docx, named after itself.
+
+    The current graph, so it carries every change made since the import —
+    including the equations, which go back as Word's own markup where nobody
+    has rewritten them.
+    """
+    from app.docos.export import graph_to_docx_bytes
+
+    try:
+        graph = get_service().current_graph(doc_id, owner_id=user.id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="document not found")
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="not your document")
+
+    return Response(
+        content=graph_to_docx_bytes(graph),
+        media_type=_DOCX_MIME,
+        headers={"Content-Disposition":
+                 f'attachment; filename="{_safe_name(graph.title)}.docx"'},
+    )
+
+
+@router.get("/{doc_id}/download.pdf")
+def download_pdf(doc_id: str, user: User = Depends(get_current_user)) -> Response:
+    """The edited document as a PDF, laid out by LibreOffice.
+
+    The same rendering the exact view shows, offered as a file: what the editor
+    draws is HTML, and a PDF is what somebody sends to a supervisor.
+    """
+    from app.docos.export import graph_to_docx_bytes
+    from app.docos.parser.paginator import docx_to_pdf, libreoffice_available
+
+    if not libreoffice_available():
+        raise HTTPException(status_code=503, detail="a PDF needs LibreOffice")
+
+    try:
+        graph = get_service().current_graph(doc_id, owner_id=user.id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="document not found")
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="not your document")
+
+    pdf = docx_to_pdf(graph_to_docx_bytes(graph))
+    if pdf is None:
+        raise HTTPException(status_code=503, detail="could not render the PDF")
+
+    return Response(
+        # `docx_to_pdf` hands back the file it wrote, not its contents.
+        content=pdf.read_bytes(),
+        media_type="application/pdf",
+        headers={"Content-Disposition":
+                 f'attachment; filename="{_safe_name(graph.title)}.pdf"'},
+    )
 
 
 @router.get("/{doc_id}/exact.pdf")
