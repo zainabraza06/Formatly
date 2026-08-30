@@ -48,6 +48,23 @@ def _style_of(action: Action) -> Style:
     return Style.model_validate(loose)
 
 
+def _introduces_a_list(node: Node, scope: list[Node]) -> bool:
+    """A paragraph that announces the items rather than being one of them.
+
+    It ends in a colon and is followed by something that does not — a list
+    whose items all end in colons ("Inputs:", "Outputs:") is a list of them,
+    not an introduction to itself, and a colon on the last paragraph in scope
+    announces nothing that is here.
+    """
+    def _text(n: Node) -> str:
+        return (n.runs_text() or n.content or "").rstrip()
+
+    if not _text(node).endswith(":"):
+        return False
+    return any(not _text(other).endswith(":")
+               for other in scope[scope.index(node) + 1:])
+
+
 class ExecutionEngine:
     """Stateless. `stream` yields events lazily; `execute` collects them."""
 
@@ -202,13 +219,19 @@ class ExecutionEngine:
         # contributions does not bullet the whole introduction around them.
         splits: dict[str, tuple[str, list[str]]] = {}
         if kind:
+            nodes = [n for n in nodes if n.type in (NodeType.BODY, NodeType.PARAGRAPH)]
             for n in nodes:
-                if n.type in (NodeType.BODY, NodeType.PARAGRAPH):
-                    lead, items = split_items(n.runs_text() or n.content)
-                    if items:
-                        splits[n.id] = (lead, items)
+                lead, items = split_items(n.runs_text() or n.content)
+                if items:
+                    splits[n.id] = (lead, items)
             if splits:
                 nodes = [n for n in nodes if n.id in splits]
+            else:
+                # The sentence that introduces a list is not one of its items.
+                # "The main contributions of this work are:" ends in a colon and
+                # is followed by the things it announces, and bulleting it put a
+                # bullet on the announcement.
+                nodes = [n for n in nodes if not _introduces_a_list(n, nodes)]
 
         yield Event(name=EventName.FORMAT_STARTED,
                     payload={"target": action.target, "total": len(nodes),

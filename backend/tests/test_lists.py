@@ -97,6 +97,40 @@ def test_bulleting_an_enumerating_paragraph_makes_one_item_per_thing():
     ]
 
 
+def test_the_sentence_that_introduces_the_list_does_not_get_a_bullet():
+    graph = _run(_graph("The main contributions of this work are:",
+                        "A subject-independent benchmark.",
+                        "An evidence-gated feature set."))
+    assert _items(graph) == [
+        ("", "The main contributions of this work are:"),
+        ("bullet", "A subject-independent benchmark."),
+        ("bullet", "An evidence-gated feature set."),
+    ]
+
+
+def test_a_colon_on_the_last_paragraph_is_still_an_item():
+    """It announces nothing that is in scope, so it is one of the things."""
+    graph = _run(_graph("Inputs:", "Outputs:"))
+    assert _items(graph) == [("bullet", "Inputs:"), ("bullet", "Outputs:")]
+
+
+def test_a_heading_in_scope_is_not_turned_into_a_bullet():
+    graph = _run(_graph("First point.", "Second point."))
+    assert [n.content for n in graph.nodes()
+            if n.type is NodeType.HEADING and not n.metadata.get("list")] == ["Introduction"]
+
+
+def test_word_list_paragraph_style_alone_is_not_a_list():
+    """Word gives List Paragraph to any indented block, list or not."""
+    doc = Document()
+    doc.add_paragraph("The contributions are:", style="List Paragraph")
+    buf = io.BytesIO()
+    doc.save(buf)
+
+    graph = parse_docx_bytes(buf.getvalue(), title="t")
+    assert all(not n.metadata.get("list") for n in graph.nodes())
+
+
 def test_plain_paragraphs_become_items_as_they_stand():
     graph = _run(_graph("First point.", "Second point."), kind="number")
     assert _items(graph) == [("number", "First point."), ("number", "Second point.")]

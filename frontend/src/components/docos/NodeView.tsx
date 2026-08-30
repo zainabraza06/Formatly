@@ -154,7 +154,20 @@ function withBullet(node: GraphNode, css: CSSProperties,
       <span
         aria-hidden
         className="select-none"
-        style={{ flex: '0 0 1.6em', color: css.color ?? '#1a1a1a', lineHeight: css.lineHeight }}
+        style={{
+          flex: '0 0 1.6em',
+          color: css.color ?? '#1a1a1a',
+          // The marker belongs on the item's first line. Left to itself it sits
+          // at the top of the row, above the space the paragraph puts over its
+          // own text, which is what made the bullets look unaligned. It takes
+          // the paragraph's line height, size and space-before so the two start
+          // on the same line, and its own text-align so a number is not
+          // dragged around by an item that happens to be centred.
+          lineHeight: css.lineHeight,
+          fontSize: css.fontSize,
+          marginTop: css.marginTop,
+          textAlign: 'left',
+        }}
       >
         {marker}
       </span>

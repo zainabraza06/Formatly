@@ -363,9 +363,9 @@ def _list_of(para: _Paragraph, style_name: str) -> Optional[dict]:
     """
     lname = (style_name or "").lower()
     kind: Optional[str] = None
-    if "list number" in lname or "numbered" in lname:
+    if "list number" in lname:
         kind = "number"
-    elif "list bullet" in lname or "bullet" in lname:
+    elif "list bullet" in lname:
         kind = "bullet"
 
     level = 0
@@ -382,8 +382,10 @@ def _list_of(para: _Paragraph, style_name: str) -> Optional[dict]:
         # commoner of the two and the safer guess, since a wrong bullet reads
         # as a bullet and a wrong number implies an order that is not there.
         kind = kind or "bullet"
-    elif "list paragraph" in lname:
-        kind = kind or "bullet"
+    # Deliberately not "List Paragraph": Word gives that style to any indented
+    # block, list or not, and treating it as one put a bullet on the sentence
+    # that introduces the list. A List Paragraph with real numbering is caught
+    # above, by its numbering.
 
     return {"kind": kind, "level": level} if kind else None
 
