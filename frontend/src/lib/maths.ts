@@ -38,3 +38,16 @@ export function hasMaths(text: string): boolean {
   return maths().test(text)
 }
 
+
+
+/** The LaTeX of equations the document itself stores as equations.
+ *
+ *  Word keeps an equation as its own markup; the parser translates it and
+ *  records what it produced. Anything else that looks like maths is characters
+ *  somebody typed, and an imported document should look like itself until an
+ *  instruction changes it.
+ */
+export function knownEquations(node: { metadata?: Record<string, unknown> }): Set<string> {
+  const stored = (node.metadata as { equations?: { latex?: string }[] } | undefined)?.equations
+  return new Set((stored ?? []).map((e) => (e.latex ?? '').trim()).filter(Boolean))
+}

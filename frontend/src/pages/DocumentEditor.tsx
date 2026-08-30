@@ -16,6 +16,9 @@ export function DocumentEditor() {
   const fileRef = useRef<HTMLInputElement>(null)
   const [dragOver, setDragOver] = useState(false)
   const [view, setView] = useState<'edit' | 'exact'>('edit')
+  // Off by default: an imported document should look like itself. A paper that
+  // types its maths as LaTeX shows the characters it typed, until asked.
+  const [renderMaths, setRenderMaths] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   // open a document passed via ?doc=<id> (from My Uploads / after import)
@@ -81,6 +84,21 @@ export function DocumentEditor() {
               ))}
             </div>
           )}
+          {!noDoc && (
+            <button
+              onClick={() => setRenderMaths((on) => !on)}
+              title="Draw LaTeX typed into the text as mathematics. Equations the
+document stores as equations are always drawn."
+              className={clsx(
+                'rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors',
+                renderMaths
+                  ? 'border-line-strong bg-surface-2 text-ink'
+                  : 'border-line bg-surface text-muted hover:text-ink',
+              )}
+            >
+              ∑ Maths
+            </button>
+          )}
           <input
             ref={fileRef}
             type="file"
@@ -129,6 +147,7 @@ export function DocumentEditor() {
               removingIds={doc.removingIds}
               marks={marks}
               focusId={doc.focusId}
+              renderMaths={renderMaths}
             />
           )}
         </div>

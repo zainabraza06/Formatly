@@ -16,6 +16,8 @@ interface Props {
   marks?: Map<string, DiffMark>
   /** Turn to the page holding this node — the assistant is working there. */
   focusId?: string | null
+  /** Draw LaTeX typed into the text as mathematics, because the reader asked. */
+  renderMaths?: boolean
 }
 
 // Fallback only: when a document carries no real page-break markers (e.g. it was
@@ -93,7 +95,9 @@ function paginate(nodes: GraphNode[], exactCount?: number): GraphNode[][] {
   return pages.length ? pages : [[]]
 }
 
-export function GraphCanvas({ graph, selectedIds, activeId, removingIds, marks, focusId }: Props) {
+export function GraphCanvas({
+  graph, selectedIds, activeId, removingIds, marks, focusId, renderMaths,
+}: Props) {
   const nodes = flatten(graph)
   const geo = pageGeometry(graph)
 
@@ -182,7 +186,7 @@ export function GraphCanvas({ graph, selectedIds, activeId, removingIds, marks, 
     // so a diff opening or closing has to be measured again. The display scale
     // is deliberately absent: it changes how big the page looks, never how the
     // text wraps inside it.
-  }, [nodes, marks, naturalLineHeight, geo.width_in, geo.height_in,
+  }, [nodes, marks, renderMaths, naturalLineHeight, geo.width_in, geo.height_in,
       geo.margin.top, geo.margin.bottom, geo.default_font, geo.default_size_pt])
 
   const pages = measuredPages ?? markerPages
@@ -249,6 +253,7 @@ export function GraphCanvas({ graph, selectedIds, activeId, removingIds, marks, 
             removing={false}
             mark={marks?.get(n.id)}
             naturalLineHeight={naturalLineHeight}
+            renderMaths={renderMaths}
           />
         ))}
       </div>
@@ -310,6 +315,7 @@ export function GraphCanvas({ graph, selectedIds, activeId, removingIds, marks, 
                 removing={removing.has(n.id)}
                 mark={marks?.get(n.id)}
                 naturalLineHeight={naturalLineHeight}
+                renderMaths={renderMaths}
               />
             ))}
           </motion.div>

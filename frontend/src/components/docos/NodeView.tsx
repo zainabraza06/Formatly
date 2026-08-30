@@ -4,7 +4,7 @@ import type { CSSProperties } from 'react'
 import type { GraphNode, Run, Style } from '../../types/docos'
 import { inlineRuns } from '../../types/docos'
 import { Maths } from './Maths'
-import { hasMaths, splitMaths } from '../../lib/maths'
+import { knownEquations, splitMaths } from '../../lib/maths'
 import type { DiffMark } from '../../lib/diffMarks'
 import { NODE_LABEL } from '../../lib/graphUtils'
 
@@ -60,9 +60,13 @@ interface Props {
   mark?: DiffMark
   /** The document font's own line height, as a ratio of its size. */
   naturalLineHeight?: number
+  /** Draw typed-out LaTeX as mathematics too. */
+  renderMaths?: boolean
 }
 
-export function NodeView({ node, selected, active, removing, mark, naturalLineHeight }: Props) {
+export function NodeView({
+  node, selected, active, removing, mark, naturalLineHeight, renderMaths,
+}: Props) {
   const css = { ...styleToCss(node.style), ...spacingToCss(node, naturalLineHeight) }
 
   return (
@@ -106,7 +110,7 @@ export function NodeView({ node, selected, active, removing, mark, naturalLineHe
       >
         {NODE_LABEL[node.type]}
       </span>
-      {renderBody(node, css, mark)}
+      {renderBody(node, css, mark, renderMaths)}
     </motion.div>
   )
 }
@@ -114,9 +118,10 @@ export function NodeView({ node, selected, active, removing, mark, naturalLineHe
 // The page is always a white sheet (see GraphCanvas), so text colours are fixed
 // dark-on-white like Word — never inverted by the app's dark theme. Explicit
 // colours parsed from the DOCX still win via inline `css`.
-function renderBody(node: GraphNode, css: CSSProperties, mark?: DiffMark) {
+function renderBody(node: GraphNode, css: CSSProperties, mark?: DiffMark,
+                    renderMaths?: boolean) {
   // The words themselves, marked up when a compare result knows how they changed.
-  const text = <Text node={node} mark={mark} />
+  const text = <Text node={node} mark={mark} renderAll={renderMaths} />
   switch (node.type) {
     case 'heading':
       return <h1 data-node-text style={{ color: '#1a1a1a', ...css }} className="mb-1 mt-2 text-[20pt] font-semibold">{node.content ? text : 'Heading'}</h1>
@@ -149,7 +154,7 @@ function renderBody(node: GraphNode, css: CSSProperties, mark?: DiffMark) {
     case 'image':
       return <ImageView node={node} css={css} />
     case 'table':
-      return <TableView node={node} />
+      return <TableView node={node} renderMaths={renderMaths} />
     default:
       return <p data-node-text style={{ color: '#1a1a1a', ...css }} className="">{text}</p>
   }
@@ -163,7 +168,12 @@ function renderBody(node: GraphNode, css: CSSProperties, mark?: DiffMark) {
  *  throughout and is one plain string. The page is a white sheet, so diff
  *  colours are fixed light-on-paper rather than theme tokens.
  */
-function Text({ node, mark }: { node: GraphNode; mark?: DiffMark }) {
+function Text({ node, mark, renderAll }: {
+  node: GraphNode
+  mark?: DiffMark
+  /** Draw typed-out LaTeX as mathematics too, because the reader asked. */
+  renderAll?: boolean
+}) {
   if (mark?.segments) {
     return (
       <>
@@ -184,7 +194,13 @@ function Text({ node, mark }: { node: GraphNode; mark?: DiffMark }) {
   // inline run formatting to do it — an equation and a bold phrase in the same
   // paragraph is rare, and reading raw LaTeX is a worse loss
   // than reading it unemphasised.
-  if (hasMaths(node.content)) {
+  // Only maths the document itself stores as an equation is drawn as one.
+  // Word displays its own equations as mathematics and displays typed-out
+  // LaTeX as the characters somebody typed, so drawing both as mathematics
+  // would show an imported document as something it is not — converted before
+  // anybody asked for it. `renderAll` is the reader asking.
+  const known = knownEquations(node)
+  if (known.size || renderAll) {
     const pieces = splitMaths(node.content)
     // A paragraph that is nothing but an equation is a display equation, which
     // a paper sets on its own centred line — not tucked against the text above
@@ -192,13 +208,16 @@ function Text({ node, mark }: { node: GraphNode; mark?: DiffMark }) {
     const alone = pieces.length === 1 && pieces[0].kind !== 'text'
     return (
       <>
-        {pieces.map((piece, i) =>
-          piece.kind === 'text' ? (
-            <span key={i}>{piece.value}</span>
-          ) : (
-            <Maths key={i} latex={piece.value} display={alone || piece.kind === 'display'} />
-          ),
-        )}
+        {pieces.map((piece, i) => {
+          const isMaths = piece.kind !== 'text' && (renderAll || known.has(piece.value))
+          if (!isMaths) {
+            // Shown as written: the dollars belong to the text, not to us.
+            const raw = piece.kind === 'text' ? piece.value
+              : piece.kind === 'display' ? `$$${piece.value}$$` : `$${piece.value}$`
+            return <span key={i}>{raw}</span>
+          }
+          return <Maths key={i} latex={piece.value} display={alone || piece.kind === 'display'} />
+        })}
       </>
     )
   }
@@ -274,7 +293,7 @@ function ImageView({ node, css }: { node: GraphNode; css: React.CSSProperties })
   )
 }
 
-function TableView({ node }: { node: GraphNode }) {
+function TableView({ node, renderMaths }: { node: GraphNode; renderMaths?: boolean }) {
   return (
     <div className="my-1 overflow-x-auto">
       <table className="w-full border-collapse text-[10pt]">
@@ -286,7 +305,7 @@ function TableView({ node }: { node: GraphNode }) {
                   {/* A display equation is very often laid out as a one-row
                       table with its number in the next cell, so a cell is one
                       of the likeliest places in a paper to find mathematics. */}
-                  <Text node={cell} />
+                  <Text node={cell} renderAll={renderMaths} />
                   {/* a screenshot laid out in a table is still a picture */}
                   {cell.children.map((pic) => (
                     <ImageView key={pic.id} node={pic} css={styleToCss(pic.style)} />
