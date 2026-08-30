@@ -58,8 +58,12 @@ def locate_section(command: str, brief: dict[str, Any]) -> Optional[dict[str, An
     so "the part that reports accuracy" finds III. RESULTS even though neither
     word appears in its heading.
     """
-    if not names_a_place(command):
-        return None
+    # A request may name a place two ways: with a word that means "a part of
+    # this document" — "the section on…" — or simply by naming the heading.
+    # "Make the contributions in introduction bullet points" does the second,
+    # and requiring the first sent it to the whole document: thirteen passes to
+    # rewrite one section, and twelve of them for nothing.
+    cued = names_a_place(command)
 
     wanted = _terms(command)
     if not wanted:
@@ -80,15 +84,24 @@ def locate_section(command: str, brief: dict[str, Any]) -> Optional[dict[str, An
 
     best: Optional[dict[str, Any]] = None
     best_score = 0.0
+    best_named_heading = False
     for section in candidates:
         heading_terms = _terms(section.get("heading", ""))
         section_terms = heading_terms | _terms(section.get("about", ""))
         score = 0.0
+        matched_heading = False
         for term in wanted & section_terms:
             distinctive = 2.0 if spread.get(term, 0) == 1 else 1.0
             # Naming the heading is the plainest way to mean a section.
-            score += distinctive + (1.0 if term in heading_terms else 0.0)
+            in_heading = term in heading_terms
+            matched_heading = matched_heading or in_heading
+            score += distinctive + (1.0 if in_heading else 0.0)
         if score > best_score:
-            best, best_score = section, score
+            best, best_score, best_named_heading = section, score, matched_heading
 
-    return best if best_score >= _MIN_OVERLAP else None
+    if best is None or best_score < _MIN_OVERLAP:
+        return None
+    # Without a cue word, only a heading will do. A word that happens to appear
+    # in what a section was read to be about is too thin a reason to send an
+    # instruction there and nowhere else.
+    return best if cued or best_named_heading else None

@@ -658,3 +658,39 @@ def test_a_request_the_document_already_satisfies_says_so():
         Node(type=NodeType.BODY, content="No headings here."),
     ]))
     assert not ExecutionEngine().scope_of(empty, batch.actions[0]), "nothing matched"
+
+
+def test_naming_a_heading_names_a_place():
+    """"Make the contributions in introduction bullet points" names a place by
+    its heading rather than by saying the word "section". Requiring the word
+    sent the instruction to the whole document — thirteen rewrite passes to
+    change one section, twelve of them for nothing."""
+    from app.docos.command.locate import locate_section
+
+    brief = {"sections": [
+        {"heading": "I. INTRODUCTION", "about": "motivates automated fall detection",
+         "node_ids": ["a", "b"]},
+        {"heading": "IV. Evaluation Protocol", "about": "describes the validation",
+         "node_ids": ["c", "d"]},
+    ]}
+
+    assert locate_section("make the contributions in introduction bullet points",
+                          brief)["heading"] == "I. INTRODUCTION"
+    assert locate_section("tighten the evaluation protocol",
+                          brief)["heading"] == "IV. Evaluation Protocol"
+
+
+def test_a_chance_word_in_a_summary_is_not_a_place():
+    """Without a word like "section", only a heading will do: a word that
+    happens to appear in what a section was read to be about is too thin a
+    reason to send an instruction there and nowhere else."""
+    from app.docos.command.locate import locate_section
+
+    brief = {"sections": [
+        {"heading": "I. INTRODUCTION", "about": "motivates automated fall detection",
+         "node_ids": ["a"]},
+    ]}
+    # "detection" appears only in the reading, and the request names no place.
+    assert locate_section("improve the detection wording", brief) is None
+    # ...but saying "the part about" does name one.
+    assert locate_section("improve the part about detection", brief) is not None

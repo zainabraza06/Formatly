@@ -218,7 +218,9 @@ export function useDocOS() {
         }
         setPanel((s) => ({
           ...s,
-          currentAction: `Reading page ${p.pass ?? '?'} of ${p.of ?? '?'}…`,
+          // "Reading" here read as though the document were being read again,
+          // which is a different thing that also says so on its own line.
+          currentAction: `Rewriting — part ${p.pass ?? '?'} of ${p.of ?? '?'}…`,
           progress: { done: (p.pass ?? 1) - 1, total: p.of ?? 0 },
         }))
         return STEP_DELAY
