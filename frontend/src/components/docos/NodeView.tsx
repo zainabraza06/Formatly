@@ -283,7 +283,10 @@ function TableView({ node }: { node: GraphNode }) {
             <tr key={row.id}>
               {row.children.map((cell) => (
                 <td key={cell.id} className="border border-neutral-400 px-3 py-1.5 align-top text-neutral-900">
-                  {cell.content}
+                  {/* A display equation is very often laid out as a one-row
+                      table with its number in the next cell, so a cell is one
+                      of the likeliest places in a paper to find mathematics. */}
+                  <Text node={cell} />
                   {/* a screenshot laid out in a table is still a picture */}
                   {cell.children.map((pic) => (
                     <ImageView key={pic.id} node={pic} css={styleToCss(pic.style)} />

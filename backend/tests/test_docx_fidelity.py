@@ -473,3 +473,49 @@ def test_the_converter_handles_the_shapes_maths_actually_takes():
     }
     for inner, expected in cases.items():
         assert omml_to_latex(parse_xml(_omml(inner))) == expected, inner[:40]
+
+
+def _equation_in_a_cell_docx() -> bytes:
+    """A display equation laid out the way papers usually lay one out: a
+    one-row table, the equation in one cell and its number in the next."""
+    import io
+    from docx import Document
+    from docx.oxml import parse_xml
+
+    d = Document()
+    table = d.add_table(rows=1, cols=2)
+    cell = table.cell(0, 0)
+    cell.text = ""
+    cell.paragraphs[0]._p.append(parse_xml(_omml(
+        "<m:f><m:num><m:r><m:t>a</m:t></m:r></m:num>"
+        "<m:den><m:r><m:t>b</m:t></m:r></m:den></m:f>")))
+    table.cell(0, 1).text = "(9)"
+
+    buf = io.BytesIO(); d.save(buf); return buf.getvalue()
+
+
+def test_an_equation_in_a_table_cell_is_read():
+    """`c.text` has the same blind spot as `para.text`, so the cells a paper
+    puts its mathematics in came back empty."""
+    graph = parse_docx_bytes(_equation_in_a_cell_docx(), title="C")
+    cells = [n for n in graph.nodes() if n.type is NodeType.TABLE_CELL]
+
+    assert cells[0].content == r"$\frac{a}{b}$"
+    assert cells[0].metadata.get("equations"), "and it kept the original XML"
+    assert cells[1].content == "(9)", "the number beside it is untouched"
+
+
+def test_an_equation_in_a_table_cell_survives_a_round_trip():
+    import io
+    from docx import Document
+    from docx.oxml.ns import qn
+    from app.docos.export import graph_to_docx_bytes
+
+    original = _equation_in_a_cell_docx()
+    exported = graph_to_docx_bytes(parse_docx_bytes(original, title="C"))
+
+    def equations(data: bytes) -> int:
+        return len(Document(io.BytesIO(data)).element.body.findall(".//" + qn("m:oMath")))
+
+    assert equations(original) == 1
+    assert equations(exported) == 1

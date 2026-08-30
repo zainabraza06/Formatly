@@ -312,7 +312,9 @@ def _table(doc: Document, node: Node, page: dict[str, Any]) -> None:
         for i, cell in enumerate(row.children[:columns]):
             paragraph = cells[i].paragraphs[0]
             _apply_paragraph_format(paragraph, cell)
-            if cell.content:
+            # A cell holds a display equation as often as it holds a number,
+            # and one nobody edited goes back as Word's own XML.
+            if cell.content and not _write_with_equations(paragraph, cell, page, False):
                 _apply_run(paragraph.add_run(cell.content), cell, page)
             for picture in cell.children:
                 if picture.type == NodeType.IMAGE:

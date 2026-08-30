@@ -18,6 +18,7 @@ from docx.document import Document as _Doc
 from docx.oxml.ns import qn
 from docx.table import Table as _Table
 from docx.text.paragraph import Paragraph as _Paragraph
+from lxml import etree
 
 from app.docos.graph import DocumentGraph, Node, NodeType, Run, Style, merge_runs
 from app.docos.parser.omml import paragraph_parts
@@ -670,12 +671,32 @@ def _table_node(table: _Table, doc: _Doc) -> Node:
                 for img in _images(para):
                     pictures.append(Node(type=NodeType.IMAGE,
                                          metadata={"is_figure": True, **img}))
+
+            # `c.text` has the same blind spot as `para.text`: it reads the
+            # w:t runs and skips Word's equations entirely. A display equation
+            # is very often laid out as a one-row table with the number beside
+            # it, so that blind spot emptied exactly the cells a paper puts its
+            # mathematics in.
+            lines: list[str] = []
+            cell_maths: list[dict] = []
+            for para in c.paragraphs:
+                parts = paragraph_parts(para)
+                if any(kind == "maths" for kind, _text, _el in parts):
+                    lines.append("".join(text if kind == "text" else f"${text}$"
+                                         for kind, text, _el in parts))
+                    cell_maths.extend(
+                        {"latex": text, "xml": etree.tostring(element, encoding="unicode")}
+                        for kind, text, element in parts if kind == "maths")
+                else:
+                    lines.append(para.text)
+
+            cell_meta: dict = {"equations": cell_maths} if cell_maths else {}
             cells.append(
                 Node(
                     type=NodeType.TABLE_CELL,
-                    content=c.text,
+                    content="\n".join(lines),
                     children=pictures,
-                    metadata={},
+                    metadata=cell_meta,
                 )
             )
         row_meta: dict = {}
