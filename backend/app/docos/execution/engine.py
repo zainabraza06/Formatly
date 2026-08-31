@@ -10,6 +10,7 @@ from typing import Iterator
 
 from app.docos.actions import Action, ActionBatch, ActionType
 from app.docos.execution.events import Event, EventName
+from app.docos.execution.markdown import apply_typed_emphasis
 from app.docos.execution.lists import split_items
 from app.docos.graph import DocumentGraph, Node, NodeType, Style
 
@@ -472,7 +473,12 @@ class ExecutionEngine:
             node = g.get(node_id)
             if node is not None and isinstance(text, str) and text.strip():
                 # New words: whatever formatted the old ones no longer applies.
-                node.set_text(text)
+                # Emphasis the model typed rather than applied — `**COMPONENT**`
+                # for a header it was told to bold — is read as the formatting
+                # it asked for, because this document has no Markdown in it and
+                # an asterisk stored here is an asterisk on the page.
+                if apply_typed_emphasis(node, text) is None:
+                    continue
                 touched.append(node_id)
                 yield Event(name=EventName.FORMAT_PROGRESS,
                             payload={"id": node_id, "index": len(touched) - 1})
