@@ -330,6 +330,7 @@ def _table(doc: Document, node: Node, page: dict[str, Any]) -> None:
 
     table = doc.add_table(rows=0, cols=columns)
     table.style = "Table Grid"
+    _apply_borders(table, (node.metadata or {}).get("borders"))
     for row in rows:
         cells = table.add_row().cells
         for i, cell in enumerate(row.children[:columns]):
@@ -345,6 +346,44 @@ def _table(doc: Document, node: Node, page: dict[str, Any]) -> None:
 
     for caption in (c for c in node.children if c.type == NodeType.CAPTION):
         doc.add_paragraph(caption.content)
+
+
+_BORDER_TAGS = (("top", "w:top"), ("bottom", "w:bottom"), ("left", "w:left"),
+                ("right", "w:right"), ("inside_h", "w:insideH"),
+                ("inside_v", "w:insideV"))
+
+
+def _apply_borders(table, borders: Any) -> None:
+    """Write the table's own edges, so a table with two rules exports as one.
+
+    Word measures a line in eighths of a point and spells "no line" as `none`.
+    Without this the exporter always wrote Table Grid, and a table that had
+    been given horizontal rules only came back out of the file fully boxed.
+    """
+    if not isinstance(borders, dict) or not borders:
+        return
+
+    properties = table._tbl.tblPr
+    for existing in properties.findall(qn("w:tblBorders")):
+        properties.remove(existing)
+
+    element = OxmlElement("w:tblBorders")
+    for side, tag in _BORDER_TAGS:
+        try:
+            width = float(borders.get(side, 0) or 0)
+        except (TypeError, ValueError):
+            width = 0.0
+        edge = OxmlElement(tag)
+        if width > 0:
+            edge.set(qn("w:val"), "single")
+            edge.set(qn("w:sz"), str(max(2, int(round(width * 8)))))
+            edge.set(qn("w:space"), "0")
+            edge.set(qn("w:color"), "333333")
+        else:
+            edge.set(qn("w:val"), "none")
+            edge.set(qn("w:sz"), "0")
+        element.append(edge)
+    properties.append(element)
 
 
 def _picture_in_cell(cell, node: Node, page: dict[str, Any]) -> None:

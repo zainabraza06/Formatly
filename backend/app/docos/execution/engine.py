@@ -6,7 +6,7 @@ caller keeps the original graph (rollback on failure — no version is committed
 """
 from __future__ import annotations
 
-from typing import Iterator
+from typing import Iterator, Optional
 
 from app.docos.actions import Action, ActionBatch, ActionType
 from app.docos.execution.events import Event, EventName
@@ -84,6 +84,32 @@ def _section_under(g: DocumentGraph, heading: Node) -> list[Node]:
         out.append(node)
     return out
 
+
+
+# The six edges Word gives a table, and the words people use for them.
+_BORDER_SIDES = ("top", "bottom", "left", "right", "inside_h", "inside_v")
+
+_BORDER_ALIASES = {
+    "upper": "top", "above": "top", "header": "top", "first": "top",
+    "lower": "bottom", "below": "bottom", "last": "bottom", "under": "bottom",
+    "outer": "outside", "outside": "outside",
+    "inner": "inside", "middle": "inside", "internal": "inside",
+    "horizontal": "inside_h", "inside_horizontal": "inside_h", "row": "inside_h",
+    "vertical": "inside_v", "inside_vertical": "inside_v", "column": "inside_v",
+    "insideh": "inside_h", "insidev": "inside_v",
+}
+
+
+def _table_of(g: DocumentGraph, node: Node) -> Optional[Node]:
+    """The table a node belongs to, or the node itself if it is one."""
+    seen = 0
+    current: Optional[Node] = node
+    while current is not None and seen < 6:
+        if current.type is NodeType.TABLE:
+            return current
+        current = g.parent_of(current.id)
+        seen += 1
+    return None
 
 def _introduces_a_list(node: Node, scope: list[Node]) -> bool:
     """A paragraph that announces the items rather than being one of them.
@@ -259,6 +285,67 @@ class ExecutionEngine:
         for k, n in enumerate(nodes):
             current = n.style.font_size or base
             n.apply_style(Style(font_size=round(max(4.0, min(current * scale, 96.0)), 1)))
+            changed.append(n.id)
+            yield Event(name=EventName.FORMAT_PROGRESS, payload={"id": n.id, "index": k})
+        yield Event(name=EventName.FORMAT_FINISHED, payload={"count": len(changed)})
+        return changed
+
+    def _h_border(self, g, action, i, selection) -> Iterator[Event]:
+        """Which edges a table draws, and how heavily.
+
+        "Only upper and lower borders, bold" is the commonest table request in
+        academic writing — the horizontal-rules-only look — and nothing about
+        the text can express it, so it is its own action. Naming some sides
+        means those and no others: a request for two edges that left the other
+        four in place would not be the table anyone asked for.
+        """
+        params = action.params or {}
+        sides = [str(s).lower().strip() for s in (params.get("sides") or [])]
+        sides = [_BORDER_ALIASES.get(s, s) for s in sides]
+        wanted: list[str] = []
+        for side in sides:
+            # "Outside" and "inside" each name a pair of edges.
+            if side == "outside":
+                wanted += ["top", "bottom", "left", "right"]
+            elif side == "inside":
+                wanted += ["inside_h", "inside_v"]
+            elif side in _BORDER_SIDES:
+                wanted.append(side)
+
+        width = params.get("width")
+        try:
+            width = float(width) if width is not None else None
+        except (TypeError, ValueError):
+            width = None
+        if str(params.get("style") or "").lower() in ("none", "nil", "off"):
+            width = 0.0
+        if width is None:
+            width = 1.5 if params.get("heavy") else 0.5
+
+        nodes = [n for n in self._scope(g, action, selection)
+                 if n.type is NodeType.TABLE]
+        # A request about a table's borders that reached the cells, or the row,
+        # still means the table they are in.
+        if not nodes:
+            nodes = [t for t in {id(x): x for x in
+                                 (_table_of(g, n) for n in self._scope(g, action, selection))
+                                 if x is not None}.values()]
+
+        yield Event(name=EventName.FORMAT_STARTED,
+                    payload={"target": action.target, "total": len(nodes),
+                             "borders": wanted or "all", "width": width})
+        changed: list[str] = []
+        for k, n in enumerate(nodes):
+            borders = {side: 0.0 for side in _BORDER_SIDES}
+            if wanted:
+                for side in wanted:
+                    borders[side] = width
+            else:
+                # No side named: the request is about all of them.
+                borders = {side: width for side in _BORDER_SIDES}
+            if n.metadata.get("borders") == borders:
+                continue
+            n.metadata["borders"] = borders
             changed.append(n.id)
             yield Event(name=EventName.FORMAT_PROGRESS, payload={"id": n.id, "index": k})
         yield Event(name=EventName.FORMAT_FINISHED, payload={"count": len(changed)})
@@ -551,6 +638,7 @@ class ExecutionEngine:
         ActionType.NORMALIZE: _h_normalize,
         ActionType.RENDER_MATHS: _h_render_maths,
         ActionType.LIST: _h_list,
+        ActionType.BORDER: _h_border,
         ActionType.REWRITE: _h_rewrite,
         ActionType.MERGE: _h_merge,
         ActionType.SPLIT: _h_split,

@@ -166,7 +166,17 @@ class CommandEngine:
         color = _color(c)
         size, relative = _size(c)
 
-        if _WANTS_A_LIST.search(c):
+        if _ABOUT_BORDERS.search(c):
+            sides, width = _borders_wanted(c)
+            # Whatever noun was matched, a border request is about a table:
+            # "lines" alone resolves to the document's horizontal rules.
+            actions.append(a(type="border",
+                             target=target if target in ("table", "table_cell",
+                                                         "table_header") else "table",
+                             params={"sides": sides, "width": width}))
+            reasoning = ("borders off" if width == 0 else
+                         f"{' and '.join(sides) or 'all'} borders")
+        elif _WANTS_A_LIST.search(c):
             # Checked before "select", which claims the word "list" and so used
             # to answer "put these in bullets" by selecting something.
             kind = ("none" if _has(c, "remove", "delete", "un-bullet", "unbullet")
@@ -400,3 +410,65 @@ def _size(text: str) -> tuple[Optional[float], Optional[float]]:
     if _SIZE_WORDS.search(text):
         return None, 1.25 if _BIGGER.search(text) else 0.8
     return None, None
+
+
+# A request about a table's rules rather than its text.
+_ABOUT_BORDERS = re.compile(
+    r"\bborders?\b|\bgridlines?\b"
+    # "Lines" and "rules" mean a table's edges only when a table is being
+    # talked about. Without that, "remove the horizontal lines" is about the
+    # rules drawn across the page, which is a different request entirely.
+    r"|\b(?:lines?|rules?)\b(?=.*\btable\b)|\btable\b(?=.*\b(?:lines?|rules?)\b)",
+    re.IGNORECASE)
+
+# Which edges, named the several ways people name them.
+_SIDE_WORDS = (
+    ("top", r"\b(top|upper|above|head(er)?)\b"),
+    ("bottom", r"\b(bottom|lower|below|under|last)\b"),
+    ("left", r"\bleft\b"),
+    ("right", r"\bright\b"),
+    ("outside", r"\b(outer|outside|around|perimeter)\b"),
+    ("inside", r"\b(inner|inside|internal|between)\b"),
+    ("inside_h", r"\b(horizontal|row)\b"),
+    ("inside_v", r"\b(vertical|column)\b"),
+)
+
+# How heavy a line "bold" or "thick" asks for, in points, against the ordinary
+# half-point rule Word draws by default.
+_HEAVY_LINE = 1.5
+_THIN_LINE = 0.5
+
+
+def _borders_wanted(text: str) -> tuple[list[str], float]:
+    """`(the edges named, the width in points)`. No edges named means all."""
+    sides = [name for name, pattern in _SIDE_WORDS
+             if re.search(pattern, text, re.IGNORECASE)]
+    if re.search(r"\b(no|without|remove|delete|hide|off|none|clear)\b", text, re.IGNORECASE):
+        # "No vertical lines" takes those away and leaves the rest; "no
+        # borders", naming no side, takes them all.
+        if sides:
+            return _keep_others(sides), _THIN_LINE
+        return [], 0.0
+    heavy = re.search(r"\b(bold|thick|heavy|strong|double|dark)\b", text, re.IGNORECASE)
+    return sides, _HEAVY_LINE if heavy else _THIN_LINE
+
+
+_BORDER_ALL = ("top", "bottom", "left", "right", "inside_h", "inside_v")
+
+
+def _expand(sides: list[str]) -> list[str]:
+    out: list[str] = []
+    for side in sides:
+        if side == "outside":
+            out += ["top", "bottom", "left", "right"]
+        elif side == "inside":
+            out += ["inside_h", "inside_v"]
+        else:
+            out.append(side)
+    return out
+
+
+def _keep_others(sides: list[str]) -> list[str]:
+    """The edges left after the named ones are taken away."""
+    gone = set(_expand(sides))
+    return [s for s in _BORDER_ALL if s not in gone]

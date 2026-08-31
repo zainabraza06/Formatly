@@ -43,6 +43,10 @@ class ActionType(str, Enum):
     # list. Bullets are a property of the paragraph in Word, not punctuation
     # typed into it, so this sets that property rather than editing the text.
     LIST = "list"
+    # Which edges a table draws, and how heavily. A request about a table's
+    # rules — "only the top and bottom borders" — is about the table, not
+    # about the text in it, so no style patch can express it.
+    BORDER = "border"
 
 
 # Targets that name a role rather than a node type, resolved by the graph.
@@ -119,6 +123,10 @@ def _validate_params(i: int, a: Action, errors: list[str]) -> None:
         if ("font_size" not in a.params and "scale" not in a.params
                 and not (a.style and a.style.font_size)):
             errors.append(f"action[{i}]: resize needs a font_size or a scale")
+    if a.type == ActionType.BORDER:
+        sides = a.params.get("sides")
+        if sides is not None and not isinstance(sides, list):
+            errors.append(f"action[{i}]: border needs params.sides as a list")
     if a.type == ActionType.REPLACE:
         if "find" not in a.params and "with" not in a.params:
             errors.append(f"action[{i}]: replace needs params.find and params.with")

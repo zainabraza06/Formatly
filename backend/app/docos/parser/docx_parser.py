@@ -812,12 +812,49 @@ def _table_node(table: _Table, doc: _Doc) -> Node:
             row_meta["header_row"] = True
         rows.append(Node(type=NodeType.TABLE_ROW, children=cells, metadata=row_meta))
     meta: dict = {"rows": len(table.rows), "cols": len(table.columns)}
+    borders = _table_borders(table)
+    if borders:
+        meta["borders"] = borders
     # A long table Word split across pages carries lastRenderedPageBreak markers
     # inside its cells; count them so the total page count stays accurate.
     internal_breaks = len(table._tbl.findall(".//" + qn("w:lastRenderedPageBreak")))
     if internal_breaks:
         meta["extra_pages"] = internal_breaks
     return Node(type=NodeType.TABLE, children=rows, metadata=meta)
+
+
+# The six edges Word gives a table, in the words a request uses for them.
+_BORDER_SIDES = ("top", "bottom", "left", "right", "inside_h", "inside_v")
+
+_BORDER_TAGS = {"top": "w:top", "bottom": "w:bottom", "left": "w:left",
+                "right": "w:right", "inside_h": "w:insideH", "inside_v": "w:insideV"}
+
+
+def _table_borders(table: _Table) -> dict[str, float]:
+    """Each edge's line width in points, 0 where there is no line.
+
+    Word measures it in eighths of a point, and says `none` or `nil` for an
+    edge it does not draw. A table that states nothing states nothing: the
+    empty dict means "as the style has it", not "no borders".
+    """
+    properties = table._tbl.find(qn("w:tblPr"))
+    borders = properties.find(qn("w:tblBorders")) if properties is not None else None
+    if borders is None:
+        return {}
+
+    out: dict[str, float] = {}
+    for side, tag in _BORDER_TAGS.items():
+        edge = borders.find(qn(tag))
+        if edge is None:
+            continue
+        if (edge.get(qn("w:val")) or "").lower() in ("none", "nil"):
+            out[side] = 0.0
+            continue
+        try:
+            out[side] = round(int(edge.get(qn("w:sz")) or 4) / 8, 2)
+        except ValueError:
+            out[side] = 0.5
+    return out
 
 
 def _attach_headers_footers(doc: _Doc, root: Node) -> None:

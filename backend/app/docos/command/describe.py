@@ -110,6 +110,17 @@ def _one(action: Any, changed: list[Any]) -> str:
         if wanted in ("none", "off", "remove", "plain", "paragraph"):
             return f"took the bullets off {what}"
         return f"{'numbered' if wanted.startswith('num') else 'bulleted'} {what}"
+    if kind is ActionType.BORDER:
+        sides = [str(s).replace("inside_h", "inner horizontal")
+                 .replace("inside_v", "inner vertical").replace("_", " ")
+                 for s in params.get("sides") or []]
+        width = float(params.get("width") or 0)
+        if not width:
+            return f"took the borders off {what}"
+        heavy = "heavy" if width >= 1.0 else "thin"
+        if sides:
+            return f"drew {heavy} {_join(sides)} borders on {what}, and no others"
+        return f"drew {heavy} borders on {what}"
     if kind is ActionType.DELETE:
         return f"deleted {what}"
     if kind is ActionType.REPLACE:
