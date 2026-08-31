@@ -16,7 +16,10 @@ export interface HistoryEntry {
 
 export interface PanelState {
   task: string
-  reasoning: string
+  /** What was done, in the document's terms — not the planner's note to
+   *  itself, which talks about node ids and describes an intention rather
+   *  than an outcome. */
+  summary: string
   provider: string
   source: string
   currentAction: string
@@ -31,7 +34,7 @@ export interface PanelState {
 }
 
 const EMPTY_PANEL: PanelState = {
-  task: '', reasoning: '', provider: '', source: '',
+  task: '', summary: '', provider: '', source: '',
   currentAction: 'Idle', progress: null, history: [], upcoming: [], error: null,
   reading: null,
 }
@@ -99,7 +102,7 @@ export function useDocOS() {
         const actions: any[] = p.actions || []
         setPanel((s) => ({
           ...s,
-          reasoning: p.reasoning || '',
+          summary: '',
           provider: p.provider || '',
           source: p.source || '',
           upcoming: actions.map((a) => `${a.type}${a.target ? ` · ${a.target}` : ''}`),
@@ -260,7 +263,8 @@ export function useDocOS() {
       case 'version_changed':
         // sync authoritative graph + history once the animation settles
         void syncAfterCommit()
-        setPanel((s) => ({ ...s, currentAction: 'Done', upcoming: [] }))
+        setPanel((s) => ({ ...s, currentAction: 'Done', upcoming: [],
+                           summary: p.summary || s.summary }))
         return STEP_DELAY
 
       case 'compare_result':

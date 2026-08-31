@@ -96,8 +96,8 @@ export function AIPanel({ panel, running, disabled, onRun }: Props) {
  {panel.currentAction}
  </div>
 
- {panel.reasoning ? (
- <div className="mt-1 text-xs italic text-muted">{panel.reasoning}</div>
+ {panel.summary ? (
+ <div className="mt-1 text-xs text-muted">{panel.summary}</div>
  ) : null}
 
  {(pct > 0 || running) && (

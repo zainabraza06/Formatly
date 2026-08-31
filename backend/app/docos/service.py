@@ -12,6 +12,7 @@ import anyio
 import anyio.to_thread
 
 from app.docos.command import CommandEngine, ControlOp
+from app.docos.command.describe import describe_outcome
 from app.docos.execution import ExecutionEngine
 from app.docos.graph import DocumentGraph
 from app.docos.parser import parse_docx_bytes, repaginate
@@ -321,10 +322,18 @@ class DocOSService:
             await emit({"event": "command_noop", "payload": {"reason": message}})
             return {"ok": False, "error": message, "graph": graph.to_dict()}
 
+        # What was done, said in the document's terms. The planner's own
+        # reasoning was being shown instead, and that is a note it writes to
+        # itself about node ids — it describes an intention, so it read the
+        # same whether the words were bolded or nothing happened at all.
+        summary = describe_outcome(batch, _nodes_by_id(exec_result.graph, changed),
+                                   placed["heading"] if placed else None)
+
         info = self.versions.commit(doc_id, batch, exec_result.graph, user=user)
-        await emit({"event": "version_committed", "payload": info.to_dict()})
+        await emit({"event": "version_committed",
+                    "payload": {**info.to_dict(), "summary": summary}})
         return {"ok": True, "version": info.to_dict(), "graph": exec_result.graph.to_dict(),
-                "changed": len(changed),
+                "changed": len(changed), "summary": summary,
                 "warnings": rewrite_failures}
 
     async def _apply_rewrites(self, graph, batch, emit,
@@ -535,6 +544,12 @@ def get_service() -> DocOSService:
     if _service is None:
         _service = DocOSService()
     return _service
+
+
+def _nodes_by_id(graph: DocumentGraph, ids: set[str]) -> list:
+    """The changed nodes themselves, in document order, so what happened can
+    be said in terms of what they are."""
+    return [n for n in graph.nodes() if n.id in ids]
 
 
 def _changed_node_ids(before: DocumentGraph, after: DocumentGraph) -> set[str]:
