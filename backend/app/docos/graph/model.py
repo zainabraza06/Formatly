@@ -54,6 +54,13 @@ TARGET_TO_TYPES: dict[str, tuple[NodeType, ...]] = {
     "header": (NodeType.HEADER,),
     "footer": (NodeType.FOOTER,),
     "footnote": (NodeType.FOOTNOTE,),
+    # Everywhere words are. "Bold Midlands wherever it appears" is not about a
+    # class of node, and answering it with one — headings, say — formatted the
+    # wrong things and missed the word in the table.
+    "document": (NodeType.HEADING, NodeType.SUBHEADING, NodeType.BODY,
+                 NodeType.PARAGRAPH, NodeType.CAPTION, NodeType.TABLE_CELL,
+                 NodeType.REFERENCE, NodeType.FOOTNOTE,
+                 NodeType.HEADER, NodeType.FOOTER),
 }
 
 
@@ -297,6 +304,14 @@ class DocumentGraph(BaseModel):
                     if (row.metadata or {}).get("header_row")
                     for cell in row.children
                     if cell.type is NodeType.TABLE_CELL]
+
+        if target == "title":
+            # The document's own title: the first heading in it. "Make the
+            # title larger" resized every section heading in the report while
+            # reporting success, because a title was only a heading like any
+            # other.
+            headings = self.find_by_types([NodeType.HEADING])
+            return headings[:1]
 
         types = TARGET_TO_TYPES.get(target)
         if not types:

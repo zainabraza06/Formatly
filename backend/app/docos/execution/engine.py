@@ -131,8 +131,26 @@ class ExecutionEngine:
         yield Event(name=EventName.SELECTION_FINISHED, payload={"ids": ids})
         return ids
 
+    @staticmethod
+    def _text_scope(nodes: list[Node]) -> list[Node]:
+        """The nodes that actually hold text, for a request about how it looks.
+
+        A table has no words of its own — its cells do. "Colour the percentages
+        in the table green" put the colour on the table and left every figure
+        in it black, which is a change the document does not show. Alignment is
+        left out of this: a table is aligned as a block, the way Word does it.
+        """
+        out: list[Node] = []
+        for n in nodes:
+            if n.type in (NodeType.TABLE, NodeType.TABLE_ROW, NodeType.FIGURE):
+                out.extend(c for c in n.walk()
+                           if c.type not in (NodeType.TABLE, NodeType.TABLE_ROW))
+            else:
+                out.append(n)
+        return out
+
     def _h_format(self, g, action, i, selection) -> Iterator[Event]:
-        nodes = self._scope(g, action, selection)
+        nodes = self._text_scope(self._scope(g, action, selection))
         patch = _style_of(action)
         yield Event(name=EventName.FORMAT_STARTED,
                     payload={"target": action.target, "total": len(nodes),
@@ -167,7 +185,7 @@ class ExecutionEngine:
 
     def _h_highlight(self, g, action, i, selection) -> Iterator[Event]:
         color = action.params.get("color") or (action.style.highlight if action.style else None) or "#fff59d"
-        nodes = self._scope(g, action, selection)
+        nodes = self._text_scope(self._scope(g, action, selection))
         yield Event(name=EventName.FORMAT_STARTED,
                     payload={"target": action.target, "total": len(nodes), "highlight": color})
         for k, n in enumerate(nodes):
@@ -186,7 +204,28 @@ class ExecutionEngine:
 
     def _h_resize(self, g, action, i, selection) -> Iterator[Event]:
         size = action.params.get("font_size") or (action.style.font_size if action.style else None)
-        return (yield from self._apply_style(g, action, selection, Style(font_size=size)))
+        if size:
+            return (yield from self._apply_style(g, action, selection, Style(font_size=size)))
+
+        # "Larger" and "smaller" name no number. Each node moves from the size
+        # it actually has, which is the only reading that keeps a document's own
+        # hierarchy: a title and a footnote both grow, and stay apart.
+        try:
+            scale = float(action.params.get("scale") or 1.0)
+        except (TypeError, ValueError):
+            scale = 1.0
+        nodes = self._text_scope(self._scope(g, action, selection))
+        yield Event(name=EventName.FORMAT_STARTED,
+                    payload={"target": action.target, "total": len(nodes), "scale": scale})
+        base = float((g.root.metadata.get("page") or {}).get("default_size_pt") or 11.0)
+        changed: list[str] = []
+        for k, n in enumerate(nodes):
+            current = n.style.font_size or base
+            n.apply_style(Style(font_size=round(max(4.0, min(current * scale, 96.0)), 1)))
+            changed.append(n.id)
+            yield Event(name=EventName.FORMAT_PROGRESS, payload={"id": n.id, "index": k})
+        yield Event(name=EventName.FORMAT_FINISHED, payload={"count": len(changed)})
+        return changed
 
     def _h_list(self, g, action, i, selection) -> Iterator[Event]:
         """Make the paragraphs in scope a bulleted or numbered list.

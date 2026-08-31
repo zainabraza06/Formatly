@@ -46,7 +46,7 @@ class ActionType(str, Enum):
 
 
 # Targets that name a role rather than a node type, resolved by the graph.
-ROLE_TARGETS: frozenset[str] = frozenset({"table_header"})
+ROLE_TARGETS: frozenset[str] = frozenset({"table_header", "title"})
 
 TARGETS: frozenset[str] = frozenset(TARGET_TO_TYPES.keys()) | ROLE_TARGETS
 
@@ -114,8 +114,11 @@ def _validate_params(i: int, a: Action, errors: list[str]) -> None:
         if val not in {"left", "center", "right", "justify"}:
             errors.append(f"action[{i}]: align needs params.alignment in left|center|right|justify")
     if a.type == ActionType.RESIZE:
-        if "font_size" not in a.params and not (a.style and a.style.font_size):
-            errors.append(f"action[{i}]: resize needs a font_size")
+        # Either a size to set, or a factor to change the sizes that are there
+        # by: "make the title larger" names no number and means one all the same.
+        if ("font_size" not in a.params and "scale" not in a.params
+                and not (a.style and a.style.font_size)):
+            errors.append(f"action[{i}]: resize needs a font_size or a scale")
     if a.type == ActionType.REPLACE:
         if "find" not in a.params and "with" not in a.params:
             errors.append(f"action[{i}]: replace needs params.find and params.with")
