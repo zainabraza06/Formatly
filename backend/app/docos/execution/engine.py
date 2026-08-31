@@ -48,6 +48,42 @@ def _style_of(action: Action) -> Style:
     return Style.model_validate(loose)
 
 
+def expand_headings(g: DocumentGraph, nodes: list[Node]) -> list[Node]:
+    """A scope of nothing but headings means the sections they introduce.
+
+    The planner names a part of the document by the id of its heading, which
+    is the only id it is ever shown. Read literally that is five words of
+    title; read as a section it is what the request was about.
+    """
+    if nodes and all(n.type in (NodeType.HEADING, NodeType.SUBHEADING)
+                     for n in nodes):
+        return [child for n in nodes for child in _section_under(g, n)]
+    return nodes
+
+
+def _section_under(g: DocumentGraph, heading: Node) -> list[Node]:
+    """What a heading introduces: everything until the next heading of the same
+    rank or higher. A subheading's section ends at the next subheading; a
+    heading's runs on through the subheadings inside it."""
+    parent = g.parent_of(heading.id)
+    if parent is None:
+        return []
+    siblings = parent.children
+    try:
+        start = siblings.index(heading)
+    except ValueError:
+        return []
+
+    stop = (NodeType.HEADING,) if heading.type is NodeType.SUBHEADING \
+        else (NodeType.HEADING, NodeType.SUBHEADING)
+    out: list[Node] = []
+    for node in siblings[start + 1:]:
+        if node.type in stop or node.type is heading.type:
+            break
+        out.append(node)
+    return out
+
+
 def _introduces_a_list(node: Node, scope: list[Node]) -> bool:
     """A paragraph that announces the items rather than being one of them.
 
@@ -249,6 +285,13 @@ class ExecutionEngine:
 
         nodes = [n for n in self._scope(g, action, selection)
                  if n.type not in (NodeType.TABLE, NodeType.TABLE_ROW)]
+        # A heading cannot be a bullet, so a scope of nothing but headings means
+        # the sections they introduce. The planner names a section by the id of
+        # its heading — that is the id it is shown — and reading it literally
+        # made "put the objectives in bullets" a no-op with the objectives
+        # sitting right underneath.
+        if nodes and all(n.type in (NodeType.HEADING, NodeType.SUBHEADING) for n in nodes):
+            nodes = [child for n in nodes for child in _section_under(g, n)]
 
         # A request to bullet something is usually aimed at a paragraph that
         # already enumerates — "the contributions are: (i) … (ii) …". Bulleting

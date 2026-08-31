@@ -204,6 +204,21 @@ class DocOSService:
         # A request may describe the words to format rather than quote them.
         await self._resolve_described_spans(graph, batch, emit)
 
+        # Ids the document does not have. The planner is not shown the real
+        # ones — they were thousands of tokens for a decision it is not asked
+        # to make — so when it emits ids anyway they are invented, and an
+        # invented id is worse than none: it scopes the action to nothing, and
+        # it looks placed, which stopped the section match below from running.
+        # Dropping them lets the request be placed the way an unplaced one is.
+        known = {n.id for n in graph.nodes()}
+        for action in batch.actions:
+            if action.node_ids and not any(nid in known for nid in action.node_ids):
+                await emit({"event": "ids_discarded",
+                            "payload": {"count": len(action.node_ids)}})
+                action.node_ids = []
+            else:
+                action.node_ids = [nid for nid in action.node_ids if nid in known]
+
         # A request that names a part of the document is pinned to that part.
         # The planner is given the sections and what each is about and still
         # answers "the part about the results" with a target that happens to
@@ -419,6 +434,7 @@ class DocOSService:
         """
         from app.docos.actions import ActionType
         from app.docos.command.spans import find_spans
+        from app.docos.execution.engine import expand_headings
         from app.services.router import get_router
 
         for action in batch.actions:
@@ -429,6 +445,17 @@ class DocOSService:
                 continue
 
             nodes = self.executor.scope_of(graph, action)
+            # A description is about words in a section, and the planner names a
+            # section by its heading — the only id it is shown. Reading that
+            # literally showed the span finder five words of heading and asked
+            # it to find the figures in them, which of course it could not.
+            widened = expand_headings(graph, nodes)
+            if widened is not nodes:
+                # The action has to work on what was read, or the spans would be
+                # looked for in one place and formatted in another.
+                action.node_ids = [n.id for n in widened]
+                action.target = None
+            nodes = widened
             if not nodes:
                 continue
 
