@@ -36,10 +36,10 @@ export function Login() {
     <div className="flex min-h-screen items-center justify-center bg-canvas p-4 text-ink">
       <motion.form
         onSubmit={submit}
-        initial={{ opacity: 0, y: 8 }}
+        initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.2 }}
-        className="w-full max-w-sm rounded-2xl border border-line bg-surface p-7"
+        transition={{ duration: 0.3, ease: 'easeOut' }}
+        className="w-full max-w-sm rounded-2xl border border-line bg-surface p-8 shadow-xl shadow-black/5"
       >
         <div className="mb-1 flex items-center gap-2.5">
           <div className="flex h-7 w-7 items-center justify-center rounded-md bg-accent text-[13px] font-semibold text-accent-fg">
