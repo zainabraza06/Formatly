@@ -15,6 +15,11 @@ from app.docos.execution.lists import split_items
 from app.docos.graph import DocumentGraph, Node, NodeType, Style
 
 
+# No document sets real type below this. A "font size" under it is a number
+# that was meant as something else — nearly always a step, as in "by 2".
+_SMALLEST_REAL_SIZE = 5.0
+
+
 class ExecutionError(Exception):
     def __init__(self, action_index: int, message: str):
         self.action_index = action_index
@@ -267,24 +272,41 @@ class ExecutionEngine:
 
     def _h_resize(self, g, action, i, selection) -> Iterator[Event]:
         size = action.params.get("font_size") or (action.style.font_size if action.style else None)
+        delta = action.params.get("delta")
+
+        # "Increase the headings by 2" names a step, not a size, and a planner
+        # that reads it as one asks for 2 pt type. No document sets real type
+        # that small, so a size below the smallest readable one is the request
+        # having been misread, and it is taken as the step it was.
+        if size is not None and float(size) < _SMALLEST_REAL_SIZE and delta is None:
+            delta, size = float(size), None
+
         if size:
             return (yield from self._apply_style(g, action, selection, Style(font_size=size)))
 
-        # "Larger" and "smaller" name no number. Each node moves from the size
-        # it actually has, which is the only reading that keeps a document's own
-        # hierarchy: a title and a footnote both grow, and stay apart.
+        # "Larger" and "smaller" name no number, and "by 2" names how much but
+        # not from what. Each node moves from the size it actually has, which is
+        # the only reading that keeps a document's own hierarchy: a title and a
+        # footnote both grow, and stay apart.
         try:
             scale = float(action.params.get("scale") or 1.0)
         except (TypeError, ValueError):
             scale = 1.0
+        try:
+            step = float(delta) if delta is not None else None
+        except (TypeError, ValueError):
+            step = None
+
         nodes = self._text_scope(self._scope(g, action, selection))
         yield Event(name=EventName.FORMAT_STARTED,
-                    payload={"target": action.target, "total": len(nodes), "scale": scale})
+                    payload={"target": action.target, "total": len(nodes),
+                             "scale": scale, "delta": step})
         base = float((g.root.metadata.get("page") or {}).get("default_size_pt") or 11.0)
         changed: list[str] = []
         for k, n in enumerate(nodes):
             current = n.style.font_size or base
-            n.apply_style(Style(font_size=round(max(4.0, min(current * scale, 96.0)), 1)))
+            wanted = current + step if step is not None else current * scale
+            n.apply_style(Style(font_size=round(max(4.0, min(wanted, 96.0)), 1)))
             changed.append(n.id)
             yield Event(name=EventName.FORMAT_PROGRESS, payload={"id": n.id, "index": k})
         yield Event(name=EventName.FORMAT_FINISHED, payload={"count": len(changed)})

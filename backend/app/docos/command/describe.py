@@ -101,6 +101,10 @@ def _one(action: Any, changed: list[Any]) -> str:
     if kind is ActionType.JUSTIFY:
         return f"justified {what}"
     if kind is ActionType.RESIZE:
+        if params.get("delta"):
+            step = float(params["delta"])
+            return (f"made {what} {_number(abs(step))} pt "
+                    f"{'larger' if step > 0 else 'smaller'}")
         if params.get("font_size"):
             return f"set {what} to {_number(params['font_size'])} pt"
         scale = float(params.get("scale") or 1.0)

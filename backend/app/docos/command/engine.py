@@ -164,7 +164,7 @@ class CommandEngine:
 
         alignment = _alignment(c)
         color = _color(c)
-        size, relative = _size(c)
+        size, relative, step = _size(c)
 
         if _ABOUT_BORDERS.search(c):
             sides, width = _borders_wanted(c)
@@ -197,13 +197,18 @@ class CommandEngine:
             actions.append(a(type="align", target=target or "body",
                              params={"alignment": alignment}))
             reasoning = f"{alignment} {target or 'body'}"
-        elif size is not None or relative:
-            # "size 9" says which size; "larger" says which way, and the sizes
+        elif size is not None or relative or step:
+            # "size 9" says which size; "by 2" says how much to add to whatever
+            # each thing already is; "larger" says only which way, and the sizes
             # in the document decide the rest.
-            params = {"scale": relative} if relative else {"font_size": size}
+            if step:
+                params, said = {"delta": step}, f"by {step:+g} pt"
+            elif relative:
+                params, said = {"scale": relative}, f"by {relative}"
+            else:
+                params, said = {"font_size": size}, f"to {size}"
             actions.append(a(type="resize", target=target or "body", params=params))
-            reasoning = (f"resize {target or 'body'} by {relative}" if relative
-                         else f"resize {target or 'body'} to {size}")
+            reasoning = f"resize {target or 'body'} {said}"
         elif _style_asked(c, color):
             # Several at once is an ordinary request — "bold and italic", "red
             # and underlined" — and answering only the first of them was
@@ -396,20 +401,54 @@ def _color(text: str) -> Optional[str]:
     return None
 
 
-def _size(text: str) -> tuple[Optional[float], Optional[float]]:
-    """`(absolute size, relative factor)` — at most one of them."""
+def _size(text: str) -> tuple[Optional[float], Optional[float], Optional[float]]:
+    """`(absolute size, relative factor, step in points)` — at most one of them.
+
+    "Increase the headings by 2" names a step, not a size. Reading it as a size
+    set every heading to 2 pt, which is unreadable and the opposite of what was
+    asked, so the step is looked for first: a number a request is *adding* is
+    never the size it wants.
+    """
+    step = _step(text)
+    if step is not None:
+        return None, None, step
+
     m = re.search(r"\b(?:size|pt|point)\D{0,12}?(\d{1,2}(?:\.\d)?)\b", text, re.IGNORECASE)
     if not m:
         m = re.search(r"\b(\d{1,2}(?:\.\d)?)\s*(?:pt|point)\b", text, re.IGNORECASE)
     if m:
-        return float(m.group(1)), None
+        return float(m.group(1)), None, None
     if _BIGGER.search(text):
-        return None, 1.25
+        return None, 1.25, None
     if _SMALLER.search(text):
-        return None, 0.8
+        return None, 0.8, None
     if _SIZE_WORDS.search(text):
-        return None, 1.25 if _BIGGER.search(text) else 0.8
-    return None, None
+        return None, 1.25 if _BIGGER.search(text) else 0.8, None
+    return None, None, None
+
+
+# "by 2", "by 2 points", "2 units bigger", "+2" — a number being added to the
+# size the text already has, whatever the document's sizes happen to be.
+_BY_STEP = re.compile(
+    r"\bby\s+(\d{1,2}(?:\.\d)?)\s*(?:pt|points?|units?|sizes?|steps?)?\b"
+    r"|\b(\d{1,2}(?:\.\d)?)\s*(?:pt|points?|units?)\s+(?:bigger|larger|smaller|more|less)\b"
+    r"|(?<![\w.])\+\s*(\d{1,2}(?:\.\d)?)\b",
+    re.IGNORECASE)
+
+_GOES_DOWN = re.compile(r"\b(smaller|reduce|decrease|shrink|down|less|lower)\b",
+                        re.IGNORECASE)
+
+
+def _step(text: str) -> Optional[float]:
+    """How much bigger or smaller, in points, when a request says by how much."""
+    if not re.search(r"\b(increase|decrease|raise|lower|reduce|grow|shrink|bigger|"
+                     r"larger|smaller|bump|more|less|up|down|by)\b", text, re.IGNORECASE):
+        return None
+    m = _BY_STEP.search(text)
+    if not m:
+        return None
+    value = float(next(g for g in m.groups() if g))
+    return -value if _GOES_DOWN.search(text) else value
 
 
 # A request about a table's rules rather than its text.
