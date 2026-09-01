@@ -56,6 +56,14 @@ Rules:
 - Never summarise, never shorten, never merge nodes, never drop a sentence.
 - The text is plain text, not markdown. Do not add formatting the original did
   not have.
+- `document` says what this document is and how it is divided. Use it when the
+  instruction refers to the document rather than quoting it — "rephrase the
+  title around the architecture" means name the architecture this document
+  actually describes.
+- An instruction to rephrase, retitle or reword a passage asks for that passage
+  written again. Putting the instruction's own words in front of the original —
+  "Architecture of <the old title>" — is not a rephrasing; it is the original
+  with a word stuck on.
 """
 
 
@@ -152,6 +160,7 @@ def rewrite_nodes(
     instruction: str,
     *,
     router: Any,
+    context: Optional[dict[str, Any]] = None,
     on_progress: Optional[Progress] = None,
     cancel: Optional[threading.Event] = None,
 ) -> tuple[dict[str, str], list[str]]:
@@ -198,6 +207,11 @@ def rewrite_nodes(
 
         payload = {
             "instruction": instruction,
+            # What the document is and what is in it. Without this a request
+            # like "rephrase the title around the architecture" has nothing to
+            # name the architecture with, so the only edit available is to put
+            # the word "Architecture" in front of the title it was given.
+            "document": context,
             "page": [{"id": n.id, "type": n.type.value, "text": n.content} for n in batch],
         }
         try:

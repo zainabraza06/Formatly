@@ -396,8 +396,15 @@ class DocOSService:
             asyncio.run_coroutine_threadsafe(
                 emit({"event": "rewrite_progress", "payload": info}), loop)
 
+        # What the document is, sent with the request. A rewrite used to be
+        # shown one paragraph and an instruction, so "rephrase the title around
+        # the architecture" had no way to learn what the architecture is, and
+        # the only edit available was to write "Architecture of" in front of
+        # the title it was given.
+        context = _rewrite_context(graph)
+
         edits, failures = await anyio.to_thread.run_sync(
-            lambda: rewrite_nodes(graph, nodes, instruction,
+            lambda: rewrite_nodes(graph, nodes, instruction, context=context,
                                   router=get_router(), on_progress=on_progress))
 
         if edits or failures:
@@ -550,6 +557,27 @@ def _nodes_by_id(graph: DocumentGraph, ids: set[str]) -> list:
     """The changed nodes themselves, in document order, so what happened can
     be said in terms of what they are."""
     return [n for n in graph.nodes() if n.id in ids]
+
+
+
+def _rewrite_context(graph: DocumentGraph) -> dict[str, Any]:
+    """What the document is, small enough to send with every rewrite pass.
+
+    Its title, what it appears to be, and its headings. Enough for a request
+    that refers to the document — "around the architecture", "in the terms the
+    method section uses" — to be answered from the document rather than from
+    the one paragraph in front of the model.
+    """
+    from app.docos.command.brief import document_brief
+
+    brief = document_brief(graph)
+    sections = brief.get("sections") or []
+    return {
+        "title": graph.title,
+        "kind": brief.get("kind"),
+        "about": brief.get("about"),
+        "headings": [s.get("heading") for s in sections[:20] if s.get("heading")],
+    }
 
 
 def _changed_node_ids(before: DocumentGraph, after: DocumentGraph) -> set[str]:
