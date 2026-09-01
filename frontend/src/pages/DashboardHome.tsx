@@ -70,33 +70,43 @@ export function DashboardHome() {
  }, [])
 
  return (
- <div className="space-y-5">
-
+ <div className="space-y-8">
  {/* ── Page header ── */}
  <div>
- <h1 className="text-xl font-semibold tracking-tight text-ink">Home</h1>
- <p className="mt-0.5 text-sm text-muted">
+ <motion.h1 
+ initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}
+ className="text-3xl font-bold tracking-tight text-ink"
+ >
+ Home
+ </motion.h1>
+ <motion.p 
+ initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.1 }}
+ className="mt-2 text-base text-muted max-w-2xl"
+ >
  AI-powered document production — prompt to polished export in seconds.
- </p>
+ </motion.p>
  </div>
 
  {/* ── Quick actions ── */}
- <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+ <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
  {quickActions.map((a, i) => (
  <motion.div
  key={a.to}
- initial={{ opacity: 0, y: 12 }}
+ initial={{ opacity: 0, y: 15 }}
  animate={{ opacity: 1, y: 0 }}
- transition={{ duration: 0.28, delay: i * 0.06 }}
+ transition={{ duration: 0.3, delay: i * 0.1 }}
+ whileHover={{ y: -2 }}
  >
  <Link
  to={a.to}
- className={`flex items-center gap-3 rounded-xl border ${a.border} ${a.color} p-4 transition-colors hover:bg-surface-2`}
+ className={`flex items-center gap-4 rounded-2xl border ${a.border} ${a.color} p-5 shadow-sm transition-all hover:shadow-md active:scale-[0.98]`}
  >
- <div className={`shrink-0 ${a.textColor}`}>{a.icon}</div>
+ <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-surface-2 ${a.textColor} shadow-sm border border-line`}>
+ {a.icon}
+ </div>
  <div>
- <div className={`text-sm font-semibold ${a.textColor}`}>{a.label}</div>
- <div className="text-xs text-muted">{a.desc}</div>
+ <div className={`text-base font-bold ${a.textColor}`}>{a.label}</div>
+ <div className="text-xs font-medium text-muted mt-0.5">{a.desc}</div>
  </div>
  </Link>
  </motion.div>
@@ -104,47 +114,46 @@ export function DashboardHome() {
  </div>
 
  {/* ── Recent + Demo flow ── */}
- <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-
+ <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
  {/* Recent documents */}
  <GlassCard className="xl:col-span-2">
- <div className="flex items-center justify-between">
- <div className="text-sm font-semibold text-ink">Recent documents</div>
- <Link to="/app/files" className="text-xs text-ink hover:text-ink dark:text-muted">
+ <div className="flex items-center justify-between mb-4">
+ <div className="text-lg font-bold text-ink">Recent documents</div>
+ <Link to="/app/files" className="text-sm font-semibold text-focus hover:underline">
  View all →
  </Link>
  </div>
 
- <div className="mt-3 space-y-2">
+ <div className="space-y-3">
  {recent.length ? (
  recent.map((d, i) => (
  <motion.div
  key={d.document_id}
- initial={{ opacity: 0, x: -8 }}
+ initial={{ opacity: 0, x: -10 }}
  animate={{ opacity: 1, x: 0 }}
- transition={{ duration: 0.22, delay: i * 0.04 }}
- className="flex items-center justify-between rounded-xl border border-line bg-surface px-3 py-2.5 "
+ transition={{ duration: 0.3, delay: i * 0.05 }}
+ className="flex items-center justify-between rounded-xl border border-line bg-surface px-4 py-3 shadow-sm hover:shadow-md transition-shadow"
  >
  <div>
- <div className="text-xs font-semibold text-ink">{d.title}</div>
- <div className="mt-0.5 flex items-center gap-1.5">
- <span className="rounded-md bg-surface-2/80 px-1.5 py-0.5 text-[10px] font-medium text-muted ">
+ <div className="text-sm font-bold text-ink">{d.title}</div>
+ <div className="mt-1 flex items-center gap-2">
+ <span className="rounded-md bg-surface-2 px-2 py-0.5 text-[11px] font-semibold text-muted border border-line">
  {d.style_preset}
  </span>
  </div>
  </div>
- <div className="flex gap-1.5">
+ <div className="flex gap-2">
  <button
  onClick={() => save(d.document_id, d.title, 'docx')}
  disabled={saving !== null}
- className="rounded-lg border border-line bg-surface px-2.5 py-1 text-[11px] font-medium text-ink transition hover:bg-surface-2 disabled:opacity-50"
+ className="rounded-lg border border-line bg-surface px-3 py-1.5 text-xs font-bold text-ink transition hover:bg-surface-2 hover:border-line-strong shadow-sm disabled:opacity-50"
  >
  {saving === `${d.document_id}:docx` ? '…' : 'DOCX'}
  </button>
  <button
  onClick={() => save(d.document_id, d.title, 'pdf')}
  disabled={saving !== null}
- className="rounded-lg border border-line bg-surface-2 px-2.5 py-1 text-[11px] font-medium text-ink transition hover:bg-surface-2 disabled:opacity-50"
+ className="rounded-lg border border-line bg-surface-2 px-3 py-1.5 text-xs font-bold text-ink transition hover:bg-surface hover:border-line-strong shadow-sm disabled:opacity-50"
  >
  {saving === `${d.document_id}:pdf` ? '…' : 'PDF'}
  </button>
@@ -152,41 +161,41 @@ export function DashboardHome() {
  </motion.div>
  ))
  ) : (
- <div className="rounded-xl border border-dashed border-line/60 p-6 text-center ">
- <div className="text-xs text-muted">
+ <div className="rounded-2xl border-2 border-dashed border-line p-8 text-center bg-surface-2/50">
+ <div className="text-sm text-muted font-medium">
  No documents yet.{' '}
- <Link to="/app/compose" className="font-semibold text-ink hover:underline dark:text-muted">
+ <Link to="/app/compose" className="font-bold text-focus hover:underline">
  Generate your first →
  </Link>
  </div>
  </div>
  )}
- {error && <div className="text-xs text-danger">{error}</div>}
+ {error && <div className="mt-2 text-xs font-medium text-danger bg-danger/10 p-2 rounded-lg">{error}</div>}
  </div>
  </GlassCard>
 
  {/* Demo flow */}
  <GlassCard>
- <div className="text-sm font-semibold text-ink">Quick demo flow</div>
- <div className="mt-1 text-xs text-muted">From material to a finished document in four steps.</div>
+ <div className="text-lg font-bold text-ink">Quick start</div>
+ <div className="mt-1.5 text-sm text-muted">From material to a finished document in four steps.</div>
 
- <ol className="mt-4 space-y-3">
+ <ol className="mt-6 space-y-4">
  {demoSteps.map((step, i) => (
- <li key={i} className="flex items-start gap-2.5">
- <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-surface-2 text-[10px] font-bold text-ink">
+ <li key={i} className="flex items-start gap-3">
+ <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-surface-2 text-xs font-bold text-ink border border-line shadow-sm">
  {i + 1}
  </span>
- <span className="text-xs leading-5 text-muted">{step}</span>
+ <span className="text-sm leading-relaxed text-muted font-medium">{step}</span>
  </li>
  ))}
  </ol>
 
- <div className="mt-5">
+ <div className="mt-8">
  <Link
  to="/app/compose"
- className="rounded-xl bg-accent px-3 py-2 text-center text-xs font-medium text-accent-fg transition hover:opacity-90"
+ className="inline-flex w-full items-center justify-center rounded-xl bg-focus px-4 py-2.5 text-sm font-bold text-white shadow-md shadow-focus/20 transition hover:-translate-y-0.5 hover:shadow-lg hover:shadow-focus/30 active:translate-y-0"
  >
- New Doc
+ Create a Document
  </Link>
  </div>
  </GlassCard>

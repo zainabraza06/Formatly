@@ -13,8 +13,8 @@ export function Settings() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-xl font-semibold tracking-tight text-ink">Settings</h1>
-        <p className="mt-0.5 text-sm text-muted">Manage your account.</p>
+        <h1 className="text-3xl font-bold tracking-tight text-ink">Settings</h1>
+        <p className="mt-2 text-base text-muted">Manage your account.</p>
       </div>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
@@ -230,7 +230,7 @@ function message(err: unknown): string {
 }
 
 function CardTitle({ children }: { children: React.ReactNode }) {
-  return <div className="text-sm font-semibold text-ink">{children}</div>
+  return <div className="text-base font-bold text-ink mb-1">{children}</div>
 }
 
 function Field({
@@ -244,11 +244,11 @@ function Field({
 }) {
   return (
     <label className="block">
-      <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-muted">
+      <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-muted">
         {label}
       </span>
       {children}
-      {hint && <span className="mt-1 block text-[10px] text-faint">{hint}</span>}
+      {hint && <span className="mt-1 block text-xs text-faint">{hint}</span>}
     </label>
   )
 }
