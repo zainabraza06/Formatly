@@ -64,6 +64,17 @@ TARGET_TO_TYPES: dict[str, tuple[NodeType, ...]] = {
 }
 
 
+# Nothing that runs before or beside the text can be the document's title.
+_NOT_A_TITLE = (NodeType.HEADER, NodeType.FOOTER, NodeType.PAGE_BREAK,
+                NodeType.HORIZONTAL_RULE, NodeType.TABLE, NodeType.TABLE_ROW,
+                NodeType.TABLE_CELL, NodeType.FIGURE, NodeType.IMAGE,
+                NodeType.CAPTION, NodeType.FOOTNOTE)
+
+# Longer than this and an opening paragraph is prose, not a title. Even a
+# subtitled paper title runs well under it.
+_TITLE_MAX_CHARS = 250
+
+
 class Style(BaseModel):
     """Presentation attributes. All optional; None means "inherit / unset"."""
 
@@ -293,6 +304,25 @@ class DocumentGraph(BaseModel):
         wanted = set(types)
         return [n for n in self.nodes() if n.type in wanted]
 
+    def _title_node(self) -> list["Node"]:
+        """The document's title, or nothing if it does not appear to have one.
+
+        Whichever node comes first and has words in it. A heading there is the
+        title; a paragraph there is the title too, if it is short enough to be
+        one — a document that opens straight into prose has no title, and
+        calling its first paragraph the title would be worse than saying so.
+        """
+        for node in self.nodes():
+            if node.type in _NOT_A_TITLE:
+                continue
+            text = (node.content or "").strip()
+            if not text:
+                continue
+            if node.type in (NodeType.HEADING, NodeType.SUBHEADING):
+                return [node]
+            return [node] if len(text) <= _TITLE_MAX_CHARS else []
+        return []
+
     def resolve_target(self, target: str) -> list[Node]:
         """Resolve a high-level action target to concrete nodes, in doc order."""
         if target == "table_header":
@@ -306,12 +336,12 @@ class DocumentGraph(BaseModel):
                     if cell.type is NodeType.TABLE_CELL]
 
         if target == "title":
-            # The document's own title: the first heading in it. "Make the
-            # title larger" resized every section heading in the report while
-            # reporting success, because a title was only a heading like any
-            # other.
-            headings = self.find_by_types([NodeType.HEADING])
-            return headings[:1]
+            # The document's own title: the first thing it says. Taking it as
+            # the first Heading-styled node was wrong twice over — it resized
+            # every section heading in one report, and in a paper whose title
+            # is a plain bold paragraph, which is how most templates set one,
+            # it centred "I. Introduction" instead.
+            return self._title_node()
 
         types = TARGET_TO_TYPES.get(target)
         if not types:

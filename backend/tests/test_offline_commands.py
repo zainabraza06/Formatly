@@ -77,6 +77,35 @@ def test_the_title_is_not_every_heading():
     assert [n.content for n in graph.resolve_target("title")] == ["Annual Review"]
 
 
+def test_a_title_set_as_a_plain_paragraph_is_still_the_title():
+    """Most paper templates set the title as a big bold paragraph, not as a
+    Word Heading — so the first Heading-styled node is "I. Introduction"."""
+    graph = DocumentGraph(root=Node(type=NodeType.DOCUMENT, children=[
+        Node(type=NodeType.BODY, content="A Lightweight, Subject-Independent Classifier",
+             style=Style(bold=True, font_size=12)),
+        Node(type=NodeType.BODY, content="Abstract — smartphone-based recognition."),
+        Node(type=NodeType.HEADING, content="I. Introduction"),
+    ]), title="t")
+    assert [n.content for n in graph.resolve_target("title")] == [
+        "A Lightweight, Subject-Independent Classifier"]
+
+
+def test_a_document_that_opens_into_prose_has_no_title():
+    graph = DocumentGraph(root=Node(type=NodeType.DOCUMENT, children=[
+        Node(type=NodeType.BODY, content="Falls are a major cause of injury. " * 12),
+        Node(type=NodeType.HEADING, content="Method"),
+    ]), title="t")
+    assert graph.resolve_target("title") == []
+
+
+def test_a_header_running_above_the_page_is_not_the_title():
+    graph = DocumentGraph(root=Node(type=NodeType.DOCUMENT, children=[
+        Node(type=NodeType.HEADER, content="IEEE Transactions"),
+        Node(type=NodeType.BODY, content="A Study of Falls", style=Style(bold=True)),
+    ]), title="t")
+    assert [n.content for n in graph.resolve_target("title")] == ["A Study of Falls"]
+
+
 def test_larger_moves_each_node_from_the_size_it_has():
     graph = DocumentGraph(root=Node(type=NodeType.DOCUMENT, children=[
         Node(type=NodeType.BODY, content="a", style=Style(font_size=10)),
