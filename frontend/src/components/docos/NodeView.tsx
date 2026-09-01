@@ -248,10 +248,11 @@ function Text({ node, mark, renderAll }: {
     )
   }
 
-  // Equations are set as equations. A paragraph carrying one gives up its
-  // inline run formatting to do it — an equation and a bold phrase in the same
-  // paragraph is rare, and reading raw LaTeX is a worse loss
-  // than reading it unemphasised.
+  // Equations are set as equations, and the words around them keep their own
+  // formatting. Giving the whole paragraph's runs up to draw one equation is
+  // what made "bold the results" appear to do nothing: with maths rendering
+  // on, every paragraph took this path, so no bold phrase anywhere in the
+  // document could be drawn.
   // Only maths the document itself stores as an equation is drawn as one.
   // Word displays its own equations as mathematics and displays typed-out
   // LaTeX as the characters somebody typed, so drawing both as mathematics
@@ -264,17 +265,25 @@ function Text({ node, mark, renderAll }: {
     // a paper sets on its own centred line — not tucked against the text above
     // it as though it were a phrase.
     const alone = pieces.length === 1 && pieces[0].kind !== 'text'
+    const runs = inlineRuns(node)
+    // Where each piece starts in the node's text, so the words in it can be
+    // drawn with the formatting they actually have. The dollars count: they
+    // are in `content` even though they are not shown once the maths is drawn.
+    let at = 0
     return (
       <>
         {pieces.map((piece, i) => {
+          const raw = piece.kind === 'text' ? piece.value
+            : piece.kind === 'display' ? `$$${piece.value}$$` : `$${piece.value}$`
+          const from = at
+          at += raw.length
           const isMaths = piece.kind !== 'text' && (renderAll || known.has(piece.value))
-          if (!isMaths) {
-            // Shown as written: the dollars belong to the text, not to us.
-            const raw = piece.kind === 'text' ? piece.value
-              : piece.kind === 'display' ? `$$${piece.value}$$` : `$${piece.value}$`
-            return <span key={i}>{raw}</span>
+          if (isMaths) {
+            return <Maths key={i} latex={piece.value} display={alone || piece.kind === 'display'} />
           }
-          return <Maths key={i} latex={piece.value} display={alone || piece.kind === 'display'} />
+          // Shown as written — the dollars belong to the text, not to us — and
+          // in whatever formatting this stretch of the paragraph carries.
+          return <RunSpan key={i} runs={runs} from={from} to={at} fallback={raw} />
         })}
       </>
     )
@@ -293,6 +302,35 @@ function Text({ node, mark, renderAll }: {
 
 /** One formatted piece. Only what the run states is set here; everything else
  *  is left to inherit from the paragraph, which is how the document means it. */
+/**
+ * One stretch of a paragraph — characters `from` to `to` — drawn with the
+ * formatting the runs give it.
+ *
+ * A paragraph with an equation in it still has bold words around the equation,
+ * and they used to be lost: the maths path drew the text as one plain span.
+ * The runs are cut at the piece's edges instead, so a phrase that straddles
+ * nothing is drawn once and one that spans two runs is drawn as both.
+ */
+function RunSpan({ runs, from, to, fallback }: {
+  runs: Run[]; from: number; to: number; fallback: string
+}) {
+  const parts: Run[] = []
+  let at = 0
+  for (const run of runs) {
+    const start = at
+    at += run.text.length
+    if (at <= from) continue
+    if (start >= to) break
+    parts.push({ text: run.text.slice(Math.max(0, from - start), to - start), style: run.style })
+  }
+  // The runs did not describe this stretch — draw it plainly rather than
+  // dropping it.
+  if (!parts.length || parts.map((p) => p.text).join('') !== fallback) {
+    return <span>{fallback}</span>
+  }
+  return <>{parts.map((part, i) => <RunView key={i} run={part} />)}</>
+}
+
 function RunView({ run }: { run: Run }) {
   const css = styleToCss(run.style)
   const raised = run.style.vertical_align
@@ -383,15 +421,43 @@ function cellBorders(borders: Borders | null, row: number, col: number,
 function TableView({ node, renderMaths }: { node: GraphNode; renderMaths?: boolean }) {
   const borders = ((node.metadata ?? {})['borders'] ?? null) as Borders | null
   const rows = node.children.length
+  const meta = (node.metadata ?? {}) as Record<string, unknown>
+  const columns = Array.isArray(meta.columns_in) ? (meta.columns_in as number[]) : null
+  // The document's own width and placement. A table Word set to 3.5 inches and
+  // centred was drawn full-width and flush left, which is a different table.
+  const width = typeof meta.width_in === 'number' ? `${meta.width_in}in`
+    : typeof meta.width_pct === 'number' ? `${meta.width_pct}%` : '100%'
+  const place = meta.align === 'center' ? '0 auto'
+    : meta.align === 'right' ? '0 0 0 auto' : undefined
+
   return (
     <div className="my-1 overflow-x-auto">
-      <table className="w-full border-collapse text-[10pt]">
+      <table
+        className="border-collapse text-[10pt]"
+        style={{ width, margin: place, tableLayout: columns ? 'fixed' : 'auto' }}
+      >
+        {/* The column widths the document states. Without them every column
+            was drawn the same width, so a table with a wide first column and
+            three narrow ones came out evenly spaced. */}
+        {columns && (
+          <colgroup>
+            {columns.map((inches, i) => (
+              <col key={i} style={{ width: `${inches}in` }} />
+            ))}
+          </colgroup>
+        )}
         <tbody>
           {node.children.map((row, rowIndex) => (
             <tr key={row.id}>
-              {row.children.map((cell, colIndex) => (
+              {row.children.map((cell, colIndex) => {
+                const cellMeta = (cell.metadata ?? {}) as Record<string, unknown>
+                // A cell that continues the one above holds no text of its own.
+                if (cellMeta.vmerge === 'continue') return null
+                const span = typeof cellMeta.span === 'number' ? cellMeta.span : 1
+                return (
                 <td
                   key={cell.id}
+                  colSpan={span > 1 ? span : undefined}
                   // A cell's own formatting was never drawn, so making the
                   // header row bold changed the model and the exported file
                   // and nothing a reader could see — which looks like the
@@ -399,8 +465,13 @@ function TableView({ node, renderMaths }: { node: GraphNode; renderMaths?: boole
                   style={{
                     ...styleToCss(cell.style),
                     ...cellBorders(borders, rowIndex, colIndex, rows, row.children.length),
+                    // Shading the document gave it, and the vertical placement
+                    // of the text inside the cell.
+                    ...(typeof cellMeta.shade === 'string'
+                      ? { backgroundColor: cellMeta.shade as string } : {}),
+                    verticalAlign: (cellMeta.valign as string) || 'top',
                   }}
-                  className="px-3 py-1.5 align-top text-neutral-900"
+                  className="px-3 py-1.5 text-neutral-900"
                 >
                   {/* A display equation is very often laid out as a one-row
                       table with its number in the next cell, so a cell is one
@@ -411,7 +482,8 @@ function TableView({ node, renderMaths }: { node: GraphNode; renderMaths?: boole
                     <ImageView key={pic.id} node={pic} css={styleToCss(pic.style)} />
                   ))}
                 </td>
-              ))}
+                )
+              })}
             </tr>
           ))}
         </tbody>

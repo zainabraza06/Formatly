@@ -331,10 +331,12 @@ def _table(doc: Document, node: Node, page: dict[str, Any]) -> None:
     table = doc.add_table(rows=0, cols=columns)
     table.style = "Table Grid"
     _apply_borders(table, (node.metadata or {}).get("borders"))
+    _apply_table_layout(table, node.metadata or {})
     for row in rows:
         cells = table.add_row().cells
         for i, cell in enumerate(row.children[:columns]):
             paragraph = cells[i].paragraphs[0]
+            _apply_cell_layout(cells[i], cell.metadata or {})
             _apply_paragraph_format(paragraph, cell)
             # A cell holds a display equation as often as it holds a number,
             # and one nobody edited goes back as Word's own XML.
@@ -384,6 +386,48 @@ def _apply_borders(table, borders: Any) -> None:
             edge.set(qn("w:sz"), "0")
         element.append(edge)
     properties.append(element)
+
+
+def _apply_table_layout(table, meta: dict[str, Any]) -> None:
+    """Column widths and placement, so a downloaded table is the one on screen."""
+    from docx.enum.table import WD_TABLE_ALIGNMENT
+
+    columns = meta.get("columns_in")
+    if isinstance(columns, list) and columns:
+        table.autofit = False
+        for index, inches in enumerate(columns):
+            if index >= len(table.columns):
+                break
+            try:
+                table.columns[index].width = Inches(float(inches))
+            except (TypeError, ValueError):
+                continue
+
+    placement = {"left": WD_TABLE_ALIGNMENT.LEFT, "center": WD_TABLE_ALIGNMENT.CENTER,
+                 "right": WD_TABLE_ALIGNMENT.RIGHT}.get(str(meta.get("align") or ""))
+    if placement is not None:
+        table.alignment = placement
+
+
+def _apply_cell_layout(cell, meta: dict[str, Any]) -> None:
+    """A cell's shading and the vertical placement of the text in it."""
+    shade = str(meta.get("shade") or "").lstrip("#")
+    if shade:
+        properties = cell._tc.get_or_add_tcPr()
+        for existing in properties.findall(qn("w:shd")):
+            properties.remove(existing)
+        element = OxmlElement("w:shd")
+        element.set(qn("w:val"), "clear")
+        element.set(qn("w:color"), "auto")
+        element.set(qn("w:fill"), shade.upper())
+        properties.append(element)
+
+    valign = str(meta.get("valign") or "")
+    if valign in ("middle", "bottom"):
+        from docx.enum.table import WD_ALIGN_VERTICAL
+
+        cell.vertical_alignment = (WD_ALIGN_VERTICAL.CENTER if valign == "middle"
+                                   else WD_ALIGN_VERTICAL.BOTTOM)
 
 
 def _picture_in_cell(cell, node: Node, page: dict[str, Any]) -> None:

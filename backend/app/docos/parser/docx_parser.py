@@ -22,6 +22,7 @@ from lxml import etree
 
 from app.docos.graph import DocumentGraph, Node, NodeType, Run, Style, merge_runs
 from app.docos.parser.omml import paragraph_parts
+from app.docos.parser.table_layout import cell_layout, row_layout, table_layout
 
 _W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 
@@ -771,7 +772,14 @@ def _table_node(table: _Table, doc: _Doc) -> Node:
     rows: list[Node] = []
     for row_index, r in enumerate(table.rows):
         cells: list[Node] = []
+        # python-docx hands back a merged cell once for every column it covers,
+        # so a two-column merge arrived as the same cell twice and the row came
+        # out one column too wide, with the text repeated.
+        seen: set[int] = set()
         for c in r.cells:
+            if id(c._tc) in seen:
+                continue
+            seen.add(id(c._tc))
             # A cell's pictures come with it. Reading only c.text dropped any
             # screenshot placed in a table — a common way to lay out figures.
             pictures: list[Node] = []
@@ -799,6 +807,9 @@ def _table_node(table: _Table, doc: _Doc) -> Node:
                     lines.append(para.text)
 
             cell_meta: dict = {"equations": cell_maths} if cell_maths else {}
+            # Shading, width, vertical placement and merging: what makes the
+            # table look like the one in the document rather than a plain grid.
+            cell_meta.update(cell_layout(c))
             cells.append(
                 Node(
                     type=NodeType.TABLE_CELL,
@@ -807,11 +818,12 @@ def _table_node(table: _Table, doc: _Doc) -> Node:
                     metadata=cell_meta,
                 )
             )
-        row_meta: dict = {}
+        row_meta: dict = dict(row_layout(r))
         if _is_header_row(r, row_index):
             row_meta["header_row"] = True
         rows.append(Node(type=NodeType.TABLE_ROW, children=cells, metadata=row_meta))
     meta: dict = {"rows": len(table.rows), "cols": len(table.columns)}
+    meta.update(table_layout(table))
     borders = _table_borders(table)
     if borders:
         meta["borders"] = borders

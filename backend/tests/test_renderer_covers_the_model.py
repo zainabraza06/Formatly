@@ -34,6 +34,14 @@ VISIBLE_METADATA = [
     "space_after_pt",   # and below
     "indent_left_pt",
     "indent_first_line_pt",
+    # a table's layout, as against what it says
+    "columns_in",       # the width of each column
+    "width_in",         # and of the table
+    "align",            # where it sits between the margins
+    "shade",            # a shaded cell, a shaded header row
+    "valign",           # where the text sits inside the cell
+    "span",             # a cell merged across columns
+    "vmerge",           # and down rows
 ]
 
 
