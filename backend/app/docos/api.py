@@ -110,13 +110,37 @@ def get_document(doc_id: str, user: User = Depends(get_current_user)) -> dict[st
         raise HTTPException(status_code=403, detail="not your document")
 
 
+
+
+def _with_maths(graph, drawn: bool):
+    """The graph as it should be written out, given the reader's toggle.
+
+    The flag lives on a copy: a download is a way of looking at the document,
+    not an edit to it, and turning the maths on to save a file should not
+    change what anyone else sees.
+    """
+    if not drawn:
+        return graph
+    copy = graph.clone()
+    copy.root.metadata["render_maths"] = True
+    page = copy.root.metadata.setdefault("page", {})
+    if isinstance(page, dict):
+        page["render_maths"] = True
+    return copy
+
+
 @router.get("/{doc_id}/download.docx")
-def download_docx(doc_id: str, user: User = Depends(get_current_user)) -> Response:
+def download_docx(doc_id: str, maths: bool = False,
+                  user: User = Depends(get_current_user)) -> Response:
     """The edited document as a .docx, named after itself.
 
     The current graph, so it carries every change made since the import —
     including the equations, which go back as Word's own markup where nobody
     has rewritten them.
+
+    `maths` is the reader's own toggle. With the equations drawn on the page,
+    LaTeX the author typed goes into the file as an equation too — otherwise
+    the file said `$C = \frac{F}{Q}$` where the page showed a fraction.
     """
     from app.docos.export import graph_to_docx_bytes
 
@@ -128,7 +152,7 @@ def download_docx(doc_id: str, user: User = Depends(get_current_user)) -> Respon
         raise HTTPException(status_code=403, detail="not your document")
 
     return Response(
-        content=graph_to_docx_bytes(graph),
+        content=graph_to_docx_bytes(_with_maths(graph, maths)),
         media_type=_DOCX_MIME,
         headers={"Content-Disposition":
                  f'attachment; filename="{_safe_name(graph.title)}.docx"'},
@@ -136,7 +160,8 @@ def download_docx(doc_id: str, user: User = Depends(get_current_user)) -> Respon
 
 
 @router.get("/{doc_id}/download.pdf")
-def download_pdf(doc_id: str, user: User = Depends(get_current_user)) -> Response:
+def download_pdf(doc_id: str, maths: bool = False,
+                 user: User = Depends(get_current_user)) -> Response:
     """The edited document as a PDF, laid out by LibreOffice.
 
     The same rendering the exact view shows, offered as a file: what the editor
@@ -155,7 +180,7 @@ def download_pdf(doc_id: str, user: User = Depends(get_current_user)) -> Respons
     except PermissionError:
         raise HTTPException(status_code=403, detail="not your document")
 
-    pdf = docx_to_pdf(graph_to_docx_bytes(graph))
+    pdf = docx_to_pdf(graph_to_docx_bytes(_with_maths(graph, maths)))
     if pdf is None:
         raise HTTPException(status_code=503, detail="could not render the PDF")
 

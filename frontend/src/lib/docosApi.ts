@@ -58,8 +58,12 @@ export const docosApi = {
     json(await fetch(`${API_URL}/docos`, { headers: authHeaders() })),
 
   /** Save the edited document. The current graph, so every change is in it. */
-  download: async (id: string, format: 'docx' | 'pdf'): Promise<void> => {
-    const res = await fetch(`${API_URL}/docos/${id}/download.${format}`, { headers: authHeaders() })
+  /** `maths` is the reader's own toggle: with the equations drawn on screen,
+   *  the file should hold equations rather than the LaTeX they were typed as. */
+  download: async (id: string, format: 'docx' | 'pdf', maths = false): Promise<void> => {
+    const res = await fetch(
+      `${API_URL}/docos/${id}/download.${format}${maths ? '?maths=1' : ''}`,
+      { headers: authHeaders() })
     if (!res.ok) {
       throw new Error(await failure(res) || `Could not export the ${format.toUpperCase()}`)
     }

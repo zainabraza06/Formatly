@@ -22,11 +22,16 @@ export function DocumentEditor() {
   const [renderMaths, setRenderMaths] = useState(false)
   const [saving, setSaving] = useState<'docx' | 'pdf' | null>(null)
 
+  // Drawn either because the reader asked for it here, or because the document
+  // itself was told to. The download follows the same answer, so what is on
+  // the page is what is in the file.
+  const mathsOn = renderMaths || Boolean(doc.graph?.root?.metadata?.render_maths)
+
   const download = async (format: 'docx' | 'pdf') => {
     if (!doc.docId) return
     setSaving(format)
     try {
-      await docosApi.download(doc.docId, format)
+      await docosApi.download(doc.docId, format, mathsOn)
     } catch (e) {
       // A PDF needs LibreOffice, which may not be there; say so rather than
       // leaving a button that quietly does nothing.
@@ -179,7 +184,7 @@ document stores as equations are always drawn."
               focusId={doc.focusId}
               // Either the reader pressed the button, or they asked the
               // assistant for the same thing and it is now part of the document.
-              renderMaths={renderMaths || Boolean(doc.graph?.root?.metadata?.render_maths)}
+              renderMaths={mathsOn}
             />
           )}
         </div>

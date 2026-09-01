@@ -14,6 +14,7 @@ from __future__ import annotations
 import base64
 import binascii
 import io
+import re
 from typing import Any, Optional
 
 from docx import Document
@@ -23,6 +24,7 @@ from docx.oxml.ns import qn
 from docx.shared import Inches, Pt, RGBColor
 
 from app.docos.graph import DocumentGraph, Node, NodeType
+from app.docos.parser.omml_write import latex_to_omml
 
 _ALIGN = {
     "left": WD_ALIGN_PARAGRAPH.LEFT,
@@ -39,7 +41,13 @@ _MAX_IMAGE_IN = 6.5
 
 def graph_to_docx_bytes(graph: DocumentGraph) -> bytes:
     doc = Document()
-    page = (graph.root.metadata or {}).get("page") or {}
+    page = dict((graph.root.metadata or {}).get("page") or {})
+    # Whether the reader asked for the maths to be drawn. With it on, an
+    # equation the author typed as LaTeX goes into the file as an equation
+    # rather than as the characters `$...$`, which is what the page shows and
+    # what the download did not.
+    page["render_maths"] = bool(page.get("render_maths")
+                                or (graph.root.metadata or {}).get("render_maths"))
     _apply_page(doc, page)
     _apply_defaults(doc, page)
 
@@ -140,6 +148,8 @@ def _paragraph(doc: Document, node: Node, page: dict[str, Any]):
     # citation comes back out of the file the way it went in.
     if _write_with_equations(paragraph, node, page, bool(level)):
         return paragraph
+    if _write_typed_maths(paragraph, node, page, bool(level)):
+        return paragraph
 
     for piece in node.inline_runs():
         _apply_run(paragraph.add_run(piece.text), node, page,
@@ -213,6 +223,47 @@ def _write_with_equations(paragraph, node: Node, page: dict[str, Any],
                 _apply_run(paragraph.add_run(node.content), node, page, heading=heading)
                 return True
     return True
+
+
+_TYPED_MATHS = re.compile(r"\$\$(.+?)\$\$|\$([^$\n]+?)\$", re.DOTALL)
+
+
+def _write_typed_maths(paragraph, node: Node, page: dict[str, Any],
+                       heading: bool) -> bool:
+    """Write a paragraph whose LaTeX should go out as equations. True if it did.
+
+    Only when the reader has asked for the maths to be drawn: with it off, the
+    document says what the author typed and the file should say the same.
+    """
+    if not page.get("render_maths"):
+        return False
+    text = node.content or ""
+    if "$" not in text:
+        return False
+
+    pieces = list(_TYPED_MATHS.finditer(text))
+    if not pieces:
+        return False
+
+    at = 0
+    wrote = False
+    for piece in pieces:
+        before = text[at:piece.start()]
+        if before:
+            _apply_run(paragraph.add_run(before), node, page, heading=heading)
+        latex = piece.group(1) or piece.group(2) or ""
+        element = latex_to_omml(latex)
+        if element is None:
+            _apply_run(paragraph.add_run(piece.group(0)), node, page, heading=heading)
+        else:
+            paragraph._p.append(element)
+            wrote = True
+        at = piece.end()
+
+    rest = text[at:]
+    if rest:
+        _apply_run(paragraph.add_run(rest), node, page, heading=heading)
+    return wrote
 
 
 def _apply_paragraph_format(paragraph, node: Node) -> None:
