@@ -411,6 +411,30 @@ _BORDER_TAGS = (("top", "w:top"), ("bottom", "w:bottom"), ("left", "w:left"),
                 ("inside_v", "w:insideV"))
 
 
+
+# Word validates the order of these, not just their presence: `w:tblBorders`
+# belongs before `w:tblLayout`, and `w:tcBorders` before `w:vAlign`. Appending
+# them to the end is well-formed XML and an invalid document — Word refuses to
+# open it and says only that it found a problem with the contents.
+_AFTER_TBL_BORDERS = ("w:shd", "w:tblLayout", "w:tblCellMar", "w:tblLook",
+                      "w:tblCaption", "w:tblDescription")
+_AFTER_TC_BORDERS = ("w:shd", "w:noWrap", "w:tcMar", "w:textDirection",
+                     "w:tcFitText", "w:vAlign", "w:hideMark")
+_AFTER_TC_SHD = ("w:noWrap", "w:tcMar", "w:textDirection", "w:tcFitText",
+                 "w:vAlign", "w:hideMark")
+
+
+def _place(parent, element, successors: tuple[str, ...]) -> None:
+    """Put `element` where the schema expects it: before the first of the
+    elements that must follow it, or at the end if none of them are there."""
+    for tag in successors:
+        found = parent.find(qn(tag))
+        if found is not None:
+            found.addprevious(element)
+            return
+    parent.append(element)
+
+
 def _apply_borders(table, borders: Any) -> None:
     """Write the table's own edges, so a table with two rules exports as one.
 
@@ -441,7 +465,7 @@ def _apply_borders(table, borders: Any) -> None:
             edge.set(qn("w:val"), "none")
             edge.set(qn("w:sz"), "0")
         element.append(edge)
-    properties.append(element)
+    _place(properties, element, _AFTER_TBL_BORDERS)
 
 
 def _apply_table_layout(table, meta: dict[str, Any]) -> None:
@@ -471,7 +495,7 @@ def _rule_under(cell, width: float) -> None:
     borders = properties.find(qn("w:tcBorders"))
     if borders is None:
         borders = OxmlElement("w:tcBorders")
-        properties.append(borders)
+        _place(properties, borders, _AFTER_TC_BORDERS)
     for existing in borders.findall(qn("w:bottom")):
         borders.remove(existing)
     edge = OxmlElement("w:bottom")
@@ -493,7 +517,7 @@ def _apply_cell_layout(cell, meta: dict[str, Any]) -> None:
         element.set(qn("w:val"), "clear")
         element.set(qn("w:color"), "auto")
         element.set(qn("w:fill"), shade.upper())
-        properties.append(element)
+        _place(properties, element, _AFTER_TC_SHD)
 
     valign = str(meta.get("valign") or "")
     if valign in ("middle", "bottom"):
