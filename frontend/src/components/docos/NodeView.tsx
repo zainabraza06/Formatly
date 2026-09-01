@@ -351,22 +351,56 @@ function ImageView({ node, css }: { node: GraphNode; css: React.CSSProperties })
   )
 }
 
+/** A table's own edges, in points, as the document has them. */
+type Borders = Partial<Record<'top' | 'bottom' | 'left' | 'right' | 'inside_h' | 'inside_v', number>>
+
+/** What Word draws for a table that states nothing: a plain half-point grid. */
+const FULL_GRID: Borders = {
+  top: 0.5, bottom: 0.5, left: 0.5, right: 0.5, inside_h: 0.5, inside_v: 0.5,
+}
+
+/**
+ * The lines one cell draws, from the table's edges.
+ *
+ * Every cell used to draw all four of its own, so a table's real rules were
+ * neither read nor changeable and "only the top and bottom borders" had
+ * nowhere to land. A cell on the outside of the table draws the table's outer
+ * edge; one inside draws the inner rules — which is how a table with
+ * horizontal rules only, the academic default, comes out right.
+ */
+function cellBorders(borders: Borders | null, row: number, col: number,
+                     rows: number, cols: number): CSSProperties {
+  const b = borders ?? FULL_GRID
+  const line = (pt?: number) => (pt && pt > 0 ? `${pt}pt solid #333` : '0')
+  return {
+    borderTop: line(row === 0 ? b.top : b.inside_h),
+    borderBottom: line(row === rows - 1 ? b.bottom : b.inside_h),
+    borderLeft: line(col === 0 ? b.left : b.inside_v),
+    borderRight: line(col === cols - 1 ? b.right : b.inside_v),
+  }
+}
+
 function TableView({ node, renderMaths }: { node: GraphNode; renderMaths?: boolean }) {
+  const borders = ((node.metadata ?? {})['borders'] ?? null) as Borders | null
+  const rows = node.children.length
   return (
     <div className="my-1 overflow-x-auto">
       <table className="w-full border-collapse text-[10pt]">
         <tbody>
-          {node.children.map((row) => (
+          {node.children.map((row, rowIndex) => (
             <tr key={row.id}>
-              {row.children.map((cell) => (
+              {row.children.map((cell, colIndex) => (
                 <td
                   key={cell.id}
                   // A cell's own formatting was never drawn, so making the
                   // header row bold changed the model and the exported file
                   // and nothing a reader could see — which looks like the
                   // command failing rather than the page not saying so.
-                  style={styleToCss(cell.style)}
-                  className="border border-neutral-400 px-3 py-1.5 align-top text-neutral-900"
+                  style={{
+                    ...styleToCss(cell.style),
+                    ...cellBorders(borders, rowIndex, colIndex, rows, row.children.length),
+                  }}
+                  className="px-3 py-1.5 align-top text-neutral-900"
                 >
                   {/* A display equation is very often laid out as a one-row
                       table with its number in the next cell, so a cell is one
