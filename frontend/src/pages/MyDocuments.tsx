@@ -15,6 +15,10 @@ export function MyDocuments() {
   // The card awaiting a second click, so deleting a whole history takes two.
   const [confirming, setConfirming] = useState<string | null>(null)
   const [deleting, setDeleting] = useState<string | null>(null)
+  // Clearing everything asks first, in the same two-step way one card does.
+  const [askingClearAll, setAskingClearAll] = useState(false)
+  const [clearing, setClearing] = useState(false)
+  const [cleared, setCleared] = useState<number | null>(null)
 
   const load = () => {
     setLoading(true)
@@ -40,6 +44,23 @@ export function MyDocuments() {
     }
   }
 
+  const removeEverything = async () => {
+    setClearing(true)
+    setError(null)
+    try {
+      const { deleted } = await docosApi.deleteAllDocuments()
+      setDocs([])
+      // Said out loud: this takes the version history of every upload with it,
+      // and a silently emptied page reads the same as one that failed.
+      setCleared(deleted)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Delete failed')
+    } finally {
+      setClearing(false)
+      setAskingClearAll(false)
+    }
+  }
+
   const upload = async (file: File | undefined) => {
     if (!file) return
     setBusy(true)
@@ -62,13 +83,52 @@ export function MyDocuments() {
           <p className="mt-0.5 text-sm text-muted">Open any document to edit or revert to a previous version.</p>
         </div>
         <input ref={fileRef} type="file" accept=".docx" hidden onChange={(e) => upload(e.target.files?.[0])} />
-        <button onClick={() => fileRef.current?.click()} disabled={busy} className={btnPrimary}>
-          {busy ? 'Uploading…' : 'Upload DOCX'}
-        </button>
+        <div className="flex items-center gap-2">
+          {docs.length > 0 && (
+            askingClearAll ? (
+              // The question replaces the button rather than covering the page:
+              // the list it is about stays visible while it is answered.
+              <div className="flex items-center gap-2 rounded-lg border border-danger/40 bg-danger/5 px-2 py-1.5">
+                <span className="text-xs text-danger">
+                  Delete all {docs.length}, with every version?
+                </span>
+                <button
+                  onClick={() => setAskingClearAll(false)}
+                  className="rounded-md px-2 py-1 text-xs font-medium text-muted hover:text-ink"
+                >
+                  Keep
+                </button>
+                <button
+                  onClick={removeEverything}
+                  disabled={clearing}
+                  className="rounded-md bg-danger px-2 py-1 text-xs font-medium text-white disabled:opacity-60"
+                >
+                  {clearing ? 'Deleting…' : 'Delete all'}
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => { setAskingClearAll(true); setCleared(null) }}
+                className="rounded-lg border border-line px-2.5 py-1.5 text-xs font-medium text-muted transition-colors hover:border-danger/40 hover:text-danger"
+              >
+                Delete all
+              </button>
+            )
+          )}
+          <button onClick={() => fileRef.current?.click()} disabled={busy} className={btnPrimary}>
+            {busy ? 'Uploading…' : 'Upload DOCX'}
+          </button>
+        </div>
       </div>
 
       {error && (
         <div className="rounded-lg border border-danger/30 bg-danger/5 px-3 py-2 text-xs text-danger">{error}</div>
+      )}
+
+      {cleared !== null && (
+        <div className="rounded-lg border border-line bg-surface-2 px-3 py-2 text-xs text-muted">
+          Deleted {cleared} {cleared === 1 ? 'upload' : 'uploads'}.
+        </div>
       )}
 
       {loading ? (

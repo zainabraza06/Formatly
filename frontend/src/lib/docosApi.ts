@@ -86,6 +86,12 @@ export const docosApi = {
       method: 'DELETE', headers: authHeaders(),
     })),
 
+  /** Every upload of the caller's, with all its history. */
+  deleteAllDocuments: async (): Promise<{ deleted: number }> =>
+    json(await fetch(`${API_URL}/docos`, {
+      method: 'DELETE', headers: authHeaders(),
+    })),
+
   importDocx: async (file: File): Promise<ImportResponse> => {
     const form = new FormData()
     form.append('file', file)

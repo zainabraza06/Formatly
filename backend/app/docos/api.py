@@ -222,6 +222,16 @@ def exact_view(doc_id: str, user: User = Depends(get_current_user)) -> FileRespo
                         filename=f"{doc_id}.pdf")
 
 
+@router.delete("")
+def delete_all(user: User = Depends(get_current_user)) -> dict[str, int]:
+    """Delete every upload belonging to the caller, with all their history.
+
+    Declared before the by-id route so "" is not read as a document called
+    nothing.
+    """
+    return {"deleted": get_service().delete_all_documents(owner_id=user.id)}
+
+
 @router.delete("/{doc_id}")
 def delete_document(doc_id: str, user: User = Depends(get_current_user)) -> dict[str, bool]:
     try:

@@ -30,6 +30,11 @@ ORDERS = {
     "w:tcPr": ["w:cnfStyle", "w:tcW", "w:gridSpan", "w:hMerge", "w:vMerge",
                "w:tcBorders", "w:shd", "w:noWrap", "w:tcMar", "w:textDirection",
                "w:tcFitText", "w:vAlign", "w:hideMark"],
+    # The edges inside a border set are ordered too.
+    "w:tblBorders": ["w:top", "w:start", "w:left", "w:bottom", "w:end",
+                     "w:right", "w:insideH", "w:insideV"],
+    "w:tcBorders": ["w:top", "w:start", "w:left", "w:bottom", "w:end",
+                    "w:right", "w:insideH", "w:insideV", "w:tl2br", "w:tr2bl"],
     "w:pPr": ["w:pStyle", "w:keepNext", "w:keepLines", "w:pageBreakBefore",
               "w:framePr", "w:widowControl", "w:numPr", "w:suppressLineNumbers",
               "w:pBdr", "w:shd", "w:tabs", "w:spacing", "w:ind",
@@ -90,6 +95,44 @@ def test_property_children_are_in_the_order_the_schema_states(container: str):
         assert ranks == sorted(ranks), (
             f"{container} children are out of order — Word will refuse the "
             f"file and say only that it found a problem: {children}")
+
+
+# What may hold an `m:e`. It is a part of a structure, never a thing on its
+# own, and one sitting straight inside an `m:oMath` invalidates the document.
+_HOLDS_AN_E = ("m:d", "m:f", "m:rad", "m:nary", "m:sSup", "m:sSub", "m:sSubSup",
+               "m:func", "m:limLow", "m:limUpp", "m:acc", "m:bar", "m:groupChr",
+               "m:mr", "m:box", "m:borderBox", "m:eqArr", "m:phant")
+
+
+def test_no_equation_holds_a_group_where_a_group_cannot_go():
+    """`<m:oMath><m:e>` is well-formed XML and an invalid document."""
+    xml = document_xml(equations())
+    assert "<m:oMath><m:e>" not in xml
+
+
+def test_every_group_sits_inside_something_that_can_hold_one():
+    xml = document_xml(equations())
+    for match in re.finditer(r"<(m:[a-zA-Z]+)><m:e>", xml):
+        assert match.group(1) in _HOLDS_AN_E, (
+            f"an m:e inside <{match.group(1)}>, which cannot hold one")
+
+
+def equations() -> DocumentGraph:
+    """Every shape the converter can produce, in one document."""
+    latex = [
+        r"$C = \frac{F + vQ}{Q}$",
+        r"$\sum_{i=1}^{N} x_i$",
+        r"$\sqrt[3]{a^2 + b^2}$",
+        r"$\mathbf{X}_b \in \mathbb{R}^{5 \times 5}$",
+        r"$3 \times 10^{-3}$",
+        r"$f(x) = {a + b}$",          # a braced group that is not an argument
+        r"$\int_0^1 \alpha \, dx$",
+    ]
+    root = Node(type=NodeType.DOCUMENT,
+                metadata={"page": {"render_maths": True}, "render_maths": True})
+    root.children = [Node(type=NodeType.BODY, content=f"Here: {one} indeed.")
+                     for one in latex]
+    return DocumentGraph(root=root, title="equations")
 
 
 def test_the_file_is_a_zip_word_could_open():

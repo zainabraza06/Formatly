@@ -112,6 +112,20 @@ class DocOSService:
         self._require_owner(doc_id, owner_id)
         return self.versions.store.delete_document(doc_id)
 
+    def delete_all_documents(self, owner_id: Optional[str] = None) -> int:
+        """Delete every one of the caller's uploads. Returns how many went.
+
+        Only their own: the store is asked for the documents belonging to this
+        owner and each is deleted by id, so a shared store cannot lose someone
+        else's work to a stray call.
+        """
+        gone = 0
+        for doc in self.versions.store.list_documents(owner_id=owner_id):
+            if self.versions.store.delete_document(doc["id"]):
+                self._readings.pop(doc["id"], None)
+                gone += 1
+        return gone
+
     # ── import / read ─────────────────────────────────────────────────────
     def import_docx(self, data: bytes, *, title: str = "", user: str = "user",
                     owner_id: Optional[str] = None) -> dict[str, Any]:

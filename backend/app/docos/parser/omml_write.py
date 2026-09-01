@@ -193,14 +193,26 @@ def _run(text: str, *, upright: bool = False, style: str = ""):
 
 
 def _group(children: list):
-    """Several elements as one. Word has no group, so a one-element group is
-    itself and a longer one is a run of them held by an invisible delimiter."""
+    """Several elements as one.
+
+    OMML has no bare group: `m:e` is only ever a part of something else, and
+    putting one straight into an `m:oMath` is invalid — Word refuses the whole
+    file over it, saying only that it found a problem with the contents. A
+    delimiter with no brackets is Word's own way of holding a run of elements
+    together, and it draws nothing.
+    """
     if len(children) == 1:
         return children[0]
-    holder = OxmlElement("m:e")
-    for child in children:
-        holder.append(child)
-    return holder
+
+    element = OxmlElement("m:d")
+    properties = OxmlElement("m:dPr")
+    for tag in ("m:begChr", "m:endChr"):
+        marker = OxmlElement(tag)
+        marker.set(qn("m:val"), "")
+        properties.append(marker)
+    element.append(properties)
+    element.append(_wrap("m:e", children))
+    return element
 
 
 def _wrap(tag: str, children: list):

@@ -406,7 +406,11 @@ def _table(doc: Document, node: Node, page: dict[str, Any]) -> None:
         doc.add_paragraph(caption.content)
 
 
-_BORDER_TAGS = (("top", "w:top"), ("bottom", "w:bottom"), ("left", "w:left"),
+# In the order the schema states them — top, left, bottom, right, then the
+# inner two. Writing bottom before left is well-formed XML and a file Word
+# will not open, which is the same class of mistake as putting the borders
+# themselves in the wrong place inside the table's properties.
+_BORDER_TAGS = (("top", "w:top"), ("left", "w:left"), ("bottom", "w:bottom"),
                 ("right", "w:right"), ("inside_h", "w:insideH"),
                 ("inside_v", "w:insideV"))
 
