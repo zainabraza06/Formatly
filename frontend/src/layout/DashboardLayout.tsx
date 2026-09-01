@@ -175,14 +175,14 @@ export function DashboardLayout({
 
         {/* ── Main ── */}
         <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
-          <header className="flex shrink-0 items-center gap-3 border-b border-line px-4 py-3 sm:px-6">
+          <header className="flex shrink-0 items-center gap-3 border-b border-line bg-surface/80 backdrop-blur-md px-4 py-3 sm:px-6 z-10 sticky top-0">
             {/* Opens the sidebar. Hidden while it is open — the sidebar's own
                 cross is the single close control, so there are never two. */}
             <button
               onClick={() => setNavOpen(true)}
               aria-label="Open menu"
               className={clsx(
-                'flex h-8 w-8 items-center justify-center rounded-lg border border-line bg-surface text-muted transition-colors hover:bg-surface-2 hover:text-ink',
+                'flex h-9 w-9 items-center justify-center rounded-xl border border-line bg-surface-2 text-muted transition-all hover:bg-surface hover:text-ink hover:shadow-sm active:scale-95',
                 navOpen && 'hidden',
               )}
             >
@@ -192,11 +192,11 @@ export function DashboardLayout({
             </button>
 
             {/* header brand: on mobile always; on desktop only when the sidebar is collapsed */}
-            <div className={clsx('flex items-center gap-2', navOpen && 'lg:hidden')}>
-              <div className="flex h-6 w-6 items-center justify-center rounded-md bg-accent text-[11px] font-semibold text-accent-fg">
+            <div className={clsx('flex items-center gap-2.5', navOpen && 'lg:hidden')}>
+              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent text-[12px] font-bold text-accent-fg shadow-sm">
                 F
               </div>
-              <span className="text-sm font-medium text-ink">Formatly</span>
+              <span className="text-sm font-semibold tracking-wide text-ink">Formatly</span>
             </div>
 
             <div className="flex-1" />
@@ -204,13 +204,13 @@ export function DashboardLayout({
           </header>
 
           {/* the single scroll region */}
-          <div className="flex-1 overflow-y-auto overflow-x-hidden">
+          <div className="flex-1 overflow-y-auto overflow-x-hidden p-2 sm:p-4">
             <motion.div
               key="outlet"
-              initial={{ opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.2 }}
-              className="mx-auto flex min-h-full w-full max-w-6xl flex-col p-4 sm:p-6"
+              initial={{ opacity: 0, y: 12, scale: 0.99 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              transition={{ duration: 0.3, ease: 'easeOut' }}
+              className="mx-auto flex min-h-full w-full max-w-6xl flex-col rounded-3xl bg-surface shadow-sm border border-line/50 p-6 sm:p-8"
             >
               <Outlet />
             </motion.div>
