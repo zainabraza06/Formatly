@@ -164,9 +164,20 @@ class CommandEngine:
 
         alignment = _alignment(c)
         color = _color(c)
+        font = _font_family(command)
         size, relative, step = _size(c)
 
-        if _ABOUT_BORDERS.search(c):
+        if (case_kind := _case_wanted(c)):
+            actions.append(a(type="case", target=target or "document",
+                             params={"kind": case_kind}))
+            reasoning = f"{case_kind} case"
+        elif (spacing := _spacing_wanted(c)):
+            # "Line spacing" says line, and "line" on its own means the rules
+            # drawn across a page — which is not what a spacing request is about.
+            where = target if target != "horizontal_rule" else None
+            actions.append(a(type="spacing", target=where or "body", params=spacing))
+            reasoning = f"spacing {spacing}"
+        elif _ABOUT_BORDERS.search(c):
             sides, width = _borders_wanted(c)
             # Whatever noun was matched, a border request is about a table:
             # "lines" alone resolves to the document's horizontal rules.
@@ -185,14 +196,43 @@ class CommandEngine:
                              params={"kind": kind}))
             reasoning = f"{kind} list"
         elif _has(c, "highlight"):
+            if _has(c, "remove", "delete", "clear", "no highlight", "without"):
+                # Taking it off is asked for as often as putting it on, and
+                # highlighting in the same colour was answering the opposite.
+                actions.append(formatting({"highlight": ""}, "document"))
+                reasoning = "remove the highlighting"
+                return validate_batch({"reasoning": reasoning, "actions": actions})
             actions.append(a(type="highlight", target=target or "document",
                              params={"color": _HIGHLIGHT, "find": phrase} if phrase
                              else {"color": _HIGHLIGHT}))
             reasoning = f"highlight {target or 'document'}"
         elif _has(c, "remove", "delete"):
             t = target or ("horizontal_rule" if _has(c, "line", "rule") else "figure")
-            actions.append(a(type="delete", target=t))
-            reasoning = f"delete {t}"
+            if not target and _ABOUT_CHARACTERS.search(c):
+                # "Remove the double spaces" is about characters in the text.
+                # Falling through to a node type deleted the figures.
+                actions.append(a(type="rewrite", target="document",
+                                 params={"instruction": command.strip()}))
+                reasoning = "take out what the instruction names"
+                return validate_batch({"reasoning": reasoning, "actions": actions})
+            if phrase:
+                # "Delete the phrase X" takes out the words, not the paragraph
+                # they are in.
+                actions.append(a(type="replace", target=scoped or "document",
+                                 params={"find": phrase, "with": ""}))
+                reasoning = f"remove {phrase!r}"
+            elif t in ("paragraph", "body"):
+                # "Delete the second paragraph" names one, and this cannot tell
+                # which — and a delete of every paragraph is refused by the
+                # schema, so emitting one crashed the request rather than
+                # answering it. The rewriter is shown the text and can take out
+                # what the instruction names.
+                actions.append(a(type="rewrite", target=t,
+                                 params={"instruction": command.strip()}))
+                reasoning = "remove what the instruction names"
+            else:
+                actions.append(a(type="delete", target=t))
+                reasoning = f"delete {t}"
         elif alignment:
             actions.append(a(type="align", target=target or "body",
                              params={"alignment": alignment}))
@@ -209,11 +249,11 @@ class CommandEngine:
                 params, said = {"font_size": size}, f"to {size}"
             actions.append(a(type="resize", target=target or "body", params=params))
             reasoning = f"resize {target or 'body'} {said}"
-        elif _style_asked(c, color):
+        elif _style_asked(c, color, font):
             # Several at once is an ordinary request — "bold and italic", "red
             # and underlined" — and answering only the first of them was
             # answering half the question.
-            style = _style_asked(c, color)
+            style = _style_asked(c, color, font)
             actions.append(formatting(style, "heading"))
             reasoning = ", ".join(f"{k}={v}" for k, v in style.items())
         elif _has(c, "select", "find", "show", "list"):
@@ -358,7 +398,8 @@ def _named_phrase(command: str) -> str:
     return ""
 
 
-def _style_asked(text: str, color: Optional[str]) -> dict[str, Any]:
+def _style_asked(text: str, color: Optional[str],
+                 font: Optional[str] = None) -> dict[str, Any]:
     """Everything about appearance the request asks for, in one patch."""
     style: dict[str, Any] = {}
     if _has(text, "bold"):
@@ -373,6 +414,8 @@ def _style_asked(text: str, color: Optional[str]) -> dict[str, Any]:
             style[attr] = False
     if color:
         style["color"] = color
+    if font:
+        style["font_family"] = font
     return style
 
 
@@ -511,3 +554,77 @@ def _keep_others(sides: list[str]) -> list[str]:
     """The edges left after the named ones are taken away."""
     gone = set(_expand(sides))
     return [s for s in _BORDER_ALL if s not in gone]
+
+
+# Word calls this Change Case, and does it without asking anyone.
+_CASE_WORDS = (
+    ("upper", r"\b(upper[- ]?case|all[- ]?caps|capital letters|in caps|shout)\b"),
+    ("lower", r"\b(lower[- ]?case|small letters|no caps)\b"),
+    ("sentence", r"\bsentence[- ]?case\b"),
+    ("title", r"\b(title[- ]?case|capitali[sz]e each word|capitali[sz]ed?|capitali[sz]ation)\b"),
+)
+
+
+def _case_wanted(text: str) -> Optional[str]:
+    """Which case a request asks for, if it asks for one."""
+    for kind, pattern in _CASE_WORDS:
+        if re.search(pattern, text, re.IGNORECASE):
+            return kind
+    return None
+
+
+# Line spacing, and the gaps above and below a paragraph. The document has
+# carried all three since it was imported and nothing could ask for them.
+_NAMED_SPACING = (
+    (2.0, r"\bdouble[- ]?spac"),
+    (1.5, r"\bone and a half\b|\b1\.5\s*(?:line\s*)?spac"),
+    (1.0, r"\bsingle[- ]?spac"),
+)
+
+
+def _spacing_wanted(text: str) -> Optional[dict[str, float]]:
+    # "Remove double spaces" is about two space characters in a row, not about
+    # the distance between lines, and setting the document double-spaced is the
+    # opposite of what it asks.
+    if re.search(r"\b(remove|delete|strip|collapse)\b.{0,20}\bspaces\b", text, re.IGNORECASE):
+        return None
+    for value, pattern in _NAMED_SPACING:
+        if re.search(pattern, text, re.IGNORECASE):
+            return {"line": value}
+
+    m = re.search(r"\bline\s*spacing\s*(?:of|to|=)?\s*(\d(?:\.\d+)?)\b", text, re.IGNORECASE)
+    if m:
+        return {"line": float(m.group(1))}
+
+    # "More space between paragraphs" is about the gap, not the lines.
+    if re.search(r"\bspac(?:e|ing)\b.*\bbetween\b|\bbetween\b.*\bparagraphs?\b", text, re.IGNORECASE):
+        m = re.search(r"(\d{1,2}(?:\.\d)?)\s*(?:pt|points?)", text, re.IGNORECASE)
+        points = float(m.group(1)) if m else 12.0
+        if re.search(r"\b(less|reduce|decrease|tighten|remove|no)\b", text, re.IGNORECASE):
+            points = 0.0
+        return {"after_pt": points}
+    return None
+
+
+# A typeface the request names outright.
+_FONT_NAMES = ("times new roman", "times", "arial", "calibri", "helvetica",
+               "cambria", "georgia", "garamond", "verdana", "courier new",
+               "courier", "palatino", "book antiqua", "computer modern")
+
+
+def _font_family(text: str) -> Optional[str]:
+    if not re.search(r"\b(font|typeface|typeset|set)\b", text, re.IGNORECASE):
+        return None
+    for name in _FONT_NAMES:
+        if name in text.lower():
+            return name.title()
+    m = re.search(r"\bfont\s+(?:to|as|into)\s+([A-Za-z][A-Za-z ]{2,28})", text, re.IGNORECASE)
+    return m.group(1).strip().title() if m else None
+
+
+# Things a request can ask to remove that are characters rather than parts of
+# the document. Without this "remove the double spaces" deleted the figures.
+_ABOUT_CHARACTERS = re.compile(
+    r"\bspaces?\b|\bwhitespace\b|\bblank\b|\btabs?\b|\bduplicate\b"
+    r"|\bextra\b|\btypos?\b|\bcommas?\b|\bfull stops?\b|\bpunctuation\b",
+    re.IGNORECASE)

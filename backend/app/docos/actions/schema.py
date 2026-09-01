@@ -47,6 +47,13 @@ class ActionType(str, Enum):
     # rules — "only the top and bottom borders" — is about the table, not
     # about the text in it, so no style patch can express it.
     BORDER = "border"
+    # UPPERCASE, lowercase, Title Case, Sentence case. A change to the letters
+    # and not to their formatting, but a mechanical one — asking a model to
+    # retype a heading in capitals is slow, costly, and occasionally creative.
+    CASE = "case"
+    # Line spacing and the gaps around a paragraph. The document already
+    # carries all three; nothing could ask for them.
+    SPACING = "spacing"
 
 
 # Targets that name a role rather than a node type, resolved by the graph.
@@ -125,6 +132,12 @@ def _validate_params(i: int, a: Action, errors: list[str]) -> None:
                 and "delta" not in a.params
                 and not (a.style and a.style.font_size)):
             errors.append(f"action[{i}]: resize needs a font_size, a delta or a scale")
+    if a.type == ActionType.CASE:
+        if str(a.params.get("kind") or "") not in ("upper", "lower", "title", "sentence"):
+            errors.append(f"action[{i}]: case needs params.kind in upper|lower|title|sentence")
+    if a.type == ActionType.SPACING:
+        if not any(k in a.params for k in ("line", "before_pt", "after_pt")):
+            errors.append(f"action[{i}]: spacing needs params.line, before_pt or after_pt")
     if a.type == ActionType.BORDER:
         sides = a.params.get("sides")
         if sides is not None and not isinstance(sides, list):

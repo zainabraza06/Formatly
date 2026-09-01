@@ -6,7 +6,7 @@ caller keeps the original graph (rollback on failure — no version is committed
 """
 from __future__ import annotations
 
-from typing import Iterator, Optional
+from typing import Any, Iterator, Optional
 
 from app.docos.actions import Action, ActionBatch, ActionType
 from app.docos.execution.events import Event, EventName
@@ -132,6 +132,37 @@ def _introduces_a_list(node: Node, scope: list[Node]) -> bool:
     return any(not _text(other).endswith(":")
                for other in scope[scope.index(node) + 1:])
 
+
+
+def _sentence_case(text: str) -> str:
+    """First letter of each sentence up, the rest down — but an all-capital
+    word is left alone, because MobiAct and LOSO are names, not shouting."""
+    def keep(word: str) -> str:
+        return word if word.isupper() and len(word) > 1 else word.lower()
+
+    lowered = " ".join(keep(w) for w in text.split(" "))
+    out, new_sentence = [], True
+    for ch in lowered:
+        out.append(ch.upper() if new_sentence and ch.isalpha() else ch)
+        if ch.isalpha() or ch.isdigit():
+            new_sentence = False
+        elif ch in ".!?":
+            new_sentence = True
+    return "".join(out)
+
+
+def _title_case(text: str) -> str:
+    """Capitalise each word, leaving an acronym as it is."""
+    return " ".join(w if w.isupper() and len(w) > 1 else w.capitalize()
+                    for w in text.split(" "))
+
+
+_CASE_FUNCTIONS = {
+    "upper": str.upper,
+    "lower": str.lower,
+    "title": _title_case,
+    "sentence": _sentence_case,
+}
 
 class ExecutionEngine:
     """Stateless. `stream` yields events lazily; `execute` collects them."""
@@ -307,6 +338,70 @@ class ExecutionEngine:
             current = n.style.font_size or base
             wanted = current + step if step is not None else current * scale
             n.apply_style(Style(font_size=round(max(4.0, min(wanted, 96.0)), 1)))
+            changed.append(n.id)
+            yield Event(name=EventName.FORMAT_PROGRESS, payload={"id": n.id, "index": k})
+        yield Event(name=EventName.FORMAT_FINISHED, payload={"count": len(changed)})
+        return changed
+
+    def _h_case(self, g, action, i, selection) -> Iterator[Event]:
+        """UPPERCASE, lowercase, Title Case, Sentence case.
+
+        Word calls this Change Case and does it without asking anyone. Sending
+        it to a model instead cost a call per paragraph, needed the network,
+        and came back with the words improved as well as recased.
+        """
+        kind = str((action.params or {}).get("kind") or "upper").lower()
+        change = _CASE_FUNCTIONS.get(kind, _CASE_FUNCTIONS["upper"])
+
+        nodes = self._text_scope(self._scope(g, action, selection))
+        yield Event(name=EventName.FORMAT_STARTED,
+                    payload={"target": action.target, "total": len(nodes), "case": kind})
+        changed: list[str] = []
+        for k, n in enumerate(nodes):
+            before = n.content
+            # Cased as one string and then cut back up along the run
+            # boundaries, so a bold phrase keeps its formatting without being
+            # cased as if it were a sentence of its own — which is how
+            # "the results of the study" became "The results Of the study".
+            after = change(before)
+            if n.runs_describe_content() and len(after) == len(before):
+                at = 0
+                for run in n.runs:
+                    run.text = after[at:at + len(run.text)]
+                    at += len(run.text)
+            n.content = after
+            if n.content == before:
+                continue
+            changed.append(n.id)
+            yield Event(name=EventName.FORMAT_PROGRESS, payload={"id": n.id, "index": k})
+        yield Event(name=EventName.FORMAT_FINISHED, payload={"count": len(changed)})
+        return changed
+
+    def _h_spacing(self, g, action, i, selection) -> Iterator[Event]:
+        """Line spacing, and the gaps above and below a paragraph.
+
+        The document has carried all three since it was imported — the parser
+        reads them, the page draws them, the export writes them — and nothing
+        could ask for them, so "double space the document" went to the rewriter
+        and came back having changed no words, correctly.
+        """
+        params = action.params or {}
+        patch: dict[str, Any] = {}
+        if params.get("line") is not None:
+            patch["line_spacing"] = float(params["line"])
+            patch["line_spacing_exact"] = False
+        for name, key in (("before_pt", "space_before_pt"), ("after_pt", "space_after_pt")):
+            if params.get(name) is not None:
+                patch[key] = float(params[name])
+
+        nodes = self._text_scope(self._scope(g, action, selection))
+        yield Event(name=EventName.FORMAT_STARTED,
+                    payload={"target": action.target, "total": len(nodes), "spacing": patch})
+        changed: list[str] = []
+        for k, n in enumerate(nodes):
+            if all(n.metadata.get(key) == value for key, value in patch.items()):
+                continue
+            n.metadata.update(patch)
             changed.append(n.id)
             yield Event(name=EventName.FORMAT_PROGRESS, payload={"id": n.id, "index": k})
         yield Event(name=EventName.FORMAT_FINISHED, payload={"count": len(changed)})
@@ -661,6 +756,8 @@ class ExecutionEngine:
         ActionType.RENDER_MATHS: _h_render_maths,
         ActionType.LIST: _h_list,
         ActionType.BORDER: _h_border,
+        ActionType.CASE: _h_case,
+        ActionType.SPACING: _h_spacing,
         ActionType.REWRITE: _h_rewrite,
         ActionType.MERGE: _h_merge,
         ActionType.SPLIT: _h_split,

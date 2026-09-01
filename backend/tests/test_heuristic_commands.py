@@ -30,8 +30,6 @@ def test_formatting_verbs_become_a_format_action(command, style):
 
 
 @pytest.mark.parametrize("command", [
-    "make the header cells capitalized",
-    "capitalise the headings",
     "spell out the abbreviations",
     "renumber the equations",
 ])
@@ -39,6 +37,20 @@ def test_changing_the_words_becomes_a_rewrite(command):
     op, action = _plan(command)
     assert op == "rewrite"
     assert action.params["instruction"] == command
+
+
+@pytest.mark.parametrize("command, kind", [
+    ("make the header cells capitalized", "title"),
+    ("capitalise the headings", "title"),
+    ("make the headings uppercase", "upper"),
+])
+def test_changing_the_case_does_not_need_a_model(command, kind):
+    """Case used to go to the rewriter, which needs the network, costs a call
+    per paragraph, and improves the wording while it is there. It is a
+    mechanical change and is made mechanically."""
+    op, action = _plan(command)
+    assert op == "case"
+    assert action.params["kind"] == kind
 
 
 def test_a_question_about_the_document_is_still_a_selection():

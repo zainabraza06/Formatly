@@ -125,6 +125,20 @@ def _one(action: Any, changed: list[Any]) -> str:
         if sides:
             return f"drew {heavy} {_join(sides)} borders on {what}, and no others"
         return f"drew {heavy} borders on {what}"
+    if kind is ActionType.CASE:
+        named = {"upper": "capitals", "lower": "lower case",
+                 "title": "title case", "sentence": "sentence case"}
+        return f"set {what} in {named.get(str(params.get('kind')), 'another case')}"
+    if kind is ActionType.SPACING:
+        said = []
+        if params.get("line") is not None:
+            line = float(params["line"])
+            said.append({1.0: "single spacing", 1.5: "one-and-a-half spacing",
+                         2.0: "double spacing"}.get(line, f"{_number(line)} line spacing"))
+        for key, where in (("before_pt", "above"), ("after_pt", "below")):
+            if params.get(key) is not None:
+                said.append(f"{_number(params[key])} pt {where}")
+        return f"gave {what} {_join(said)}" if said else f"respaced {what}"
     if kind is ActionType.DELETE:
         return f"deleted {what}"
     if kind is ActionType.REPLACE:
@@ -185,6 +199,8 @@ def _style_verb(style: dict[str, Any]) -> str:
         words.append("underlined")
     if style.get("color"):
         words.append("coloured")
+    if style.get("font_family"):
+        words.append(f"set {style['font_family']} on")
     for attr, undone in (("bold", "unbolded"), ("italic", "un-italicised"),
                          ("underline", "removed the underline from")):
         if style.get(attr) is False:
