@@ -182,8 +182,8 @@ export function ComposePaper() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-xl font-semibold tracking-tight text-ink">Compose</h1>
-        <p className="mt-0.5 text-sm text-muted">
+        <h1 className="text-3xl font-bold tracking-tight text-ink">Compose</h1>
+        <p className="mt-2 text-base text-muted">
           Describe what you need and give it your material — the AI writes the document,
           you get a formatted DOCX.
         </p>
@@ -457,11 +457,11 @@ const option = uiSelectOption
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
     <label className="block">
-      <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-muted">
+      <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-muted">
         {label}
       </span>
       {children}
-      {hint && <span className="mt-1 block text-[10px] text-faint">{hint}</span>}
+      {hint && <span className="mt-1 block text-xs text-faint">{hint}</span>}
     </label>
   )
 }
