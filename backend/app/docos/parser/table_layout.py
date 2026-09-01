@@ -190,6 +190,30 @@ def cell_layout(cell: Any) -> dict[str, Any]:
     return out
 
 
+def header_rule(row: Any) -> Optional[float]:
+    """The line drawn beneath a header row, in points.
+
+    A paper rules its tables under the heading row and Word has no table-level
+    word for it — the line lives on those cells — so it is read from them and
+    kept with the table's other edges.
+    """
+    widths: list[float] = []
+    for cell in row.cells:
+        properties = cell._tc.find(qn("w:tcPr"))
+        borders = properties.find(qn("w:tcBorders")) if properties is not None else None
+        edge = borders.find(qn("w:bottom")) if borders is not None else None
+        if edge is None:
+            return None                     # not every cell draws it: not a rule
+        if (edge.get(qn("w:val")) or "").lower() in ("none", "nil"):
+            widths.append(0.0)
+            continue
+        try:
+            widths.append(round(int(edge.get(qn("w:sz")) or 4) / 8, 2))
+        except ValueError:
+            widths.append(0.5)
+    return max(widths) if widths else None
+
+
 def row_layout(row: Any) -> dict[str, Any]:
     """A row's height, when it states one."""
     out: dict[str, Any] = {}

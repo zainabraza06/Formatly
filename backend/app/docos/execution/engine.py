@@ -91,11 +91,17 @@ def _section_under(g: DocumentGraph, heading: Node) -> list[Node]:
 
 
 
-# The six edges Word gives a table, and the words people use for them.
-_BORDER_SIDES = ("top", "bottom", "left", "right", "inside_h", "inside_v")
+# The six edges Word gives a table, and one it does not: the rule under the
+# header row, which every paper draws and which Word can only express as a
+# border on those particular cells.
+_BORDER_SIDES = ("top", "bottom", "left", "right", "inside_h", "inside_v", "header")
 
 _BORDER_ALIASES = {
-    "upper": "top", "above": "top", "header": "top", "first": "top",
+    "upper": "top", "above": "top", "first": "top",
+    # "The header border" is the line under the heading row, not the line above
+    # the table: that one is the top.
+    "header": "header", "header_row": "header", "heading": "header",
+    "head": "header", "under_header": "header",
     "lower": "bottom", "below": "bottom", "last": "bottom", "under": "bottom",
     "outer": "outside", "outside": "outside",
     "inner": "inside", "middle": "inside", "internal": "inside",
@@ -417,8 +423,23 @@ class ExecutionEngine:
         four in place would not be the table anyone asked for.
         """
         params = action.params or {}
-        sides = [str(s).lower().strip() for s in (params.get("sides") or [])]
+        # Sides come either as a list, drawn at one width, or as a mapping of
+        # side to width — which is how a table with thin rules between the rows
+        # and heavy ones above the head and below the last row is asked for,
+        # and that is the commonest table in a paper.
+        given = params.get("sides") or []
+        per_side: dict[str, float] = {}
+        if isinstance(given, dict):
+            for name, value in given.items():
+                try:
+                    per_side[str(name).lower().strip()] = float(value)
+                except (TypeError, ValueError):
+                    continue
+            sides = list(per_side)
+        else:
+            sides = [str(s).lower().strip() for s in given]
         sides = [_BORDER_ALIASES.get(s, s) for s in sides]
+
         wanted: list[str] = []
         for side in sides:
             # "Outside" and "inside" each name a pair of edges.
@@ -456,7 +477,9 @@ class ExecutionEngine:
             borders = {side: 0.0 for side in _BORDER_SIDES}
             if wanted:
                 for side in wanted:
-                    borders[side] = width
+                    # A per-side width where one was given, the request's own
+                    # width otherwise.
+                    borders[side] = per_side.get(side, width)
             else:
                 # No side named: the request is about all of them.
                 borders = {side: width for side in _BORDER_SIDES}

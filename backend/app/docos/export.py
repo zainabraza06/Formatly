@@ -328,6 +328,7 @@ def _table(doc: Document, node: Node, page: dict[str, Any]) -> None:
     if columns < 1:
         return
 
+    header_rule = float(((node.metadata or {}).get("borders") or {}).get("header") or 0)
     table = doc.add_table(rows=0, cols=columns)
     table.style = "Table Grid"
     _apply_borders(table, (node.metadata or {}).get("borders"))
@@ -337,6 +338,10 @@ def _table(doc: Document, node: Node, page: dict[str, Any]) -> None:
         for i, cell in enumerate(row.children[:columns]):
             paragraph = cells[i].paragraphs[0]
             _apply_cell_layout(cells[i], cell.metadata or {})
+            # Word has no table-level rule under the header row; it is a border
+            # on those cells, so that is how it goes back into the file.
+            if header_rule and (row.metadata or {}).get("header_row"):
+                _rule_under(cells[i], header_rule)
             _apply_paragraph_format(paragraph, cell)
             # A cell holds a display equation as often as it holds a number,
             # and one nobody edited goes back as Word's own XML.
@@ -407,6 +412,23 @@ def _apply_table_layout(table, meta: dict[str, Any]) -> None:
                  "right": WD_TABLE_ALIGNMENT.RIGHT}.get(str(meta.get("align") or ""))
     if placement is not None:
         table.alignment = placement
+
+
+def _rule_under(cell, width: float) -> None:
+    """A line beneath one cell, in eighths of a point as Word counts them."""
+    properties = cell._tc.get_or_add_tcPr()
+    borders = properties.find(qn("w:tcBorders"))
+    if borders is None:
+        borders = OxmlElement("w:tcBorders")
+        properties.append(borders)
+    for existing in borders.findall(qn("w:bottom")):
+        borders.remove(existing)
+    edge = OxmlElement("w:bottom")
+    edge.set(qn("w:val"), "single")
+    edge.set(qn("w:sz"), str(max(2, int(round(width * 8)))))
+    edge.set(qn("w:space"), "0")
+    edge.set(qn("w:color"), "333333")
+    borders.append(edge)
 
 
 def _apply_cell_layout(cell, meta: dict[str, Any]) -> None:

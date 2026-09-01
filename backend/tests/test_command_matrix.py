@@ -176,6 +176,14 @@ MATRIX: list[tuple[str, Check]] = [
      bordered(top=0.5, bottom=0.5, inside_v=0.0)),
     ("make the table borders thin", bordered(top=0.5, inside_v=0.5)),
 
+    # the rule under the heading row, which Word has no word for
+    ("add a rule under the header row", bordered(header=0.5)),
+    ("bold the header row border and the last bottom one",
+     bordered(header=1.5, bottom=1.5, top=0.0)),
+    ("for tables keep borders top and bottom for all cells bold only the "
+     "header cells and last bottom one",
+     bordered(top=1.5, bottom=1.5, header=1.5, inside_h=1.5, inside_v=0.0)),
+
     # a phrase, wherever it is
     ("bold the word Adam wherever it appears", any_run_styled("Adam", bold=True)),
     ('italicise the phrase "older adults"', any_run_styled("older adults", italic=True)),

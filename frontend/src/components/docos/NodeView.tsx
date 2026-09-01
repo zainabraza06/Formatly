@@ -390,7 +390,7 @@ function ImageView({ node, css }: { node: GraphNode; css: React.CSSProperties })
 }
 
 /** A table's own edges, in points, as the document has them. */
-type Borders = Partial<Record<'top' | 'bottom' | 'left' | 'right' | 'inside_h' | 'inside_v', number>>
+type Borders = Partial<Record<'top' | 'bottom' | 'left' | 'right' | 'inside_h' | 'inside_v' | 'header', number>>
 
 /** What Word draws for a table that states nothing: a plain half-point grid. */
 const FULL_GRID: Borders = {
@@ -407,12 +407,16 @@ const FULL_GRID: Borders = {
  * horizontal rules only, the academic default, comes out right.
  */
 function cellBorders(borders: Borders | null, row: number, col: number,
-                     rows: number, cols: number): CSSProperties {
+                     rows: number, cols: number, headerRow: boolean): CSSProperties {
   const b = borders ?? FULL_GRID
   const line = (pt?: number) => (pt && pt > 0 ? `${pt}pt solid #333` : '0')
+  // The rule under the header row is its own line in a paper's table, heavier
+  // than the rules between the rows and lighter than the one closing the
+  // table. Word has no word for it; it is a border on those cells.
+  const under = headerRow && b.header !== undefined ? b.header : b.inside_h
   return {
     borderTop: line(row === 0 ? b.top : b.inside_h),
-    borderBottom: line(row === rows - 1 ? b.bottom : b.inside_h),
+    borderBottom: line(row === rows - 1 ? b.bottom : under),
     borderLeft: line(col === 0 ? b.left : b.inside_v),
     borderRight: line(col === cols - 1 ? b.right : b.inside_v),
   }
@@ -474,7 +478,8 @@ function TableView({ node, renderMaths }: { node: GraphNode; renderMaths?: boole
                   // command failing rather than the page not saying so.
                   style={{
                     ...styleToCss(cell.style),
-                    ...cellBorders(borders, rowIndex, colIndex, rows, row.children.length),
+                    ...cellBorders(borders, rowIndex, colIndex, rows, row.children.length,
+                                   Boolean((row.metadata ?? {})['header_row'])),
                     // Shading the document gave it, and the vertical placement
                     // of the text inside the cell.
                     ...(typeof cellMeta.shade === 'string'

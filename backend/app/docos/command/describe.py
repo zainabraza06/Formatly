@@ -115,10 +115,22 @@ def _one(action: Any, changed: list[Any]) -> str:
             return f"took the bullets off {what}"
         return f"{'numbered' if wanted.startswith('num') else 'bulleted'} {what}"
     if kind is ActionType.BORDER:
+        given = params.get("sides") or []
+        # A mapping can name a side and give it no width, which is a side that
+        # is not drawn: saying it was drawn would be a report of the opposite.
+        named = ([s for s, w in given.items() if float(w or 0) > 0]
+                 if isinstance(given, dict) else list(given))
         sides = [str(s).replace("inside_h", "inner horizontal")
-                 .replace("inside_v", "inner vertical").replace("_", " ")
-                 for s in params.get("sides") or []]
-        width = float(params.get("width") or 0)
+                 .replace("inside_v", "inner vertical")
+                 .replace("header", "header-row").replace("_", " ")
+                 for s in named]
+        widths = [float(w or 0) for w in given.values()] if isinstance(given, dict) else []
+        if widths:
+            width = max([float(params.get("width") or 0), *widths])
+        else:
+            # A list of sides with no width is the executor's ordinary rule.
+            width = float(params.get("width") if params.get("width") is not None
+                          else (0.5 if named else 0))
         if not width:
             return f"took the borders off {what}"
         heavy = "heavy" if width >= 1.0 else "thin"

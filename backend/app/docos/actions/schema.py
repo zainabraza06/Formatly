@@ -140,8 +140,11 @@ def _validate_params(i: int, a: Action, errors: list[str]) -> None:
             errors.append(f"action[{i}]: spacing needs params.line, before_pt or after_pt")
     if a.type == ActionType.BORDER:
         sides = a.params.get("sides")
-        if sides is not None and not isinstance(sides, list):
-            errors.append(f"action[{i}]: border needs params.sides as a list")
+        # A list draws every named edge at one width; a mapping of side to
+        # width draws each at its own, which is how a table with thin rules
+        # between the rows and heavy ones top and bottom is asked for.
+        if sides is not None and not isinstance(sides, (list, dict)):
+            errors.append(f"action[{i}]: border needs params.sides as a list or a mapping")
     if a.type == ActionType.REPLACE:
         if "find" not in a.params and "with" not in a.params:
             errors.append(f"action[{i}]: replace needs params.find and params.with")

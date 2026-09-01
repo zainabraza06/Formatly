@@ -17,7 +17,7 @@ from docx.oxml.ns import qn
 from docx.shared import Inches
 
 from app.docos.export import graph_to_docx_bytes
-from app.docos.graph import DocumentGraph, NodeType
+from app.docos.graph import DocumentGraph, Node, NodeType
 from app.docos.parser import parse_docx_bytes
 
 
@@ -100,6 +100,23 @@ def test_the_room_inside_a_cell_is_read():
     its own padding, which over ten rows is a table of a different height."""
     pad = table_of(parse_docx_bytes(built(), title="t")).metadata["cell_pad_in"]
     assert pad == {"top": 0.0, "left": 0.075, "bottom": 0.0, "right": 0.075}
+
+
+def test_the_rule_under_a_header_row_goes_out_and_comes_back():
+    """A paper rules its table under the heading row. Word has no table-level
+    word for it — the line lives on those cells — so it is written there and
+    read back from there."""
+    cells = [[Node(type=NodeType.TABLE_CELL, content=c) for c in row]
+             for row in (("Component", "Configuration"), ("LSTM", "h = 16"))]
+    table = Node(type=NodeType.TABLE, metadata={"borders": {
+        "top": 1.5, "bottom": 1.5, "header": 1.0,
+        "left": 0.0, "right": 0.0, "inside_h": 0.0, "inside_v": 0.0}}, children=[
+        Node(type=NodeType.TABLE_ROW, children=cells[0], metadata={"header_row": True}),
+        Node(type=NodeType.TABLE_ROW, children=cells[1])])
+    graph = DocumentGraph(root=Node(type=NodeType.DOCUMENT, children=[table]), title="t")
+
+    back = parse_docx_bytes(graph_to_docx_bytes(graph), title="t")
+    assert table_of(back).metadata["borders"]["header"] == 1.0
 
 
 # ── and written back to one ──────────────────────────────────────────────────

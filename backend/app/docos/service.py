@@ -6,6 +6,7 @@ and no storage details; it composes Document, Command, Execution and Version eng
 from __future__ import annotations
 
 import asyncio
+import re
 from typing import Any, Awaitable, Callable, Optional
 
 import anyio
@@ -219,6 +220,8 @@ class DocOSService:
                 action.node_ids = []
             else:
                 action.node_ids = [nid for nid in action.node_ids if nid in known]
+
+        _rules_are_not_type(command, batch)
 
         # A request that names a part of the document is pinned to that part.
         # The planner is given the sections and what each is about and still
@@ -572,6 +575,34 @@ def _nodes_by_id(graph: DocumentGraph, ids: set[str]) -> list:
     be said in terms of what they are."""
     return [n for n in graph.nodes() if n.id in ids]
 
+
+
+def _rules_are_not_type(command: str, batch) -> None:
+    """A bold border is a heavy line, not bold words.
+
+    "Keep the top and bottom borders, bold" came back as a border action and
+    two format actions, and the text of every cell in the document was bolded.
+    The word had already been spent on the rule: it cannot also be spent on
+    the type, and a table nobody asked to embolden should not come back
+    emboldened.
+    """
+    from app.docos.actions import ActionType
+
+    borders = [a for a in batch.actions if a.type is ActionType.BORDER]
+    if not borders:
+        return
+    if not re.search(r"\b(bold|thick|heavy|strong)\b", command, re.IGNORECASE):
+        return
+
+    kept = []
+    for action in batch.actions:
+        style = action.style.model_dump(exclude_none=True) if action.style else {}
+        loose = {k: v for k, v in (action.params or {}).items() if k == "bold"}
+        asks_only_bold = {**style, **loose} == {"bold": True}
+        if action.type is ActionType.FORMAT and asks_only_bold:
+            continue
+        kept.append(action)
+    batch.actions = kept
 
 
 def _rewrite_context(graph: DocumentGraph) -> dict[str, Any]:

@@ -502,25 +502,37 @@ def _step(text: str) -> Optional[float]:
     return -value if _GOES_DOWN.search(text) else value
 
 
+# The words that say a request is about a table. "Rules" and "lines" mean a
+# table's edges only in their company — otherwise they are the rules drawn
+# across a page, which is a different request.
+_TABLE_CONTEXT = r"\b(?:tables?|header\s+rows?|cells?|columns?|grid)\b"
+
 # A request about a table's rules rather than its text.
 _ABOUT_BORDERS = re.compile(
     r"\bborders?\b|\bgridlines?\b"
     # "Lines" and "rules" mean a table's edges only when a table is being
     # talked about. Without that, "remove the horizontal lines" is about the
     # rules drawn across the page, which is a different request entirely.
-    r"|\b(?:lines?|rules?)\b(?=.*\btable\b)|\btable\b(?=.*\b(?:lines?|rules?)\b)",
+    r"|\b(?:lines?|rules?)\b(?=.*" + _TABLE_CONTEXT + r")"
+    r"|" + _TABLE_CONTEXT + r"(?=.*\b(?:lines?|rules?)\b)",
     re.IGNORECASE)
 
 # Which edges, named the several ways people name them.
 _SIDE_WORDS = (
-    ("top", r"\b(top|upper|above|head(er)?)\b"),
-    ("bottom", r"\b(bottom|lower|below|under|last)\b"),
+    # The rule under the heading row, which a paper draws and Word has no
+    # table-level word for. Checked before "top": "the header border" is the
+    # line under the headings, and the line above them is the top.
+    ("header", r"\bheader\s*(?:row|cells?|line|rule|border)?\b|\bunder\s+the\s+head"),
+    ("top", r"\b(top|upper|above)\b"),
+    ("bottom", r"\b(bottom|lower|below|last)\b"),
     ("left", r"\bleft\b"),
     ("right", r"\bright\b"),
     ("outside", r"\b(outer|outside|around|perimeter)\b"),
     ("inside", r"\b(inner|inside|internal|between)\b"),
-    ("inside_h", r"\b(horizontal|row)\b"),
-    ("inside_v", r"\b(vertical|column)\b"),
+    # "Rows", plural, is the lines between them; "the header row" is one row
+    # and names no such line.
+    ("inside_h", r"\b(horizontal|rows)\b"),
+    ("inside_v", r"\b(vertical|columns?)\b"),
 )
 
 # How heavy a line "bold" or "thick" asks for, in points, against the ordinary
