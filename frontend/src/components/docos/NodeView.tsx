@@ -429,11 +429,21 @@ function TableView({ node, renderMaths }: { node: GraphNode; renderMaths?: boole
     : typeof meta.width_pct === 'number' ? `${meta.width_pct}%` : '100%'
   const place = meta.align === 'center' ? '0 auto'
     : meta.align === 'right' ? '0 0 0 auto' : undefined
+  // The room Word leaves inside a cell. Its own default is 0.075in at the
+  // sides and none above or below; the editor was drawing half again as much
+  // at the sides and rather more above, which over ten rows is a table of a
+  // different height from the document's.
+  const pad = (meta.cell_pad_in ?? {}) as Record<string, number>
+  const inset = (side: 'top' | 'right' | 'bottom' | 'left') =>
+    `${typeof pad[side] === 'number' ? pad[side] : side === 'top' || side === 'bottom' ? 0 : 0.075}in`
+  const padding = `${inset('top')} ${inset('right')} ${inset('bottom')} ${inset('left')}`
 
   return (
     <div className="my-1 overflow-x-auto">
       <table
-        className="border-collapse text-[10pt]"
+        // No size of its own: a cell is set in the document's type, and
+        // forcing 10pt on every table made an 11pt document's tables small.
+        className="border-collapse"
         style={{ width, margin: place, tableLayout: columns ? 'fixed' : 'auto' }}
       >
         {/* The column widths the document states. Without them every column
@@ -470,8 +480,9 @@ function TableView({ node, renderMaths }: { node: GraphNode; renderMaths?: boole
                     ...(typeof cellMeta.shade === 'string'
                       ? { backgroundColor: cellMeta.shade as string } : {}),
                     verticalAlign: (cellMeta.valign as string) || 'top',
+                    padding,
                   }}
-                  className="px-3 py-1.5 text-neutral-900"
+                  className="text-neutral-900"
                 >
                   {/* A display equation is very often laid out as a one-row
                       table with its number in the next cell, so a cell is one

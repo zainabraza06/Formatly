@@ -547,7 +547,7 @@ def _borders_wanted(text: str) -> tuple[list[str], float]:
     if keep:
         # What it asked to keep is the whole answer: naming some sides means
         # those and no others, so whatever it also asked to remove is gone.
-        return keep, width
+        return _every_row(head, keep), width
     if drop:
         # Only a removal: everything else stays, at the width it would have.
         return _keep_others(drop), _THIN_LINE
@@ -556,6 +556,24 @@ def _borders_wanted(text: str) -> tuple[list[str], float]:
         return [], 0.0
     # No side named and nothing removed: the request is about all of them.
     return [], width
+
+
+def _every_row(text: str, keep: list[str]) -> list[str]:
+    """Whether "top and bottom" means the table's or every row's.
+
+    A table has one top and one bottom; a row has one each as well. "Keep the
+    top and bottom borders" on a ten-row table drew two rules around the whole
+    thing, and "all the top and bottom borders" means the line above and below
+    each row — which is a ruled table, and a different request.
+    """
+    if "inside_h" in keep and re.search(r"\bhorizontal\b", text, re.IGNORECASE):
+        # "Horizontal borders" is every horizontal line there is, the outermost
+        # two included.
+        return sorted(set(keep) | {"top", "bottom"})
+    if {"top", "bottom"} <= set(keep) and re.search(
+            r"\b(all|every|each)\b", text, re.IGNORECASE):
+        return sorted(set(keep) | {"inside_h"})
+    return keep
 
 
 def _sides_in(text: str) -> list[str]:

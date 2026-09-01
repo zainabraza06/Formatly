@@ -169,6 +169,9 @@ MATRIX: list[tuple[str, Check]] = [
     ("change the table layout only keep top and bottom borders bold "
      "removing the left and right one",
      bordered(top=1.5, bottom=1.5, left=0.0, right=0.0, inside_v=0.0)),
+    # a table has one top and one bottom; a row has one each as well
+    ("keep all the top and bottom borders",
+     bordered(top=0.5, bottom=0.5, inside_h=0.5, inside_v=0.0)),
     ("top and bottom borders, no verticals",
      bordered(top=0.5, bottom=0.5, inside_v=0.0)),
     ("make the table borders thin", bordered(top=0.5, inside_v=0.5)),

@@ -81,11 +81,49 @@ def table_layout(table: Any) -> dict[str, Any]:
         elif kind == "dxa" and number:
             out["width_in"] = round(number / _TWIPS_PER_INCH, 3)
 
+    # What the table states, and failing that what its style states.
+    pad = _margins(properties.find(qn("w:tblCellMar"))) or style_cell_padding(table)
+    if pad:
+        out["cell_pad_in"] = pad
+
     placement = properties.find(qn("w:jc"))
     if placement is not None:
         wanted = _ALIGNMENTS.get((placement.get(qn("w:val")) or "").lower())
         if wanted:
             out["align"] = wanted
+    return out
+
+
+def style_cell_padding(table: Any) -> dict[str, float]:
+    """The room a table's style leaves inside each cell.
+
+    Word states this once for the table, usually in the style rather than on
+    the table, and the editor was drawing its own padding instead — enough
+    difference over ten rows to make an imported table a different height.
+    """
+    try:
+        element = table.style.element
+    except Exception:
+        return {}
+    if element is None:
+        return {}
+    properties = element.find(qn("w:tblPr"))
+    margins = properties.find(qn("w:tblCellMar")) if properties is not None else None
+    return _margins(margins)
+
+
+def _margins(margins: Any) -> dict[str, float]:
+    if margins is None:
+        return {}
+    out: dict[str, float] = {}
+    for side in ("top", "left", "bottom", "right"):
+        edge = margins.find(qn(f"w:{side}"))
+        if edge is None:
+            continue
+        try:
+            out[side] = round(int(edge.get(qn("w:w")) or 0) / _TWIPS_PER_INCH, 3)
+        except ValueError:
+            continue
     return out
 
 

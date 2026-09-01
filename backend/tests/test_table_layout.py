@@ -95,6 +95,13 @@ def test_a_table_that_states_no_edges_reports_its_styles():
                        "right": 0.5, "inside_h": 0.5, "inside_v": 0.5}
 
 
+def test_the_room_inside_a_cell_is_read():
+    """Word leaves 0.075in at the sides and none above; the editor was drawing
+    its own padding, which over ten rows is a table of a different height."""
+    pad = table_of(parse_docx_bytes(built(), title="t")).metadata["cell_pad_in"]
+    assert pad == {"top": 0.0, "left": 0.075, "bottom": 0.0, "right": 0.075}
+
+
 # ── and written back to one ──────────────────────────────────────────────────
 
 @pytest.mark.parametrize("key, expected", [

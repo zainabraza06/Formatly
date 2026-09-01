@@ -42,6 +42,7 @@ VISIBLE_METADATA = [
     "valign",           # where the text sits inside the cell
     "span",             # a cell merged across columns
     "vmerge",           # and down rows
+    "cell_pad_in",      # the room Word leaves inside a cell
 ]
 
 
