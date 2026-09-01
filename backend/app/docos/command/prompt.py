@@ -69,6 +69,10 @@ SYSTEM = (
     "a MAPPING of side to width when they differ: "
     "{\"top\":1.5,\"header\":1,\"bottom\":1.5,\"inside_h\":0.5} is the ordinary "
     "table of a paper.\n"
+    "  A border named on the HEADER CELLS is the table's: their top edge is "
+    "'top' and the line beneath them is 'header'. The last row's bottom edge "
+    "is 'bottom'. Emit ONE border action per table with every side it needs — "
+    "a second border action states the table again and undoes the first.\n"
     "- In a request about borders, 'bold' / 'thick' / 'heavy' describes the "
     "LINE, not the text: put it in params.width (1.5 for bold, 0.5 for thin) "
     "and do NOT add a format action. 'Top and bottom borders, bold' asks for "
@@ -148,3 +152,21 @@ def _for_prompt(brief: dict) -> dict:
     if len(sections) > len(trimmed):
         out["sections_omitted"] = len(sections) - len(trimmed)
     return out
+
+
+def build_short_message(command: str, graph: DocumentGraph) -> str:
+    """The instruction, and barely anything else.
+
+    The full message carries the document's brief — a couple of thousand
+    tokens for a long paper — and that is what times out when a provider is
+    slow. This one is a tenth the size and asked as a second attempt, so a
+    request still reaches something that reads English before it reaches the
+    word-matching rules.
+    """
+    counts: dict[str, int] = {}
+    for n in graph.nodes():
+        counts[n.type.value] = counts.get(n.type.value, 0) + 1
+    return ("Produce the JSON action batch for:\n"
+            + json.dumps({"instruction": command,
+                          "document_node_counts": counts},
+                         separators=(",", ":")))

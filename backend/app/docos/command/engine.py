@@ -14,7 +14,8 @@ from dataclasses import dataclass, field
 from typing import Any, Optional
 
 from app.docos.actions import ActionBatch, ActionValidationError, validate_batch
-from app.docos.command.prompt import SYSTEM, build_user_message
+from app.docos.command.prompt import (SYSTEM, build_short_message,
+                                      build_user_message)
 from app.docos.graph import DocumentGraph
 from app.paper.jsonx import extract_json
 
@@ -91,6 +92,21 @@ class CommandEngine:
             # one could see from the outside.
             reason = f"{type(exc).__name__}: {exc}"
 
+        # A second, cheaper attempt before giving up on understanding the
+        # words. The first carries the whole document's brief — two thousand
+        # tokens for a long paper — and that is what times out under load; the
+        # instruction itself is twenty. Asking again with the instruction alone
+        # is quick enough to succeed where the full request did not, and it
+        # still reads English, which the rules below do not: they match words,
+        # so "squash the gap between paragraphs" is a different request to them
+        # than "reduce the space between paragraphs", and it should not be.
+        try:
+            batch, provider = self._llm_actions(command, graph, reading, briefly=True)
+            return CommandResult(kind="actions", batch=batch, provider=provider,
+                                 source="llm-brief", fell_back_because=reason)
+        except Exception as exc:
+            reason += f"; brief attempt: {type(exc).__name__}: {exc}"
+
         batch = self._heuristic_actions(command)
         return CommandResult(kind="actions", batch=batch, provider="heuristic",
                              source="heuristic", fell_back_because=reason)
@@ -115,16 +131,26 @@ class CommandEngine:
 
     # ── LLM path ──────────────────────────────────────────────────────────
     def _llm_actions(self, command: str, graph: DocumentGraph,
-                     reading: Optional[dict[str, str]] = None) -> tuple[ActionBatch, str]:
+                     reading: Optional[dict[str, str]] = None,
+                     briefly: bool = False) -> tuple[ActionBatch, str]:
+        """The instruction as an action batch.
+
+        `briefly` sends the instruction without the document's brief. It cannot
+        place a request in a named section — nothing tells it what the sections
+        are — but it can still tell a border from a bullet from a rewrite,
+        which is the part the rules are worst at.
+        """
         router = self._router
         if router is None:
             from app.services.router import get_router
             router = get_router()
 
+        message = (build_short_message(command, graph) if briefly
+                   else build_user_message(command, graph, reading))
         text, provider, _elapsed = router.chat(
             [
                 {"role": "system", "content": SYSTEM},
-                {"role": "user", "content": build_user_message(command, graph, reading)},
+                {"role": "user", "content": message},
             ],
             max_tokens=900,
             # A plan is a few hundred bytes of JSON, but the document it is

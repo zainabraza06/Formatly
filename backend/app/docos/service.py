@@ -222,6 +222,7 @@ class DocOSService:
                 action.node_ids = [nid for nid in action.node_ids if nid in known]
 
         _rules_are_not_type(command, batch)
+        _merge_border_actions(batch)
 
         # A request that names a part of the document is pinned to that part.
         # The planner is given the sections and what each is about and still
@@ -575,6 +576,65 @@ def _nodes_by_id(graph: DocumentGraph, ids: set[str]) -> list:
     be said in terms of what they are."""
     return [n for n in graph.nodes() if n.id in ids]
 
+
+
+def _merge_border_actions(batch) -> None:
+    """One table, one set of edges.
+
+    "Top and bottom for the header cell, bottom only for the last" arrives as
+    two border actions, and each of them states the whole table: naming some
+    sides means those and no others, so the second wiped out the first and the
+    table came back with one rule instead of three. Two requests about the same
+    table's edges are one request, and they are merged into it — later sides
+    win where they overlap, and every side either action named is kept.
+    """
+    from app.docos.actions import ActionType
+
+    borders = [a for a in batch.actions if a.type is ActionType.BORDER]
+    if len(borders) < 2:
+        return
+
+    merged: dict[tuple, Any] = {}
+    for action in borders:
+        key = (action.target, tuple(action.node_ids))
+        sides = _sides_with_widths(action)
+        if key in merged:
+            merged[key].params.setdefault("sides", {}).update(sides)
+            continue
+        action.params = {**action.params, "sides": dict(sides)}
+        action.params.pop("width", None)
+        merged[key] = action
+
+    kept, seen = [], set()
+    for action in batch.actions:
+        if action.type is not ActionType.BORDER:
+            kept.append(action)
+            continue
+        key = (action.target, tuple(action.node_ids))
+        if key in seen:
+            continue
+        seen.add(key)
+        kept.append(merged[key])
+    batch.actions = kept
+
+
+def _sides_with_widths(action) -> dict[str, float]:
+    """An action's sides as side → width, whichever form it arrived in."""
+    given = (action.params or {}).get("sides") or []
+    try:
+        width = float((action.params or {}).get("width", 0.5) or 0.0)
+    except (TypeError, ValueError):
+        width = 0.5
+
+    if isinstance(given, dict):
+        out = {}
+        for side, value in given.items():
+            try:
+                out[str(side)] = float(value)
+            except (TypeError, ValueError):
+                continue
+        return out
+    return {str(side): width for side in given}
 
 
 def _rules_are_not_type(command: str, batch) -> None:
