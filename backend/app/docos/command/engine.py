@@ -62,6 +62,12 @@ _WANTS_NEW_WORDS = re.compile(
     r"abbreviate|spell\s+out|renumber|reorder|number)\b", re.IGNORECASE)
 
 
+# How long to wait for a plan before answering from the rules instead. Long
+# enough for a model to read a long paper's brief, short enough that a provider
+# which has gone quiet does not hold up the request.
+_PLANNER_SECONDS = 40
+
+
 class CommandEngine:
     def __init__(self, router: Any = None):
         self._router = router  # injected; defaults to app.services.router.get_router()
@@ -121,11 +127,13 @@ class CommandEngine:
                 {"role": "user", "content": build_user_message(command, graph, reading)},
             ],
             max_tokens=900,
-            # A plan is a few hundred bytes of JSON. If it has not arrived in
-            # twenty seconds it is not coming, and the heuristic — which answers
-            # instantly and handles most requests — is a better use of the wait
-            # than another half minute of a still screen.
-            timeout=20,
+            # A plan is a few hundred bytes of JSON, but the document it is
+            # planned against is not: a long paper's brief takes the model ten
+            # or twenty seconds to read before it writes anything. Twenty
+            # seconds was cutting off plans that were on their way, and a
+            # request answered by the rules when the planner had understood it
+            # is a worse outcome than a few more seconds of waiting.
+            timeout=_PLANNER_SECONDS,
         )
         raw = _extract_json(text)
         if raw is None:
@@ -522,17 +530,52 @@ _THIN_LINE = 0.5
 
 
 def _borders_wanted(text: str) -> tuple[list[str], float]:
-    """`(the edges named, the width in points)`. No edges named means all."""
-    sides = [name for name, pattern in _SIDE_WORDS
-             if re.search(pattern, text, re.IGNORECASE)]
-    if re.search(r"\b(no|without|remove|delete|hide|off|none|clear)\b", text, re.IGNORECASE):
-        # "No vertical lines" takes those away and leaves the rest; "no
-        # borders", naming no side, takes them all.
-        if sides:
-            return _keep_others(sides), _THIN_LINE
-        return [], 0.0
+    """`(the edges to draw, the width in points)`. No edges named means all.
+
+    A request often says both halves at once — "keep only the top and bottom
+    borders, removing the left and right" — and reading it as one list kept
+    all four. The sentence is cut at the word that turns it: what is named
+    before is kept, what is named after is taken away.
+    """
+    head, tail, removes = _split_at_removal(text)
+    keep = _sides_in(head)
+    drop = _sides_in(tail)
+
     heavy = re.search(r"\b(bold|thick|heavy|strong|double|dark)\b", text, re.IGNORECASE)
-    return sides, _HEAVY_LINE if heavy else _THIN_LINE
+    width = _HEAVY_LINE if heavy else _THIN_LINE
+
+    if keep:
+        # What it asked to keep is the whole answer: naming some sides means
+        # those and no others, so whatever it also asked to remove is gone.
+        return keep, width
+    if drop:
+        # Only a removal: everything else stays, at the width it would have.
+        return _keep_others(drop), _THIN_LINE
+    if removes:
+        # "Remove the borders", naming no side at all.
+        return [], 0.0
+    # No side named and nothing removed: the request is about all of them.
+    return [], width
+
+
+def _sides_in(text: str) -> list[str]:
+    return [name for name, pattern in _SIDE_WORDS
+            if re.search(pattern, text, re.IGNORECASE)]
+
+
+# The word that turns a sentence from what to keep into what to take away.
+_TURNS = re.compile(
+    r"\b(?:remov\w*|delet\w*|drop\w*|hid\w*|without|except|but\s+not|minus|"
+    r"no|none|clear\w*|off)\b",
+    re.IGNORECASE)
+
+
+def _split_at_removal(text: str) -> tuple[str, str, bool]:
+    """`(what is kept, what is taken away, whether anything is)`."""
+    m = _TURNS.search(text)
+    if not m:
+        return text, "", False
+    return text[:m.start()], text[m.end():], True
 
 
 _BORDER_ALL = ("top", "bottom", "left", "right", "inside_h", "inside_v")
