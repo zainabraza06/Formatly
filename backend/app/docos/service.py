@@ -569,6 +569,7 @@ def _rewrite_context(graph: DocumentGraph) -> dict[str, Any]:
     the one paragraph in front of the model.
     """
     from app.docos.command.brief import document_brief
+    from app.docos.command.terms import terms_of
 
     brief = document_brief(graph)
     sections = brief.get("sections") or []
@@ -577,6 +578,10 @@ def _rewrite_context(graph: DocumentGraph) -> dict[str, Any]:
         "kind": brief.get("kind"),
         "about": brief.get("about"),
         "headings": [s.get("heading") for s in sections[:20] if s.get("heading")],
+        # The names the document uses for its own things, so a rewrite can use
+        # them rather than inventing a synonym: a paper that says SIC and FIC
+        # should go on saying SIC and FIC.
+        "terms": terms_of(graph),
     }
 
 

@@ -56,10 +56,12 @@ Rules:
 - Never summarise, never shorten, never merge nodes, never drop a sentence.
 - The text is plain text, not markdown. Do not add formatting the original did
   not have.
-- `document` says what this document is and how it is divided. Use it when the
-  instruction refers to the document rather than quoting it — "rephrase the
-  title around the architecture" means name the architecture this document
-  actually describes.
+- `document` says what this document is, how it is divided, and the terms it
+  uses for its own things. Use it when the instruction refers to the document
+  rather than quoting it — "rephrase the title around the architecture" means
+  name the architecture this document actually describes, in the words it
+  already uses for it. Prefer a term from `document.terms` to a synonym of
+  your own: a paper that says SIC and FIC should go on saying SIC and FIC.
 - An instruction to rephrase, retitle or reword a passage asks for that passage
   written again. Putting the instruction's own words in front of the original —
   "Architecture of <the old title>" — is not a rephrasing; it is the original
