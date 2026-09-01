@@ -142,61 +142,66 @@ export function LandingPage() {
  </header>
 
  {/* ── Hero ── */}
- <section className="mt-16 text-center">
+ <section className="mt-20 flex flex-col items-center text-center">
  <motion.div
- initial={{ opacity: 0, y: 12 }}
- animate={{ opacity: 1, y: 0 }}
- transition={{ duration: 0.4 }}
+ initial={{ opacity: 0, scale: 0.9 }}
+ animate={{ opacity: 1, scale: 1 }}
+ transition={{ duration: 0.5, ease: 'easeOut' }}
+ className="mb-4 inline-flex items-center gap-2 rounded-full border border-line bg-surface-2 px-4 py-1.5 text-xs font-semibold text-ink shadow-sm"
  >
- <span className="inline-flex items-center gap-1.5 rounded-full border border-line bg-surface-2 px-3 py-1 text-xs font-medium text-ink">
- <span className="h-1.5 w-1.5 rounded-full bg-ink animate-pulse" />
- AI Document Agent
+ <span className="flex h-2 w-2 items-center justify-center">
+ <span className="absolute inline-flex h-2 w-2 animate-ping rounded-full bg-focus opacity-75"></span>
+ <span className="relative inline-flex h-2 w-2 rounded-full bg-focus"></span>
  </span>
+ The Future of AI Documents
  </motion.div>
 
  <motion.h1
- initial={{ opacity: 0, y: 16 }}
+ initial={{ opacity: 0, y: 20 }}
  animate={{ opacity: 1, y: 0 }}
- transition={{ duration: 0.45, delay: 0.05 }}
- className="mt-5 text-5xl font-bold tracking-tight text-ink sm:text-6xl"
+ transition={{ duration: 0.6, delay: 0.1, ease: 'easeOut' }}
+ className="mt-2 max-w-4xl text-5xl font-extrabold tracking-tight text-ink sm:text-7xl leading-tight"
  >
- Generate{' '}
- <span className="text-ink">
- Professional
- </span>
+ Generate <span className="bg-gradient-to-r from-focus to-accent bg-clip-text text-transparent">Professional</span>
  <br />
  Documents with AI
  </motion.h1>
 
  <motion.p
- initial={{ opacity: 0, y: 12 }}
+ initial={{ opacity: 0, y: 20 }}
  animate={{ opacity: 1, y: 0 }}
- transition={{ duration: 0.4, delay: 0.1 }}
- className="mt-5 mx-auto max-w-xl text-base leading-7 text-muted"
+ transition={{ duration: 0.6, delay: 0.2, ease: 'easeOut' }}
+ className="mt-6 mx-auto max-w-2xl text-lg leading-8 text-muted"
  >
  From prompts to fully formatted reports, resumes, and proposals in seconds.
- Formatly acts like an autonomous document-production platform.
+ Formatly acts like an autonomous document-production platform, designed to save you hours.
  </motion.p>
 
  <motion.div
- initial={{ opacity: 0, y: 10 }}
+ initial={{ opacity: 0, y: 20 }}
  animate={{ opacity: 1, y: 0 }}
- transition={{ duration: 0.4, delay: 0.15 }}
- className="mt-7 flex flex-wrap items-center justify-center gap-3"
+ transition={{ duration: 0.6, delay: 0.3, ease: 'easeOut' }}
+ className="mt-10 flex flex-wrap items-center justify-center gap-4"
  >
  <Link
  to="/app/compose"
- className="rounded-xl bg-accent px-6 py-2.5 text-sm font-semibold text-accent-fg transition hover: hover:scale-[1.02] active:scale-[0.98]"
+ className="rounded-2xl bg-focus px-8 py-3.5 text-base font-bold text-white shadow-lg shadow-focus/30 transition-all hover:-translate-y-0.5 hover:shadow-xl hover:shadow-focus/40 active:translate-y-0"
  >
  Start a New Document
+ </Link>
+ <Link
+ to="/login"
+ className="rounded-2xl bg-surface-2 px-8 py-3.5 text-base font-bold text-ink border border-line shadow-sm transition-all hover:-translate-y-0.5 hover:bg-surface hover:shadow-md active:translate-y-0"
+ >
+ Log In
  </Link>
  </motion.div>
  </section>
 
  {/* ── Feature grid ── */}
- <section className="mt-24">
+ <section className="mt-32">
  <motion.div
- initial={{ opacity: 0, y: 10 }}
+ initial={{ opacity: 0, y: 15 }}
  whileInView={{ opacity: 1, y: 0 }}
  viewport={{ once: true }}
  transition={{ duration: 0.4 }}
