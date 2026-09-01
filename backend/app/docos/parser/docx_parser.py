@@ -22,7 +22,8 @@ from lxml import etree
 
 from app.docos.graph import DocumentGraph, Node, NodeType, Run, Style, merge_runs
 from app.docos.parser.omml import paragraph_parts
-from app.docos.parser.table_layout import cell_layout, row_layout, table_layout
+from app.docos.parser.table_layout import (cell_layout, row_layout, style_borders,
+                                            table_layout)
 
 _W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 
@@ -824,7 +825,9 @@ def _table_node(table: _Table, doc: _Doc) -> Node:
         rows.append(Node(type=NodeType.TABLE_ROW, children=cells, metadata=row_meta))
     meta: dict = {"rows": len(table.rows), "cols": len(table.columns)}
     meta.update(table_layout(table))
-    borders = _table_borders(table)
+    # What the table states, and failing that what its style states: a table
+    # that says only "Table Grid" was reported as having no edges at all.
+    borders = _table_borders(table) or style_borders(table)
     if borders:
         meta["borders"] = borders
     # A long table Word split across pages carries lastRenderedPageBreak markers

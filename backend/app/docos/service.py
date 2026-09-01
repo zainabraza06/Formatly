@@ -518,10 +518,24 @@ class DocOSService:
         names its nodes has been told where to work, and a plan of several
         actions is not second-guessed.
         """
+        from app.docos.actions import ActionType
+        from app.docos.command.engine import _guess_target
         from app.docos.command.locate import locate_section
         from app.docos.command.reading import brief_with_reading
 
-        unplaced = [a for a in batch.actions if not a.node_ids]
+        # An action that already names what it is about has been told where to
+        # work. "Keep only the top and bottom borders" was pinned to whichever
+        # section read closest — four paragraphs of a cross-validation
+        # subsection — so the border action looked for a table among them,
+        # found none, and reported that the document already looked that way.
+        named = _guess_target(command.lower())
+        unplaced = [
+            a for a in batch.actions
+            if not a.node_ids
+            # A border is a property of a table wherever the table is.
+            and a.type is not ActionType.BORDER
+            and not (a.target and a.target == named)
+        ]
         if not unplaced or len(batch.actions) > 2:
             return None
 

@@ -87,6 +87,14 @@ def test_a_merged_cell_is_one_cell_not_two():
     assert merged.metadata["span"] == 2
 
 
+def test_a_table_that_states_no_edges_reports_its_styles():
+    """Most tables say only "Table Grid"; reading the table's own XML found
+    nothing, so the page fell back to drawing every edge whatever the style."""
+    borders = table_of(parse_docx_bytes(built(), title="t")).metadata["borders"]
+    assert borders == {"top": 0.5, "bottom": 0.5, "left": 0.5,
+                       "right": 0.5, "inside_h": 0.5, "inside_v": 0.5}
+
+
 # ── and written back to one ──────────────────────────────────────────────────
 
 @pytest.mark.parametrize("key, expected", [

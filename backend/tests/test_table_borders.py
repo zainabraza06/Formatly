@@ -114,7 +114,8 @@ def test_a_documents_own_borders_are_read():
     doc.save(buf)
 
     graph = parse_docx_bytes(buf.getvalue(), title="t")
-    # Table Grid states its edges in the style, not on the table, and a table
-    # that states nothing states nothing — the empty answer means "as the style
-    # has it", not "no borders".
-    assert _borders_of(graph) in (None, {})
+    # Table Grid states its edges in the style rather than on the table, and
+    # they are read from there: reporting nothing left the page to guess, and
+    # guessing meant drawing every edge whatever the style said.
+    assert _borders_of(graph) == {"top": 0.5, "bottom": 0.5, "left": 0.5,
+                                  "right": 0.5, "inside_h": 0.5, "inside_v": 0.5}

@@ -23,6 +23,32 @@ _ALIGNMENTS = {"left": "left", "start": "left", "center": "center",
                "centre": "center", "right": "right", "end": "right"}
 
 
+def _edges(borders: Any) -> dict[str, float]:
+    """A `w:tblBorders` element read into widths in points, 0 for an edge that
+    is not drawn. Word measures the width in eighths of a point."""
+    if borders is None:
+        return {}
+
+    out: dict[str, float] = {}
+    for side, tag in _BORDER_TAGS.items():
+        edge = borders.find(qn(tag))
+        if edge is None:
+            continue
+        if (edge.get(qn("w:val")) or "").lower() in ("none", "nil"):
+            out[side] = 0.0
+            continue
+        try:
+            out[side] = round(int(edge.get(qn("w:sz")) or 4) / 8, 2)
+        except ValueError:
+            out[side] = 0.5
+    return out
+
+
+_BORDER_TAGS = {"top": "w:top", "bottom": "w:bottom", "left": "w:left",
+                "right": "w:right", "inside_h": "w:insideH",
+                "inside_v": "w:insideV"}
+
+
 def table_layout(table: Any) -> dict[str, Any]:
     """Column widths, overall width and placement, as the document has them."""
     out: dict[str, Any] = {}
@@ -61,6 +87,26 @@ def table_layout(table: Any) -> dict[str, Any]:
         if wanted:
             out["align"] = wanted
     return out
+
+
+def style_borders(table: Any) -> dict[str, float]:
+    """The edges a table's style gives it, when the table states none itself.
+
+    Most tables say `Table Grid` and leave it at that, so reading only the
+    table's own XML reported nothing and the page fell back to drawing every
+    edge — which happens to look right for Table Grid and wrong for every
+    style that does not draw them all.
+    """
+    try:
+        element = table.style.element
+    except Exception:                       # a table with no style at all
+        return {}
+    if element is None:
+        return {}
+
+    properties = element.find(qn("w:tblPr"))
+    borders = properties.find(qn("w:tblBorders")) if properties is not None else None
+    return _edges(borders)
 
 
 def cell_layout(cell: Any) -> dict[str, Any]:
