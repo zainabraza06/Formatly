@@ -18,6 +18,8 @@ from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
+_NEVER_CACHE = {"Cache-Control": "no-cache, must-revalidate"}
+
 # The API's own routes. Anything under these is never a page.
 API_PREFIXES = ("/docos", "/auth", "/paper", "/documents", "/health", "/docs",
                 "/redoc", "/openapi.json")
@@ -61,6 +63,11 @@ def serve_frontend(app: FastAPI) -> Optional[Path]:
         candidate = (dist / path).resolve()
         if path and candidate.is_file() and dist.resolve() in candidate.parents:
             return FileResponse(candidate)
-        return FileResponse(dist / "index.html")
+        # The page itself must never be cached. Its assets are named by the
+        # hash of their contents and can be kept forever, but index.html is the
+        # only thing that says which of them to load — cached, a browser goes
+        # on loading yesterday's application after today's has been deployed,
+        # and the deploy appears not to have happened.
+        return FileResponse(dist / "index.html", headers=_NEVER_CACHE)
 
     return dist
