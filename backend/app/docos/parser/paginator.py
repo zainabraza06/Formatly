@@ -15,10 +15,15 @@ import re
 import shutil
 import subprocess
 import tempfile
+import threading
 from pathlib import Path
 from typing import Optional
 
 from app.docos.graph import DocumentGraph, Node, NodeType
+
+# LibreOffice renders one document at a time, however many ask at once. It is
+# the heaviest thing this process does, and the only one that can end it.
+_CONVERTING = threading.Semaphore(1)
 
 _CONVERT_TIMEOUT = 240  # seconds; large docs can take a while
 
@@ -61,6 +66,17 @@ def _docx_to_pdf(data: bytes) -> Optional[Path]:
     exe = _soffice()
     if not exe:
         return None
+
+    # One conversion at a time. LibreOffice takes a few hundred megabytes to
+    # render a document, and three of them at once is what killed a container
+    # with 512 MB to live in — the requests were concurrent, so the memory was
+    # too. Waiting a few seconds for a PDF is a far better answer than the
+    # process being killed and every request in flight dying with it.
+    with _CONVERTING:
+        return _convert(exe, data)
+
+
+def _convert(exe: str, data: bytes) -> Optional[Path]:
     tmp = Path(tempfile.mkdtemp(prefix="docos_lo_"))
     src = tmp / "in.docx"
     src.write_bytes(data)
