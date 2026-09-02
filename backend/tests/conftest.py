@@ -34,12 +34,20 @@ def _own_data_directory():
     # the operating system's to clear up either way.
     with tempfile.TemporaryDirectory(prefix="docos-tests-",
                                      ignore_cleanup_errors=True) as directory:
-        before = os.environ.get("DOCPILOT_DATA_DIR")
+        before = {name: os.environ.get(name)
+                  for name in ("DOCPILOT_DATA_DIR", "DATABASE_URL")}
         os.environ["DOCPILOT_DATA_DIR"] = directory
+        # And never the real database. Once a deployment's connection string is
+        # in .env, every test that opens a store would otherwise write to it:
+        # a suite that creates a hundred documents, against the one holding
+        # someone's work, over a network, at a hundred and seventy milliseconds
+        # a query.
+        os.environ.pop("DATABASE_URL", None)
         try:
             yield directory
         finally:
-            if before is None:
-                os.environ.pop("DOCPILOT_DATA_DIR", None)
-            else:
-                os.environ["DOCPILOT_DATA_DIR"] = before
+            for name, value in before.items():
+                if value is None:
+                    os.environ.pop(name, None)
+                else:
+                    os.environ[name] = value

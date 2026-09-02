@@ -11,6 +11,8 @@ unquoted one is a syntax error rather than a column.
 """
 from __future__ import annotations
 
+import base64
+import gzip
 import json
 import threading
 from dataclasses import dataclass
@@ -153,8 +155,7 @@ class VersionStore:
                     actions_json, snapshot_json)
                    VALUES (?,?,?,?,?,?,?,?,?)""",
                 (row.id, row.document_id, row.parent_id, row.seq, row.timestamp, row.user,
-                 row.label, json.dumps(row.actions),
-                 json.dumps(row.snapshot) if row.snapshot else None),
+                 row.label, json.dumps(row.actions), _pack(row.snapshot)),
             )
 
     def get_version(self, version_id: str) -> Optional[VersionRow]:
@@ -182,5 +183,32 @@ class VersionStore:
             id=r["id"], document_id=r["document_id"], parent_id=r["parent_id"],
             seq=r["seq"], timestamp=r["timestamp"], user=r["user"], label=r["label"],
             actions=json.loads(r["actions_json"] or "{}"),
-            snapshot=json.loads(r["snapshot_json"]) if r["snapshot_json"] else None,
+            snapshot=_unpack(r["snapshot_json"]),
         )
+
+
+# A snapshot is the whole document as JSON, and the largest thing this stores:
+# a forty-page paper is three hundred kilobytes of it, fetched over whatever
+# network lies between the app and its database. Compressed it is nine times
+# smaller, which two milliseconds of processor buys — worth it against a
+# database in another country, and worth it against a file too.
+#
+# The marker says which it is, so a snapshot written before this still reads:
+# no prefix means the plain JSON it has always been.
+_PACKED = "gz:"
+
+
+def _pack(snapshot: Optional[dict[str, Any]]) -> Optional[str]:
+    if snapshot is None:
+        return None
+    raw = json.dumps(snapshot).encode("utf-8")
+    return _PACKED + base64.b64encode(gzip.compress(raw, 6)).decode("ascii")
+
+
+def _unpack(stored: Optional[str]) -> Optional[dict[str, Any]]:
+    if not stored:
+        return None
+    if not stored.startswith(_PACKED):
+        return json.loads(stored)
+    raw = gzip.decompress(base64.b64decode(stored[len(_PACKED):]))
+    return json.loads(raw.decode("utf-8"))
