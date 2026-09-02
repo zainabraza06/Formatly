@@ -15,9 +15,12 @@ services:
     name: formatly
     runtime: docker
     dockerfilePath: ./Dockerfile
-    # Near your readers, and near the database: a query crossing an ocean does
-    # it on every version read.
-    region: frankfurt
+    # Near the database above all. Reading one version is several queries, and
+    # a service in Frankfurt talking to a database in Tokyo pays a quarter of a
+    # second for each of them. Render's regions are oregon, ohio, virginia,
+    # frankfurt and singapore; singapore is the one near ap-northeast-1 and
+    # ap-southeast-1, and the closest of them to South Asia.
+    region: singapore
     plan: free
 
     healthCheckPath: /health

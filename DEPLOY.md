@@ -11,9 +11,16 @@ exported `.docx`, a rendered chart.
 
 ## 1. The database, on Supabase
 
-1. **Create a project** at <https://supabase.com>. Choose a region near your
-   readers and set a database password — you will need it in a moment, and it
-   is not shown again.
+1. **Create a project** at <https://supabase.com>. Set a database password —
+   you will need it in a moment, and it is not shown again.
+
+   Choose the region with the *service* in mind, not only your readers. Reading
+   one document version is several queries, and a service in Frankfurt talking
+   to a database in Tokyo pays a quarter of a second for every one of them.
+   Render offers oregon, ohio, virginia, frankfurt and singapore; pair
+   `ap-southeast-1` or `ap-northeast-1` with singapore, `eu-*` with frankfurt,
+   `us-*` with the nearest American one, and set `region:` in `render.yaml` to
+   match.
 
 2. **Take the connection string.** In the project: **Connect** (or Project
    Settings → Database). You are offered more than one, and the difference
@@ -37,6 +44,10 @@ exported `.docx`, a rendered chart.
    ```
 
    `postgres://` is fine too — it is rewritten on the way in.
+
+   If the password contains any of `@ : / ? # [ ] %`, percent-encode it, or the
+   URL parses as something else and the failure is a confusing one — an `@`
+   becomes a second host, a `:` a second port.
 
 There is nothing to create inside the database. Every table is made on first
 start, and making them again is a no-op, so a restart and a redeploy are the
