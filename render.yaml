@@ -1,47 +1,43 @@
-# Formatly on Render: one service, one database, no disk.
+# Formatly on Render: one service, no disk.
 #
-# Deploy: push this file, then in Render choose New → Blueprint and point it at
-# the repository. Everything below is read from here; only the Mistral key has
-# to be typed into the dashboard.
+# Deploy: New → Blueprint, pointed at this repository. Everything below is read
+# from here; two secrets are typed into the dashboard. The walkthrough, and how
+# to get the database, is in DEPLOY.md.
 #
 # There is no disk on purpose. Everything that must survive a restart — the
 # documents, their whole version history, the accounts, the composed drafts —
 # lives in Postgres, which is why the free instance is usable: its filesystem
-# is wiped on every deploy, and nothing here minds. What is left on disk is
-# only ever regenerated output: an exported .docx, a rendered chart.
-#
-# Check Render's own terms for how long a free database lasts before you rely
-# on it. Neon and Supabase both give a Postgres that does not expire, and this
-# works with either — set DATABASE_URL by hand and delete the databases block.
+# is wiped on every deploy and nothing here minds. What is left on disk is only
+# ever regenerated output.
 
 services:
   - type: web
     name: formatly
     runtime: docker
     dockerfilePath: ./Dockerfile
-    # Where your readers are, not where you are.
+    # Near your readers, and near the database: a query crossing an ocean does
+    # it on every version read.
     region: frankfurt
     plan: free
 
     healthCheckPath: /health
 
     envVars:
-      # The database, wired up by Render from the block below.
+      # The Supabase connection string, from Connect → Transaction pooler.
+      # The pooler rather than the direct connection: a free project's direct
+      # address is reachable over IPv6 only, and most hosts are not.
       - key: DATABASE_URL
-        fromDatabase:
-          name: formatly-db
-          property: connectionString
+        sync: false          # typed into the dashboard; it holds the password
 
-      # Generated once by Render and kept. Setting it yourself is fine; letting
-      # the container invent one is not, because a new one on every restart
-      # logs everybody out.
+      # Generated once by Render and kept. Letting the container invent one
+      # instead would log everybody out on every restart.
       - key: DOCOS_SECRET
         generateValue: true
 
       # The planner. Without it the app still runs — instructions are answered
-      # by the rules instead, and the panel says so rather than pretending.
+      # by the rules, and the panel says so rather than pretending.
       - key: MISTRAL_API_KEY
-        sync: false          # typed into the dashboard, never in the repository
+        sync: false
       - key: MISTRAL_MODEL
         value: mistral-medium-latest
 
@@ -49,9 +45,3 @@ services:
       # Only needed if the frontend is ever hosted somewhere else.
       # - key: ALLOWED_ORIGINS
       #   value: https://your-frontend.example
-
-databases:
-  - name: formatly-db
-    plan: free
-    databaseName: formatly
-    user: formatly

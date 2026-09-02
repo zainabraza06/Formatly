@@ -76,7 +76,15 @@ def connect(path: Optional[Path] = None) -> Iterator[Any]:
         import psycopg
         from psycopg.rows import dict_row
 
-        with psycopg.connect(url, row_factory=dict_row) as conn:
+        # `prepare_threshold=None` turns off prepared statements. psycopg
+        # starts preparing a query after it has seen it a few times, which is
+        # a good idea against a database and a broken one through a pooler in
+        # transaction mode — Supabase's port 6543, and the connection string
+        # most hosts need. The prepared statement belongs to a server
+        # connection the next query may not get, and the failure reads as
+        # "prepared statement does not exist" from nowhere.
+        with psycopg.connect(url, row_factory=dict_row,
+                             prepare_threshold=None) as conn:
             yield _Postgres(conn)
         return
 
