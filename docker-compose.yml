@@ -1,0 +1,39 @@
+# Formatly on one machine: `docker compose up -d --build`, then :8000.
+#
+# The named volume is the whole of the state — documents, their version
+# history, the accounts and the token signing key. Remove it and everyone is
+# logged out and every upload is gone, so it is the thing to back up.
+
+services:
+  formatly:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: formatly:latest
+    restart: unless-stopped
+    ports:
+      - "${PORT:-8000}:8000"
+    environment:
+      # The planner. Without it the app still runs: instructions are answered
+      # by the rules, and the panel says so rather than pretending.
+      MISTRAL_API_KEY: ${MISTRAL_API_KEY:-}
+      MISTRAL_MODEL: ${MISTRAL_MODEL:-mistral-medium-latest}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      # Sign tokens with this, or the container invents one on first start and
+      # every restart logs everybody out.
+      DOCOS_SECRET: ${DOCOS_SECRET:?set DOCOS_SECRET — see the README}
+      # Only needed if the page is served from somewhere other than this
+      # container. Same-origin needs nothing.
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-}
+    volumes:
+      - formatly-data:/data
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health').read()"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+
+volumes:
+  formatly-data:

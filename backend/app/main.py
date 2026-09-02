@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+
 from pathlib import Path
 from typing import Any
 
@@ -26,9 +28,20 @@ from app.services.storage import get_paths
 
 app = FastAPI(title="Formatly API", version="1.0.0")
 
+# Where the browser is allowed to call from. The development ports are always
+# fine; a deployment adds its own through ALLOWED_ORIGINS, comma separated.
+# Served from one origin — the API also serving the built page — none of this
+# applies, because nothing is cross-origin.
+_DEV_ORIGINS = ["http://localhost:5173", "http://127.0.0.1:5173"]
+_ALLOWED_ORIGINS = _DEV_ORIGINS + [
+    origin.strip().rstrip("/")
+    for origin in os.environ.get("ALLOWED_ORIGINS", "").split(",")
+    if origin.strip()
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=_ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -217,3 +230,13 @@ def download_excel(document_id: str) -> FileResponse:
 # The old /chat endpoint returned canned text and never reached a model. The real
 # assistant lives in DocOS (/docos/{id}/command and the WebSocket), where a prompt
 # becomes validated actions applied to the document.
+
+
+# Last of all: the built page, if there is one beside us. It answers every path
+# the API has not already claimed, so this has to be registered after every
+# route — a catch-all declared earlier would swallow them.
+from app.web import serve_frontend  # noqa: E402
+
+_SERVING = serve_frontend(app)
+if _SERVING is not None:
+    print(f"serving the built frontend from {_SERVING}")
