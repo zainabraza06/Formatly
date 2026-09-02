@@ -35,7 +35,11 @@ RUN apt-get update && apt-get install --no-install-recommends -y \
 WORKDIR /srv
 
 COPY backend/requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
+# Patient with the network: pip gives up on a read after fifteen seconds by
+# default, and matplotlib and pdfminer are large enough that a slow connection
+# hits that and fails the whole build. Ten retries and two minutes of patience
+# cost nothing when the network is fine.
+RUN pip install --no-cache-dir --timeout 120 --retries 10 -r requirements.txt
 
 COPY backend/app ./app
 COPY --from=frontend /build/dist ./static
