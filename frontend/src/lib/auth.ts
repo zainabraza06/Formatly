@@ -1,6 +1,15 @@
 // Token storage + auth API client.
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000'
+const API_URL = import.meta.env.VITE_API_URL || sameOriginOrDevServer()
+
+/** Where the API is when nothing says otherwise.
+ *
+ *  Empty — every path relative, so the page calls whatever origin served it,
+ *  which is the API itself in a deployment. Except on Vite's own port, where
+ *  the page is served by Vite and the API is on another one. */
+function sameOriginOrDevServer(): string {
+  return window.location.port === '5173' ? 'http://127.0.0.1:8000' : ''
+}
 const TOKEN_KEY = 'docos.token'
 
 export interface AuthUser {
