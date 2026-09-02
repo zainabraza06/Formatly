@@ -33,6 +33,12 @@ class VersionRow:
         return self.snapshot is not None
 
 
+# How long a statement waits for the lock before giving up. Long enough to
+# cover a commit that is writing half a megabyte of snapshot, short enough that
+# a genuinely stuck writer is still an error rather than a hang.
+_BUSY_SECONDS = 10.0
+
+
 class VersionStore:
     def __init__(self, db_path: Optional[Path] = None):
         self._path = db_path or (get_paths().root / "docos.db")
@@ -41,9 +47,17 @@ class VersionStore:
         self._init_schema()
 
     def _conn(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(str(self._path))
+        conn = sqlite3.connect(str(self._path), timeout=_BUSY_SECONDS)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys = ON")
+        # A reader does not wait for a writer under WAL, which is what a
+        # document being committed while another is being opened looks like.
+        # The default journal blocks both ways, and under a server that shows
+        # up as a request that hangs for no reason anyone can see.
+        conn.execute("PRAGMA journal_mode = WAL")
+        # And a writer waits its turn rather than failing outright: two commits
+        # landing together is ordinary, "database is locked" is not.
+        conn.execute(f"PRAGMA busy_timeout = {int(_BUSY_SECONDS * 1000)}")
         return conn
 
     def _init_schema(self) -> None:
