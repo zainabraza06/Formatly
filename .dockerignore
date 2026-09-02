@@ -5,6 +5,12 @@
 # wherever it is pushed.
 backend/.env
 backend/.env.*
+# And the frontend's, which sets VITE_API_URL to a development machine. Baked
+# into a build it makes the deployed page call 127.0.0.1 — the reader's own
+# computer — and fail as though the server were down.
+frontend/.env
+frontend/.env.*
+!frontend/.env.example
 backend/.data/
 **/secret.key
 

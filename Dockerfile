@@ -14,10 +14,11 @@ COPY frontend/package*.json ./
 RUN npm ci
 
 COPY frontend/ ./
-# Left empty on purpose: the page calls the origin it was served from, which is
-# this same container. Set it only when the API lives somewhere else.
-ENV VITE_API_URL=""
-RUN npm run build
+# No environment file: the page then calls the origin it was served from, which
+# is this same container. A development .env naming 127.0.0.1 would otherwise
+# be compiled in, and the deployed page would call the reader's own machine.
+# Set VITE_API_URL here only if the API lives somewhere else.
+RUN rm -f .env .env.* && npm run build
 
 
 # ── the API, and the page with it ───────────────────────────────────────────

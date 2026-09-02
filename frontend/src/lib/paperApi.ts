@@ -1,6 +1,23 @@
 import { getToken } from './auth'
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000'
+// Where the API is. Set VITE_API_URL when it lives somewhere else; otherwise
+// a built page calls the origin it was served from — an empty base makes every
+// path relative — and a development page calls the API on its own port, since
+// Vite serves the page on another one.
+const API_URL = import.meta.env.VITE_API_URL || sameOriginOrDevServer()
+
+/** Where the API is when nothing says otherwise.
+ *
+ *  Empty — every path relative, so the page calls whatever origin served it,
+ *  which is the API itself in a deployment. Except on Vite's own port, where
+ *  the page is served by Vite and the API is on another one.
+ *
+ *  Decided here rather than at build time: `import.meta.env.DEV` survived
+ *  minification once, and a page that calls 127.0.0.1 from a real host fails
+ *  in a way that reads like the server being down. */
+function sameOriginOrDevServer(): string {
+  return window.location.port === '5173' ? 'http://127.0.0.1:8000' : ''
+}
 
 function authHeaders(extra?: Record<string, string>): Record<string, string> {
   const token = getToken()

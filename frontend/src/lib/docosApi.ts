@@ -7,10 +7,32 @@ import type {
 } from '../types/docos'
 import { getToken } from './auth'
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000'
+// Where the API is. Set VITE_API_URL when it lives somewhere else; otherwise
+// a built page calls the origin it was served from — an empty base makes every
+// path relative — and a development page calls the API on its own port, since
+// Vite serves the page on another one.
+const API_URL = import.meta.env.VITE_API_URL || sameOriginOrDevServer()
+
+/** Where the API is when nothing says otherwise.
+ *
+ *  Empty — every path relative, so the page calls whatever origin served it,
+ *  which is the API itself in a deployment. Except on Vite's own port, where
+ *  the page is served by Vite and the API is on another one.
+ *
+ *  Decided here rather than at build time: `import.meta.env.DEV` survived
+ *  minification once, and a page that calls 127.0.0.1 from a real host fails
+ *  in a way that reads like the server being down. */
+function sameOriginOrDevServer(): string {
+  return window.location.port === '5173' ? 'http://127.0.0.1:8000' : ''
+}
 
 function wsBase(): string {
-  return API_URL.replace(/^http/, 'ws')
+  // A WebSocket needs an absolute URL, so an empty API base — the page served
+  // by the API that answers it — resolves against the page's own origin. And
+  // it has to be wss on an https page: a browser refuses a plain ws from a
+  // secure one, which is every deployment.
+  const base = API_URL || window.location.origin
+  return base.replace(/^http/, 'ws')
 }
 
 function authHeaders(extra?: Record<string, string>): Record<string, string> {
