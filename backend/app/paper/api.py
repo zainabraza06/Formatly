@@ -167,15 +167,9 @@ def _save_spec(spec_dict: dict[str, Any], owner_id: str) -> str:
     because every read has to be able to answer "is this yours" — a document id
     is a guess away otherwise.
     """
-    from app.services.storage import get_paths, write_json
+    from app.paper.drafts import get_drafts
 
-    doc_id = new_id("paper")
-    write_json(get_paths().documents / f"{doc_id}.spec.json", {
-        "owner_id": owner_id,
-        "created_at": datetime.now(timezone.utc).isoformat(),
-        "spec": spec_dict,
-    })
-    return doc_id
+    return get_drafts().save(spec_dict, owner_id)
 
 
 def _load_owned_spec(document_id: str, owner_id: str) -> dict[str, Any]:
@@ -184,12 +178,12 @@ def _load_owned_spec(document_id: str, owner_id: str) -> dict[str, Any]:
     A stranger's document answers 404 rather than 403: whether an id exists is
     itself worth not telling them.
     """
-    from app.services.storage import get_paths, read_json
+    from app.paper.drafts import get_drafts
 
-    record = read_json(get_paths().documents / f"{document_id}.spec.json")
-    if not record or record.get("owner_id") != owner_id:
+    spec = get_drafts().load(document_id, owner_id)
+    if spec is None:
         raise HTTPException(status_code=404, detail="Paper not found")
-    return record.get("spec") or {}
+    return spec
 
 
 @router.post("/generate")
@@ -345,25 +339,9 @@ def recent_papers(user: User = Depends(get_current_user)) -> list[dict[str, Any]
     anyone who asked, which handed out other people's document titles and the
     ids that make their exports reachable.
     """
-    from app.services.storage import get_paths, read_json
+    from app.paper.drafts import get_drafts
 
-    paths = get_paths()
-    out: list[dict[str, Any]] = []
-    for path in sorted(paths.documents.glob("*.spec.json"),
-                       key=lambda p: p.stat().st_mtime, reverse=True):
-        record = read_json(path) or {}
-        if record.get("owner_id") != user.id:
-            continue
-        meta = (record.get("spec") or {}).get("meta", {})
-        out.append({
-            "document_id": path.name.replace(".spec.json", ""),
-            "title": meta.get("title") or "Untitled Document",
-            "style_preset": meta.get("style", "ieee"),
-            "created_at": record.get("created_at", ""),
-        })
-        if len(out) >= 20:
-            break
-    return out
+    return get_drafts().list_for(user.id)
 
 
 @router.get("/{document_id}/export/docx")

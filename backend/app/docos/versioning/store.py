@@ -1,18 +1,23 @@
-"""SQLite persistence for documents and versions.
+"""Persistence for documents and versions, on SQLite or Postgres.
 
-Repository pattern: the VersionEngine talks only to this interface, never to
-sqlite directly. Snapshots are stored on checkpoint versions (every N); other
+Repository pattern: the VersionEngine talks only to this interface, never to a
+database directly. Snapshots are stored on checkpoint versions (every N); other
 versions store just the action batch that produced them.
+
+The SQL is written once in the form both engines understand — see
+`app.services.db`, which decides which one hears it. `user` is quoted
+everywhere because Postgres reserves the word for the current user, and an
+unquoted one is a syntax error rather than a column.
 """
 from __future__ import annotations
 
 import json
-import sqlite3
 import threading
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Optional
 
+from app.services import db
 from app.services.storage import get_paths
 
 
@@ -33,10 +38,33 @@ class VersionRow:
         return self.snapshot is not None
 
 
-# How long a statement waits for the lock before giving up. Long enough to
-# cover a commit that is writing half a megabyte of snapshot, short enough that
-# a genuinely stuck writer is still an error rather than a hang.
-_BUSY_SECONDS = 10.0
+_SCHEMA = (
+    """
+    CREATE TABLE IF NOT EXISTS documents (
+        id              TEXT PRIMARY KEY,
+        title           TEXT NOT NULL DEFAULT '',
+        current_version TEXT,
+        redo_version    TEXT,
+        owner_id        TEXT,
+        created_at      TEXT NOT NULL
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS versions (
+        id            TEXT PRIMARY KEY,
+        document_id   TEXT NOT NULL REFERENCES documents(id),
+        parent_id     TEXT,
+        seq           INTEGER NOT NULL,
+        timestamp     TEXT NOT NULL,
+        "user"        TEXT NOT NULL DEFAULT 'user',
+        label         TEXT NOT NULL DEFAULT '',
+        actions_json  TEXT NOT NULL DEFAULT '{}',
+        snapshot_json TEXT
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_versions_doc ON versions(document_id)",
+    "CREATE INDEX IF NOT EXISTS idx_versions_parent ON versions(parent_id)",
+)
 
 
 class VersionStore:
@@ -46,58 +74,32 @@ class VersionStore:
         self._lock = threading.Lock()
         self._init_schema()
 
-    def _conn(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(str(self._path), timeout=_BUSY_SECONDS)
-        conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA foreign_keys = ON")
-        # A reader does not wait for a writer under WAL, which is what a
-        # document being committed while another is being opened looks like.
-        # The default journal blocks both ways, and under a server that shows
-        # up as a request that hangs for no reason anyone can see.
-        conn.execute("PRAGMA journal_mode = WAL")
-        # And a writer waits its turn rather than failing outright: two commits
-        # landing together is ordinary, "database is locked" is not.
-        conn.execute(f"PRAGMA busy_timeout = {int(_BUSY_SECONDS * 1000)}")
-        return conn
+    def _conn(self):
+        return db.connect(self._path)
 
     def _init_schema(self) -> None:
         with self._lock, self._conn() as c:
-            c.executescript(
-                """
-                CREATE TABLE IF NOT EXISTS documents (
-                    id              TEXT PRIMARY KEY,
-                    title           TEXT NOT NULL DEFAULT '',
-                    current_version TEXT,
-                    redo_version    TEXT,
-                    owner_id        TEXT,
-                    created_at      TEXT NOT NULL
-                );
-                CREATE TABLE IF NOT EXISTS versions (
-                    id           TEXT PRIMARY KEY,
-                    document_id  TEXT NOT NULL REFERENCES documents(id),
-                    parent_id    TEXT,
-                    seq          INTEGER NOT NULL,
-                    timestamp    TEXT NOT NULL,
-                    user         TEXT NOT NULL DEFAULT 'user',
-                    label        TEXT NOT NULL DEFAULT '',
-                    actions_json TEXT NOT NULL DEFAULT '{}',
-                    snapshot_json TEXT
-                );
-                CREATE INDEX IF NOT EXISTS idx_versions_doc ON versions(document_id);
-                CREATE INDEX IF NOT EXISTS idx_versions_parent ON versions(parent_id);
-                """
-            )
-            # migration: add owner_id to pre-existing databases
-            cols = {r["name"] for r in c.execute("PRAGMA table_info(documents)").fetchall()}
-            if "owner_id" not in cols:
-                c.execute("ALTER TABLE documents ADD COLUMN owner_id TEXT")
+            for statement in _SCHEMA:
+                c.execute(statement)
+            # A database made before documents had an owner. Only the file can
+            # be one: a Postgres is created by this schema and starts complete.
+            if not db.is_postgres():
+                cols = {r["name"] for r in
+                        c.execute("PRAGMA table_info(documents)").fetchall()}
+                if "owner_id" not in cols:
+                    c.execute("ALTER TABLE documents ADD COLUMN owner_id TEXT")
 
     # ── documents ───────────────────────────────────────────────────────────
     def create_document(self, doc_id: str, title: str, created_at: str,
                         owner_id: Optional[str] = None) -> None:
         with self._lock, self._conn() as c:
             c.execute(
-                "INSERT OR REPLACE INTO documents(id, title, created_at, owner_id) VALUES (?,?,?,?)",
+                """INSERT INTO documents(id, title, created_at, owner_id)
+                   VALUES (?,?,?,?)
+                   ON CONFLICT(id) DO UPDATE SET
+                       title=excluded.title,
+                       created_at=excluded.created_at,
+                       owner_id=excluded.owner_id""",
                 (doc_id, title, created_at, owner_id),
             )
 
@@ -117,7 +119,7 @@ class VersionStore:
             return
         vals.append(doc_id)
         with self._lock, self._conn() as c:
-            c.execute(f"UPDATE documents SET {', '.join(sets)} WHERE id=?", vals)
+            c.execute(f"UPDATE documents SET {', '.join(sets)} WHERE id=?", tuple(vals))
 
     def list_documents(self, owner_id: Optional[str] = None) -> list[dict[str, Any]]:
         with self._conn() as c:
@@ -133,9 +135,9 @@ class VersionStore:
     def delete_document(self, doc_id: str) -> bool:
         """Remove a document and every version of it. True if one was there.
 
-        Versions go first: they carry a foreign key onto `documents`, and
-        `PRAGMA foreign_keys = ON` would refuse the parent row otherwise. Both
-        statements share one transaction, so a failure leaves neither half done.
+        Versions go first: they carry a foreign key onto `documents`, which
+        would otherwise refuse the parent row. Both statements share one
+        transaction, so a failure leaves neither half done.
         """
         with self._lock, self._conn() as c:
             c.execute("DELETE FROM versions WHERE document_id=?", (doc_id,))
@@ -147,10 +149,12 @@ class VersionStore:
         with self._lock, self._conn() as c:
             c.execute(
                 """INSERT INTO versions
-                   (id, document_id, parent_id, seq, timestamp, user, label, actions_json, snapshot_json)
+                   (id, document_id, parent_id, seq, timestamp, "user", label,
+                    actions_json, snapshot_json)
                    VALUES (?,?,?,?,?,?,?,?,?)""",
                 (row.id, row.document_id, row.parent_id, row.seq, row.timestamp, row.user,
-                 row.label, json.dumps(row.actions), json.dumps(row.snapshot) if row.snapshot else None),
+                 row.label, json.dumps(row.actions),
+                 json.dumps(row.snapshot) if row.snapshot else None),
             )
 
     def get_version(self, version_id: str) -> Optional[VersionRow]:
@@ -173,7 +177,7 @@ class VersionStore:
             return 0 if row["m"] is None else int(row["m"]) + 1
 
     @staticmethod
-    def _to_row(r: sqlite3.Row) -> VersionRow:
+    def _to_row(r: Any) -> VersionRow:
         return VersionRow(
             id=r["id"], document_id=r["document_id"], parent_id=r["parent_id"],
             seq=r["seq"], timestamp=r["timestamp"], user=r["user"], label=r["label"],

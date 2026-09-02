@@ -7,13 +7,13 @@ styles are owned by a user and resolve exactly like built-in ones.
 from __future__ import annotations
 
 import json
-import sqlite3
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
 from app.paper.styles.base import StyleSheet
+from app.services import db
 from app.services.storage import get_paths, new_id
 
 
@@ -24,10 +24,8 @@ class StyleStore:
         self._lock = threading.Lock()
         self._init_schema()
 
-    def _conn(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(str(self._path))
-        conn.row_factory = sqlite3.Row
-        return conn
+    def _conn(self):
+        return db.connect(self._path)
 
     def _init_schema(self) -> None:
         with self._lock, self._conn() as c:

@@ -1,13 +1,13 @@
-"""User persistence (SQLite), sharing the DocOS database file."""
+"""User persistence, sharing the DocOS database — file or Postgres."""
 from __future__ import annotations
 
-import sqlite3
 import threading
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
+from app.services import db
 from app.services.storage import get_paths, new_id
 
 
@@ -31,10 +31,8 @@ class UserStore:
         self._lock = threading.Lock()
         self._init_schema()
 
-    def _conn(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(str(self._path))
-        conn.row_factory = sqlite3.Row
-        return conn
+    def _conn(self):
+        return db.connect(self._path)
 
     def _init_schema(self) -> None:
         with self._lock, self._conn() as c:
@@ -85,7 +83,7 @@ class UserStore:
         return self.get_by_id(user_id)
 
     @staticmethod
-    def _to_user(row: sqlite3.Row) -> User:
+    def _to_user(row: Any) -> User:
         return User(id=row["id"], email=row["email"], name=row["name"],
                     password_hash=row["password_hash"], created_at=row["created_at"])
 

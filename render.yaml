@@ -1,0 +1,57 @@
+# Formatly on Render: one service, one database, no disk.
+#
+# Deploy: push this file, then in Render choose New → Blueprint and point it at
+# the repository. Everything below is read from here; only the Mistral key has
+# to be typed into the dashboard.
+#
+# There is no disk on purpose. Everything that must survive a restart — the
+# documents, their whole version history, the accounts, the composed drafts —
+# lives in Postgres, which is why the free instance is usable: its filesystem
+# is wiped on every deploy, and nothing here minds. What is left on disk is
+# only ever regenerated output: an exported .docx, a rendered chart.
+#
+# Check Render's own terms for how long a free database lasts before you rely
+# on it. Neon and Supabase both give a Postgres that does not expire, and this
+# works with either — set DATABASE_URL by hand and delete the databases block.
+
+services:
+  - type: web
+    name: formatly
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    # Where your readers are, not where you are.
+    region: frankfurt
+    plan: free
+
+    healthCheckPath: /health
+
+    envVars:
+      # The database, wired up by Render from the block below.
+      - key: DATABASE_URL
+        fromDatabase:
+          name: formatly-db
+          property: connectionString
+
+      # Generated once by Render and kept. Setting it yourself is fine; letting
+      # the container invent one is not, because a new one on every restart
+      # logs everybody out.
+      - key: DOCOS_SECRET
+        generateValue: true
+
+      # The planner. Without it the app still runs — instructions are answered
+      # by the rules instead, and the panel says so rather than pretending.
+      - key: MISTRAL_API_KEY
+        sync: false          # typed into the dashboard, never in the repository
+      - key: MISTRAL_MODEL
+        value: mistral-medium-latest
+
+      # Nothing is cross-origin: this service serves the page and answers it.
+      # Only needed if the frontend is ever hosted somewhere else.
+      # - key: ALLOWED_ORIGINS
+      #   value: https://your-frontend.example
+
+databases:
+  - name: formatly-db
+    plan: free
+    databaseName: formatly
+    user: formatly
