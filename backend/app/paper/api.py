@@ -380,3 +380,34 @@ def export_paper_pdf(document_id: str, user: User = Depends(get_current_user)) -
     return FileResponse(str(pdf), media_type="application/pdf",
                         filename=f"{_safe(parsed.meta.title)}.pdf")
 
+
+
+@router.delete("/{document_id}")
+def delete_paper(document_id: str,
+                 user: User = Depends(get_current_user)) -> dict[str, bool]:
+    """Delete a generated paper.
+
+    Not undoable: a paper is its spec, and there is no version history behind
+    it the way there is for an imported document. A paper that is not yours
+    answers 404 rather than 403, the same as every other route here — whether
+    an id exists is itself worth not telling a stranger.
+    """
+    from app.paper.drafts import get_drafts
+
+    if not get_drafts().delete(document_id, user.id):
+        raise HTTPException(status_code=404, detail="Paper not found")
+
+    # Exporting leaves a rendered .docx beside the spec. Nothing can reach it
+    # once the spec is gone, so it would sit in the documents directory for
+    # ever; deleting it is part of deleting the paper.
+    try:
+        from app.services.storage import get_paths
+
+        rendered = get_paths().documents / f"{document_id}.docx"
+        rendered.unlink(missing_ok=True)
+    except OSError:
+        # The paper is deleted either way — a file that could not be removed is
+        # not a reason to tell the caller their delete failed.
+        pass
+
+    return {"deleted": True}
