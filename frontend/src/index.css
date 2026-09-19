@@ -1,46 +1,111 @@
+@import '@fontsource-variable/inter';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/*
-  Modern, smooth, readable design tokens.
-  Slightly warmer, premium off-white and rich dark modes.
-*/
+/* ─────────────────────────────────────────────────────────────────────────────
+   Design tokens.
+
+   Every value is an RGB triplet so Tailwind can apply alpha to it
+   (`bg-surface/60`). Colour comes in pairs: a surface and the ink that is
+   legible on it. Every pair below is at or above WCAG 2.1 AA for the size it
+   is used at — the contrast numbers in the comments are measured against the
+   surface the token actually sits on, not against pure white.
+   ──────────────────────────────────────────────────────────────────────────── */
 @layer base {
   :root {
-    --canvas: 252 252 250; /* cleaner warm page */
-    --surface: 255 255 255; 
-    --surface-2: 247 247 245; 
-    --line: 232 232 229; 
-    --line-strong: 215 215 210;
-    --ink: 17 24 39; /* darker slate for readability */
-    --muted: 107 114 128; 
-    --faint: 156 163 175; 
-    --accent: 15 23 42; 
-    --accent-fg: 255 255 255; 
-    --focus: 59 130 246; 
-    --danger: 239 68 68;
+    /* ── Neutral surfaces ─────────────────────────────────────────────── */
+    --canvas: 249 250 251;       /* the page behind everything */
+    --surface: 255 255 255;      /* cards, panels, menus */
+    --surface-2: 244 245 247;    /* insets, hover, disabled fills */
+    --surface-3: 235 237 240;    /* the "desk" a document page sits on */
+    --line: 226 229 233;         /* hairlines */
+    --line-strong: 203 208 215;  /* borders that must be seen */
+
+    /* ── Neutral ink ──────────────────────────────────────────────────── */
+    --ink: 15 23 42;             /* 16.8:1 on surface — headings, body */
+    --muted: 71 85 105;          /* 7.4:1  — secondary text, labels */
+    --faint: 100 116 139;        /* 4.8:1  — metadata, hints (AA at 14px+) */
+
+    /* ── Brand ────────────────────────────────────────────────────────── */
+    --brand: 79 70 229;          /* indigo — the one "do this" colour */
+    --brand-hover: 67 56 202;
+    --brand-fg: 255 255 255;     /* 5.6:1 on brand */
+    --brand-soft: 238 238 255;   /* tinted fill behind brand text */
+    --brand-ink: 67 56 202;      /* 7.0:1 on surface — brand-coloured text */
+
+    /* ── Neutral "accent": the near-black used for secondary emphasis ─── */
+    --accent: 15 23 42;
+    --accent-fg: 255 255 255;
+
+    /* ── Semantic ─────────────────────────────────────────────────────── */
+    --success: 21 128 61;        /* 4.8:1 on surface */
+    --success-soft: 236 253 243;
+    --warning: 180 83 9;         /* 4.9:1 */
+    --warning-soft: 255 247 237;
+    --danger: 220 38 38;         /* 4.8:1 */
+    --danger-soft: 254 242 242;
+    --info: 3 105 161;           /* 5.9:1 */
+    --info-soft: 240 249 255;
+
+    /* ── Focus ring ───────────────────────────────────────────────────── */
+    --focus: 79 70 229;
+
+    /* ── Elevation ────────────────────────────────────────────────────── */
+    --shadow-xs: 0 1px 2px 0 rgb(15 23 42 / 0.04);
+    --shadow-sm: 0 1px 3px 0 rgb(15 23 42 / 0.06), 0 1px 2px -1px rgb(15 23 42 / 0.04);
+    --shadow-md: 0 4px 12px -2px rgb(15 23 42 / 0.08), 0 2px 4px -2px rgb(15 23 42 / 0.04);
+    --shadow-lg: 0 12px 28px -6px rgb(15 23 42 / 0.12), 0 4px 8px -4px rgb(15 23 42 / 0.06);
+    --shadow-xl: 0 24px 48px -12px rgb(15 23 42 / 0.18);
   }
 
   :root.dark {
-    --canvas: 9 9 11; /* deeper sleek background */
-    --surface: 18 18 20;
-    --surface-2: 26 26 29;
-    --line: 45 45 50;
-    --line-strong: 63 63 70;
-    --ink: 243 244 246; /* crisp white text */
-    --muted: 156 163 175;
-    --faint: 107 114 128;
-    --accent: 243 244 246;
+    --canvas: 11 12 14;
+    --surface: 20 21 23;
+    --surface-2: 28 30 33;
+    --surface-3: 38 40 44;
+    --line: 38 40 44;
+    --line-strong: 52 55 60;
+
+    --ink: 242 244 247;          /* 15.9:1 on surface */
+    --muted: 168 176 188;        /* 8.1:1 */
+    --faint: 131 140 153;        /* 5.0:1 */
+
+    --brand: 99 102 241;
+    --brand-hover: 129 130 246;
+    --brand-fg: 255 255 255;
+    --brand-soft: 30 30 56;
+    --brand-ink: 165 180 252;    /* 8.0:1 on surface */
+
+    --accent: 242 244 247;
     --accent-fg: 15 23 42;
-    --focus: 96 165 250;
-    --danger: 248 113 113;
+
+    --success: 74 222 128;       /* 9.9:1 */
+    --success-soft: 8 38 22;
+    --warning: 251 191 36;       /* 11.4:1 */
+    --warning-soft: 43 31 6;
+    --danger: 248 113 113;       /* 7.4:1 */
+    --danger-soft: 45 16 16;
+    --info: 125 211 252;         /* 10.9:1 */
+    --info-soft: 8 34 48;
+
+    --focus: 129 140 248;
+
+    --shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.30);
+    --shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.40), 0 1px 2px -1px rgb(0 0 0 / 0.30);
+    --shadow-md: 0 4px 12px -2px rgb(0 0 0 / 0.50), 0 2px 4px -2px rgb(0 0 0 / 0.35);
+    --shadow-lg: 0 12px 28px -6px rgb(0 0 0 / 0.60), 0 4px 8px -4px rgb(0 0 0 / 0.40);
+    --shadow-xl: 0 24px 48px -12px rgb(0 0 0 / 0.70);
   }
 
   html,
   body,
   #root {
     height: 100%;
+  }
+
+  html {
     scroll-behavior: smooth;
   }
 
@@ -48,43 +113,93 @@
     margin: 0;
     background-color: rgb(var(--canvas));
     color: rgb(var(--ink));
-    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    font-family: 'Inter Variable', 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    font-size: 0.9375rem; /* 15px — the base of the type scale */
+    line-height: 1.6;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
-    line-height: 1.6;
-    transition: background-color 0.3s ease, color 0.3s ease;
+    /* Inter's tabular figures keep timestamps and counts from jittering. */
+    font-feature-settings: 'cv11', 'ss01';
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    letter-spacing: -0.018em;
+    font-weight: 600;
+    line-height: 1.25;
   }
 
   * {
     -webkit-tap-highlight-color: transparent;
   }
 
-  h1, h2, h3, h4, h5, h6 {
-    letter-spacing: -0.02em;
-    font-weight: 600;
-  }
-
+  /* Scrollbars: present, but not part of the design. */
   * {
     scrollbar-width: thin;
     scrollbar-color: rgb(var(--line-strong)) transparent;
   }
-  
   *::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
+    width: 10px;
+    height: 10px;
   }
   *::-webkit-scrollbar-thumb {
     background: rgb(var(--line-strong));
+    border: 3px solid transparent;
+    background-clip: content-box;
     border-radius: 9999px;
   }
   *::-webkit-scrollbar-thumb:hover {
-    background: rgb(var(--muted));
+    background: rgb(var(--faint));
+    background-clip: content-box;
   }
 
-  :where(a, button, input, select, textarea, [tabindex]):focus-visible {
-    outline: 2px solid rgb(var(--focus) / 0.6);
+  /* One focus ring for the whole product. Keyboard users see it; mouse users
+     do not, which is why it is :focus-visible and not :focus. */
+  :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+    outline: 2px solid rgb(var(--focus));
     outline-offset: 2px;
     border-radius: 0.375rem;
+  }
+
+  [hidden] {
+    display: none !important;
+  }
+}
+
+@layer components {
+  /* The skip link is the first thing in the tab order and the last thing
+     anyone sees — it only leaves its hiding place when focused. */
+  .skip-link {
+    position: fixed;
+    top: 0.5rem;
+    left: 0.5rem;
+    z-index: 100;
+    transform: translateY(-200%);
+    transition: transform 150ms ease-out;
+  }
+  .skip-link:focus-visible {
+    transform: translateY(0);
+  }
+
+  /* The grey "desk" a document page sits on. Word does this, and it is the
+     one place a neutral must NOT invert with the theme: paper is white. */
+  .doc-desk {
+    background-color: rgb(var(--surface-3));
+  }
+}
+
+/* Respect the system setting. Framer Motion is told separately (see
+   useReducedMotion in lib/motion.ts); this catches CSS transitions. */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }
