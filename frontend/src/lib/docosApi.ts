@@ -79,6 +79,18 @@ export const docosApi = {
   listDocuments: async (): Promise<DocumentSummary[]> =>
     json(await fetch(`${API_URL}/docos`, { headers: authHeaders() })),
 
+  /** The exported bytes, without saving them. Used by the export preview and
+   *  by duplicate, which feeds a document's own export back through import. */
+  downloadBlob: async (id: string, format: 'docx' | 'pdf', maths = false): Promise<Blob> => {
+    const res = await fetch(
+      `${API_URL}/docos/${id}/download.${format}${maths ? '?maths=1' : ''}`,
+      { headers: authHeaders() })
+    if (!res.ok) {
+      throw new Error(await failure(res) || `Could not export the ${format.toUpperCase()}`)
+    }
+    return res.blob()
+  },
+
   /** Save the edited document. The current graph, so every change is in it. */
   /** `maths` is the reader's own toggle: with the equations drawn on screen,
    *  the file should hold equations rather than the LaTeX they were typed as. */
@@ -92,14 +104,7 @@ export const docosApi = {
     // A protected route cannot be reached by a plain link, so the bytes are
     // fetched with the token and handed to the browser to save.
     const match = /filename="?([^";]+)"?/i.exec(res.headers.get('content-disposition') || '')
-    const url = URL.createObjectURL(await res.blob())
-    const a = document.createElement('a')
-    a.href = url
-    a.download = match ? match[1] : `document.${format}`
-    document.body.appendChild(a)
-    a.click()
-    a.remove()
-    URL.revokeObjectURL(url)
+    saveBlob(await res.blob(), match ? match[1] : `document.${format}`)
   },
 
   /** Delete an upload and its whole version history. Not undoable. */
@@ -170,4 +175,16 @@ export const docosApi = {
     const token = getToken()
     return `${wsBase()}/docos/ws/${id}${token ? `?token=${encodeURIComponent(token)}` : ''}`
   },
+}
+
+/** Hand bytes to the browser to save under a name. */
+function saveBlob(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  URL.revokeObjectURL(url)
 }

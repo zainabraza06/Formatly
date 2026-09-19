@@ -107,6 +107,14 @@ export const api = {
     download(`/paper/${documentId}/export/pdf`, filenameFor(title, documentId, 'pdf')),
   exportExcel: (documentId: string, title?: string) =>
     download(`/documents/${documentId}/export/excel`, filenameFor(title, documentId, 'xlsx')),
+
+  /** The exported bytes without saving them — for the export preview, and for
+   *  opening a generated paper in the editor, which imports its own .docx. */
+  exportBlob: async (path: string): Promise<Blob> => {
+    const res = await fetch(`${API_URL}${path}`, { headers: authHeaders() })
+    if (!res.ok) throw new Error(await failure(res))
+    return res.blob()
+  },
 }
 
 /** The name to save under when the server's own is unreadable. */
