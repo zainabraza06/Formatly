@@ -9,9 +9,11 @@ import {
 import { useRegisterCommands } from '../context/command-context'
 import { useReportError } from '../hooks/useReportError'
 import {
-  Button, ButtonLink, ConfirmModal, EmptyState, Input, Select, Tabs, useToast,
+  Button, ButtonLink, ConfirmModal, Dropdown, EmptyState, Input, Select, Tabs, useToast,
 } from '../components/ui'
-import { ComposeIcon, DocumentsIcon, PlusIcon, SearchIcon } from '../components/icons'
+import {
+  ComposeIcon, DocumentsIcon, MoreIcon, PlusIcon, SearchIcon, TrashIcon, UploadIcon,
+} from '../components/icons'
 import { DocumentCard, DocumentCardSkeleton } from '../components/documents/DocumentCard'
 import { UploadDropzone } from '../components/documents/UploadDropzone'
 
@@ -37,6 +39,9 @@ export function DocumentsPage() {
   const [uploading, setUploading] = useState<string | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<DocumentItem | null>(null)
   const [deleting, setDeleting] = useState(false)
+  // Emptying the whole library is a separate question, asked separately.
+  const [confirmClear, setConfirmClear] = useState(false)
+  const [clearing, setClearing] = useState(false)
 
   const refresh = useCallback(async () => {
     const result = await loadDocuments()
@@ -140,6 +145,29 @@ export function DocumentsPage() {
     }
   }
 
+  /**
+   * Delete every upload, with all their versions. Generated papers are left
+   * alone: they are a different list, deleted one at a time, and sweeping them
+   * up in a button labelled for uploads is how people lose work they meant to
+   * keep.
+   */
+  const clearUploads = async () => {
+    setClearing(true)
+    try {
+      const { deleted } = await docosApi.deleteAllDocuments()
+      setItems((all) => all.filter((d) => d.source !== 'upload'))
+      toast.success(
+        `Deleted ${deleted} ${deleted === 1 ? 'upload' : 'uploads'}`,
+        'Their version histories went with them.',
+      )
+      setConfirmClear(false)
+    } catch (e) {
+      report(e, 'delete your uploads')
+    } finally {
+      setClearing(false)
+    }
+  }
+
   // ── commands for this screen ──────────────────────────────────────────────
 
   useRegisterCommands(() => [
@@ -202,10 +230,47 @@ export function DocumentsPage() {
             Everything you have generated or uploaded, in one place.
           </p>
         </div>
-        <ButtonLink to="/app/compose" variant="primary" leadingIcon={<PlusIcon />}>
-          New document
-        </ButtonLink>
+        <div className="flex items-center gap-2">
+          <ButtonLink to="/app/compose" variant="primary" leadingIcon={<PlusIcon />}>
+            New document
+          </ButtonLink>
+
+          <Dropdown
+            label="More library actions"
+            triggerIcon={<MoreIcon />}
+            items={[
+              {
+                id: 'upload',
+                label: 'Upload a Word document',
+                icon: <UploadIcon />,
+                onSelect: () => document.getElementById('library-upload')?.click(),
+              },
+              {
+                id: 'clear',
+                label: 'Delete all uploads…',
+                icon: <TrashIcon />,
+                destructive: true,
+                disabled: counts.upload === 0,
+                onSelect: () => setConfirmClear(true),
+              },
+            ]}
+          />
+        </div>
       </div>
+
+      {/* The menu's picker. The dropzone below is the usual way in; this is
+          for anyone who went looking in a menu instead. */}
+      <input
+        id="library-upload"
+        type="file"
+        accept=".docx"
+        className="sr-only"
+        onChange={(e) => {
+          const file = e.target.files?.[0]
+          e.target.value = ''
+          if (file) void upload(file)
+        }}
+      />
 
       {failures.map((f) => (
         <div
@@ -332,6 +397,19 @@ export function DocumentsPage() {
             : 'This deletes the generated paper. It cannot be undone — a paper has no version history to fall back on.'
         }
         confirmLabel={confirmDelete?.source === 'upload' ? 'Delete document' : 'Delete paper'}
+      />
+
+      <ConfirmModal
+        open={confirmClear}
+        onClose={() => setConfirmClear(false)}
+        onConfirm={clearUploads}
+        busy={clearing}
+        title={`Delete all ${counts.upload} uploads?`}
+        description={
+          'Every document you have uploaded, and every version of each one, permanently. '
+          + 'Generated papers are not affected.'
+        }
+        confirmLabel="Delete all uploads"
       />
     </div>
   )
