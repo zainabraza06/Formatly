@@ -1,17 +1,8 @@
-// Token storage + auth API client.
-import { apiErrorFrom } from './errors'
+// The auth API client. Token storage is in token.ts, which both this and the
+// request plumbing depend on.
+import { getJson, sendJson } from './http'
 
-const API_URL = import.meta.env.VITE_API_URL || sameOriginOrDevServer()
-
-/** Where the API is when nothing says otherwise.
- *
- *  Empty — every path relative, so the page calls whatever origin served it,
- *  which is the API itself in a deployment. Except on Vite's own port, where
- *  the page is served by Vite and the API is on another one. */
-function sameOriginOrDevServer(): string {
-  return window.location.port === '5173' ? 'http://127.0.0.1:8000' : ''
-}
-const TOKEN_KEY = 'docos.token'
+export { clearToken, getToken, setToken } from './token'
 
 export interface AuthUser {
   id: string
@@ -20,65 +11,24 @@ export interface AuthUser {
   created_at: string
 }
 
-export function getToken(): string | null {
-  return localStorage.getItem(TOKEN_KEY)
-}
-export function setToken(token: string): void {
-  localStorage.setItem(TOKEN_KEY, token)
-}
-export function clearToken(): void {
-  localStorage.removeItem(TOKEN_KEY)
-}
-
-async function json<T>(p: Promise<Response>): Promise<T> {
-  const res = await p
-  // The same ApiError the rest of the app throws, so the sign-in screen can
-  // tell a wrong password (401) from a database that is down (503).
-  if (!res.ok) throw await apiErrorFrom(res)
-  return (await res.json()) as T
-}
 
 export const authApi = {
   signup: (email: string, password: string, name: string) =>
-    json<{ token: string; user: AuthUser }>(
-      fetch(`${API_URL}/auth/signup`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password, name }),
-      }),
-    ),
+    sendJson<{ token: string; user: AuthUser }>('/auth/signup', 'POST', { email, password, name }),
 
   login: (email: string, password: string) =>
-    json<{ token: string; user: AuthUser }>(
-      fetch(`${API_URL}/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-      }),
-    ),
+    sendJson<{ token: string; user: AuthUser }>('/auth/login', 'POST', { email, password }),
 
   me: (token: string) =>
-    json<AuthUser>(
-      fetch(`${API_URL}/auth/me`, {
-        headers: { Authorization: `Bearer ${token}` },
-      }),
-    ),
+    getJson<AuthUser>('/auth/me', { headers: { Authorization: `Bearer ${token}` } }),
 
   updateName: (token: string, name: string) =>
-    json<AuthUser>(
-      fetch(`${API_URL}/auth/me`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ name }),
-      }),
-    ),
+    sendJson<AuthUser>('/auth/me', 'PATCH', { name }, {
+      headers: { Authorization: `Bearer ${token}` },
+    }),
 
   changePassword: (token: string, current_password: string, new_password: string) =>
-    json<{ updated: boolean }>(
-      fetch(`${API_URL}/auth/password`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ current_password, new_password }),
-      }),
-    ),
+    sendJson<{ ok: boolean }>('/auth/password', 'POST', { current_password, new_password }, {
+      headers: { Authorization: `Bearer ${token}` },
+    }),
 }

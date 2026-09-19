@@ -1,39 +1,6 @@
-import { getToken } from './auth'
-import { apiErrorFrom, isAbort } from './errors'
+import { getBlob, getJson, sendJson } from './http'
 
-// Where the API is. Set VITE_API_URL when it lives somewhere else; otherwise
-// a built page calls the origin it was served from — an empty base makes every
-// path relative — and a development page calls the API on its own port, since
-// Vite serves the page on another one.
-const API_URL = import.meta.env.VITE_API_URL || sameOriginOrDevServer()
-
-/** Where the API is when nothing says otherwise.
- *
- *  Empty — every path relative, so the page calls whatever origin served it,
- *  which is the API itself in a deployment. Except on Vite's own port, where
- *  the page is served by Vite and the API is on another one.
- *
- *  Decided here rather than at build time: `import.meta.env.DEV` survived
- *  minification once, and a page that calls 127.0.0.1 from a real host fails
- *  in a way that reads like the server being down. */
-function sameOriginOrDevServer(): string {
-  return window.location.port === '5173' ? 'http://127.0.0.1:8000' : ''
-}
-
-function authHeaders(extra?: Record<string, string>): Record<string, string> {
-  const token = getToken()
-  return { ...(extra || {}), ...(token ? { Authorization: `Bearer ${token}` } : {}) }
-}
-
-async function json<T>(res: Response): Promise<T> {
-  if (!res.ok) throw await apiErrorFrom(res)
-  return (await res.json()) as T
-}
-
-async function blob(res: Response): Promise<Blob> {
-  if (!res.ok) throw await apiErrorFrom(res)
-  return await res.blob()
-}
+export { isAbort } from './errors'
 
 export interface StyleSummary {
   id: string
@@ -50,6 +17,10 @@ export interface VisualizationNote {
   rationale: string
 }
 
+/** A block is a tagged union on the server; the editor only ever reads `type`,
+ *  `level` and `text` off one, and passes the rest back untouched. */
+export type PaperBlock = Record<string, unknown>
+
 export interface PaperSpec {
   meta: {
     title: string
@@ -59,7 +30,7 @@ export interface PaperSpec {
     style: string
     page: Record<string, unknown>
   }
-  blocks: Record<string, any>[]
+  blocks: PaperBlock[]
   references: string[]
   visualization_plan: VisualizationNote[]
   resolved: boolean
@@ -96,7 +67,7 @@ export interface RefinedInstructions {
 export const paperApi = {
   /** Refine a loose instruction into one the writer can act on. `previous` and
    *  `feedback` make a retry a correction rather than another roll of the dice. */
-  refineInstructions: async (
+  refineInstructions: (
     body: {
       instructions: string
       raw_text?: string
@@ -107,78 +78,44 @@ export const paperApi = {
     },
     signal?: AbortSignal,
   ): Promise<RefinedInstructions> =>
-    json(await fetch(`${API_URL}/paper/instructions/refine`, {
-      method: 'POST',
-      headers: authHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify(body),
-      signal,
-    })),
+    sendJson('/paper/instructions/refine', 'POST', body, { signal }),
 
-  styles: async (): Promise<StyleSummary[]> =>
-    json(await fetch(`${API_URL}/paper/styles`, { headers: authHeaders() })),
-
-  getStyle: async (id: string): Promise<Record<string, any>> =>
-    json(await fetch(`${API_URL}/paper/styles/${id}`, { headers: authHeaders() })),
-
-  createStyle: async (sheet: Record<string, any>): Promise<Record<string, any>> =>
-    json(await fetch(`${API_URL}/paper/styles`, {
-      method: 'POST',
-      headers: authHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify(sheet),
-    })),
-
-
-  deleteStyle: async (id: string): Promise<{ deleted: boolean }> =>
-    json(await fetch(`${API_URL}/paper/styles/${id}`, {
-      method: 'DELETE', headers: authHeaders(),
-    })),
+  styles: (): Promise<StyleSummary[]> => getJson('/paper/styles'),
 
   // `signal` lets the caller abandon a run. Generation can take minutes, so the
   // user needs a way out that does not mean reloading the page.
-  generate: async (req: ComposeRequest, signal?: AbortSignal): Promise<{ provider: string; spec: PaperSpec }> =>
-    json(await fetch(`${API_URL}/paper/generate`, {
-      method: 'POST',
-      headers: authHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify(req),
-      signal,
-    })),
+  generate: (req: ComposeRequest, signal?: AbortSignal): Promise<{ provider: string; spec: PaperSpec }> =>
+    sendJson('/paper/generate', 'POST', req, { signal }),
 
-  renderSpec: async (spec: PaperSpec, style?: string, signal?: AbortSignal): Promise<Blob> =>
-    blob(await fetch(`${API_URL}/paper/render${style ? `?style=${encodeURIComponent(style)}` : ''}`, {
+  renderSpec: (spec: PaperSpec, style?: string, signal?: AbortSignal): Promise<Blob> =>
+    getBlob(`/paper/render${styleQuery(style)}`, {
       method: 'POST',
-      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(spec),
       signal,
-    })),
+    }),
 
   // Pixel-exact preview: the real DOCX rendered to PDF. May 503 if LibreOffice
   // is unavailable, in which case the caller falls back to the HTML view.
-  previewPdf: async (spec: PaperSpec, style?: string, signal?: AbortSignal): Promise<Blob> =>
-    blob(await fetch(`${API_URL}/paper/preview${style ? `?style=${encodeURIComponent(style)}` : ''}`, {
+  previewPdf: (spec: PaperSpec, style?: string, signal?: AbortSignal): Promise<Blob> =>
+    getBlob(`/paper/preview${styleQuery(style)}`, {
       method: 'POST',
-      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(spec),
       signal,
-    })),
+    }),
 
-  compose: async (req: ComposeRequest, signal?: AbortSignal): Promise<Blob> =>
-    blob(await fetch(`${API_URL}/paper/compose`, {
+  compose: (req: ComposeRequest, signal?: AbortSignal): Promise<Blob> =>
+    getBlob('/paper/compose', {
       method: 'POST',
-      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(req),
       signal,
-    })),
+    }),
 }
 
-export function downloadBlob(b: Blob, filename: string): void {
-  const url = URL.createObjectURL(b)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = filename
-  document.body.appendChild(a)
-  a.click()
-  a.remove()
-  URL.revokeObjectURL(url)
+function styleQuery(style?: string): string {
+  return style ? `?style=${encodeURIComponent(style)}` : ''
 }
 
-export { isAbort }
+export { saveBlob as downloadBlob } from './http'

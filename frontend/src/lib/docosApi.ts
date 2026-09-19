@@ -1,51 +1,11 @@
 import type {
   DocumentGraph,
   GetDocumentResponse,
-  GraphDiff,
   ImportResponse,
   VersionInfo,
 } from '../types/docos'
-import { getToken } from './auth'
-import { apiErrorFrom } from './errors'
-
-// Where the API is. Set VITE_API_URL when it lives somewhere else; otherwise
-// a built page calls the origin it was served from — an empty base makes every
-// path relative — and a development page calls the API on its own port, since
-// Vite serves the page on another one.
-const API_URL = import.meta.env.VITE_API_URL || sameOriginOrDevServer()
-
-/** Where the API is when nothing says otherwise.
- *
- *  Empty — every path relative, so the page calls whatever origin served it,
- *  which is the API itself in a deployment. Except on Vite's own port, where
- *  the page is served by Vite and the API is on another one.
- *
- *  Decided here rather than at build time: `import.meta.env.DEV` survived
- *  minification once, and a page that calls 127.0.0.1 from a real host fails
- *  in a way that reads like the server being down. */
-function sameOriginOrDevServer(): string {
-  return window.location.port === '5173' ? 'http://127.0.0.1:8000' : ''
-}
-
-function wsBase(): string {
-  // A WebSocket needs an absolute URL, so an empty API base — the page served
-  // by the API that answers it — resolves against the page's own origin. And
-  // it has to be wss on an https page: a browser refuses a plain ws from a
-  // secure one, which is every deployment.
-  const base = API_URL || window.location.origin
-  return base.replace(/^http/, 'ws')
-}
-
-function authHeaders(extra?: Record<string, string>): Record<string, string> {
-  const token = getToken()
-  return { ...(extra || {}), ...(token ? { Authorization: `Bearer ${token}` } : {}) }
-}
-
-/** The parsed body, or the failure the server described. */
-async function json<T>(res: Response): Promise<T> {
-  if (!res.ok) throw await apiErrorFrom(res)
-  return (await res.json()) as T
-}
+import { getToken } from './token'
+import { getBlob, getJson, request, saveBlob, sendJson, wsUrl } from './http'
 
 export interface DocumentSummary {
   document_id: string
@@ -56,110 +16,61 @@ export interface DocumentSummary {
 }
 
 export const docosApi = {
-  apiUrl: API_URL,
-
-  listDocuments: async (): Promise<DocumentSummary[]> =>
-    json(await fetch(`${API_URL}/docos`, { headers: authHeaders() })),
+  listDocuments: (): Promise<DocumentSummary[]> => getJson('/docos'),
 
   /** The exported bytes, without saving them. Used by the export preview and
    *  by duplicate, which feeds a document's own export back through import. */
-  downloadBlob: async (id: string, format: 'docx' | 'pdf', maths = false): Promise<Blob> => {
-    const res = await fetch(
-      `${API_URL}/docos/${id}/download.${format}${maths ? '?maths=1' : ''}`,
-      { headers: authHeaders() })
-    if (!res.ok) throw await apiErrorFrom(res)
-    return res.blob()
-  },
+  downloadBlob: (id: string, format: 'docx' | 'pdf', maths = false): Promise<Blob> =>
+    getBlob(`/docos/${id}/download.${format}${maths ? '?maths=1' : ''}`),
 
   /** Save the edited document. The current graph, so every change is in it. */
   /** `maths` is the reader's own toggle: with the equations drawn on screen,
    *  the file should hold equations rather than the LaTeX they were typed as. */
   download: async (id: string, format: 'docx' | 'pdf', maths = false): Promise<void> => {
-    const res = await fetch(
-      `${API_URL}/docos/${id}/download.${format}${maths ? '?maths=1' : ''}`,
-      { headers: authHeaders() })
-    if (!res.ok) throw await apiErrorFrom(res)
-    // A protected route cannot be reached by a plain link, so the bytes are
-    // fetched with the token and handed to the browser to save.
+    const res = await request(`/docos/${id}/download.${format}${maths ? '?maths=1' : ''}`)
     const match = /filename="?([^";]+)"?/i.exec(res.headers.get('content-disposition') || '')
     saveBlob(await res.blob(), match ? match[1] : `document.${format}`)
   },
 
   /** Delete an upload and its whole version history. Not undoable. */
-  deleteDocument: async (id: string): Promise<{ deleted: boolean }> =>
-    json(await fetch(`${API_URL}/docos/${id}`, {
-      method: 'DELETE', headers: authHeaders(),
-    })),
+  deleteDocument: (id: string): Promise<{ deleted: boolean }> =>
+    sendJson(`/docos/${id}`, 'DELETE'),
 
   /** Every upload of the caller's, with all its history. */
-  deleteAllDocuments: async (): Promise<{ deleted: number }> =>
-    json(await fetch(`${API_URL}/docos`, {
-      method: 'DELETE', headers: authHeaders(),
-    })),
+  deleteAllDocuments: (): Promise<{ deleted: number }> => sendJson('/docos', 'DELETE'),
 
   importDocx: async (file: File): Promise<ImportResponse> => {
     const form = new FormData()
     form.append('file', file)
-    return json(await fetch(`${API_URL}/docos/import`, {
-      method: 'POST', body: form, headers: authHeaders(),
-    }))
+    // No Content-Type: the browser sets it, with the multipart boundary.
+    return getJson('/docos/import', { method: 'POST', body: form })
   },
 
   /** Open a composed document straight from its spec. Going via a rendered
    *  .docx would flatten listings, equations and figures into loose text. */
-  importSpec: async (spec: unknown, title?: string): Promise<ImportResponse> =>
-    json(await fetch(`${API_URL}/docos/import-spec`, {
-      method: 'POST',
-      headers: authHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ spec, title }),
-    })),
+  importSpec: (spec: unknown, title?: string): Promise<ImportResponse> =>
+    sendJson('/docos/import-spec', 'POST', { spec, title }),
 
   /** The document as LibreOffice lays it out, built from the *current* graph
    *  so it reflects edits rather than the file as it arrived. */
-  exactPdf: async (id: string, signal?: AbortSignal): Promise<Blob> => {
-    const res = await fetch(`${API_URL}/docos/${id}/exact.pdf`, {
-      headers: authHeaders(), signal,
-    })
-    if (!res.ok) throw await apiErrorFrom(res)
-    return res.blob()
-  },
+  exactPdf: (id: string, signal?: AbortSignal): Promise<Blob> =>
+    getBlob(`/docos/${id}/exact.pdf`, { signal }),
 
-  getDocument: async (id: string): Promise<GetDocumentResponse> =>
-    json(await fetch(`${API_URL}/docos/${id}`, { headers: authHeaders() })),
+  getDocument: (id: string): Promise<GetDocumentResponse> => getJson(`/docos/${id}`),
 
-  history: async (id: string): Promise<VersionInfo[]> =>
-    json(await fetch(`${API_URL}/docos/${id}/history`, { headers: authHeaders() })),
+  history: (id: string): Promise<VersionInfo[]> => getJson(`/docos/${id}/history`),
 
-  diff: async (id: string, a: number, b: number): Promise<GraphDiff> =>
-    json(await fetch(`${API_URL}/docos/${id}/diff?a=${a}&b=${b}`, { headers: authHeaders() })),
 
   // REST fallback for running a command (returns collected events + final graph)
-  command: async (
+  command: (
     id: string,
     command: string,
-  ): Promise<{ ok: boolean; graph?: DocumentGraph; events: any[]; error?: string }> =>
-    json(
-      await fetch(`${API_URL}/docos/${id}/command`, {
-        method: 'POST',
-        headers: authHeaders({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify({ command }),
-      }),
-    ),
+  ): Promise<{ ok: boolean; graph?: DocumentGraph; events: unknown[]; error?: string }> =>
+    sendJson(`/docos/${id}/command`, 'POST', { command }),
 
   wsUrl: (id: string) => {
     const token = getToken()
-    return `${wsBase()}/docos/ws/${id}${token ? `?token=${encodeURIComponent(token)}` : ''}`
+    return wsUrl(`/docos/ws/${id}${token ? `?token=${encodeURIComponent(token)}` : ''}`)
   },
 }
 
-/** Hand bytes to the browser to save under a name. */
-function saveBlob(blob: Blob, filename: string): void {
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = filename
-  document.body.appendChild(a)
-  a.click()
-  a.remove()
-  URL.revokeObjectURL(url)
-}
