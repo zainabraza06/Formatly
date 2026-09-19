@@ -165,7 +165,7 @@ export function DocumentEditor() {
       {/* ── Header ───────────────────────────────────────────────────────── */}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <div className="min-w-0 flex-1">
-          <h1 className="truncate text-xl font-semibold tracking-tight text-ink">
+          <h1 className="truncate text-xl text-ink">
             {doc.title || 'Editor'}
           </h1>
           <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-muted">

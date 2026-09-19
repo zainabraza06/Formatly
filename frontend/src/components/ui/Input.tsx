@@ -17,9 +17,9 @@ export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputE
       ref={ref}
       className={cn(
         CONTROL,
-        'h-9 px-3 text-sm',
-        leadingIcon && 'pl-9',
-        trailingSlot && 'pr-9',
+        'h-8 px-2.5 text-sm',
+        leadingIcon && 'pl-8',
+        trailingSlot && 'pr-8',
         className,
       )}
       {...rest}
@@ -31,7 +31,7 @@ export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputE
   return (
     <div className="relative">
       {leadingIcon && (
-        <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-faint" aria-hidden>
+        <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-faint" aria-hidden>
           {leadingIcon}
         </span>
       )}
@@ -61,14 +61,14 @@ export const Select = forwardRef<HTMLSelectElement, SelectHTMLAttributes<HTMLSel
       <div className="relative">
         <select
           ref={ref}
-          className={cn(CONTROL, 'h-9 appearance-none pl-3 pr-9 text-sm', className)}
+          className={cn(CONTROL, 'h-8 appearance-none pl-2.5 pr-8 text-sm', className)}
           {...rest}
         >
           {children}
         </select>
         <svg
           viewBox="0 0 20 20" fill="currentColor" aria-hidden
-          className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-faint"
+          className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-faint"
         >
           <path fillRule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06z" clipRule="evenodd" />
         </svg>

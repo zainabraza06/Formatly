@@ -282,10 +282,10 @@ export function ComposePaper() {
   // ── render ────────────────────────────────────────────────────────────────
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-ink">Generate a document</h1>
+          <h1 className="text-2xl text-ink">Generate a document</h1>
           <p className="mt-1 text-sm text-muted">{STEPS[step].hint}</p>
         </div>
         {spec && (

@@ -192,18 +192,18 @@ export function LandingPage() {
 
       <main id="main">
         {/* ── Hero ───────────────────────────────────────────────────────── */}
-        <section className="mx-auto max-w-6xl px-4 pb-10 pt-12 sm:px-6 sm:pt-20">
+        <section className="mx-auto max-w-6xl px-4 pb-16 pt-16 sm:px-6 sm:pt-24">
           <div className="mx-auto max-w-3xl text-center">
             <Badge tone="brand" icon={<SparkIcon className="h-3.5 w-3.5" />}>
               AI that formats, not just writes
             </Badge>
 
-            <h1 className="mt-4 text-4xl font-semibold tracking-tight text-ink sm:text-5xl lg:text-6xl">
+            <h1 className="mt-5 text-4xl text-ink sm:text-5xl lg:text-6xl">
               Documents that come out{' '}
               <span className="text-brand-ink">properly formatted</span>
             </h1>
 
-            <p className="mx-auto mt-5 max-w-xl text-lg leading-relaxed text-muted">
+            <p className="mx-auto mt-6 max-w-xl text-lg leading-relaxed text-muted">
               Write a paper from your own material, or bring a Word document and tell it
               what to fix in plain English. Every change is shown, versioned, and
               reversible.
@@ -223,7 +223,7 @@ export function LandingPage() {
             </p>
           </div>
 
-          <ProductMock className="mx-auto mt-12 max-w-4xl" />
+          <ProductMock className="mx-auto mt-14 max-w-4xl sm:mt-16" />
         </section>
 
         {/* ── How it works ───────────────────────────────────────────────── */}
@@ -231,17 +231,17 @@ export function LandingPage() {
                  lede="No template to pick, no settings to learn first.">
           <ol className="grid gap-4 md:grid-cols-3">
             {STEPS.map((step, i) => (
-              <li key={step.title} className="rounded-lg border border-line bg-surface p-5">
-                <div className="flex items-center gap-3">
-                  <span className="flex h-9 w-9 items-center justify-center rounded-md border border-brand/20 bg-brand-soft text-brand-ink" aria-hidden>
+              <li key={step.title} className="rounded-lg border border-line bg-surface p-6">
+                <div className="flex items-center gap-2.5">
+                  <span className="flex h-8 w-8 items-center justify-center rounded-md bg-brand-soft text-brand-ink" aria-hidden>
                     {step.icon}
                   </span>
-                  <span className="text-2xs font-semibold uppercase tracking-wide text-faint">
+                  <span className="text-2xs font-medium uppercase tracking-wide text-faint">
                     Step {i + 1}
                   </span>
                 </div>
-                <h3 className="mt-4 text-base font-semibold text-ink">{step.title}</h3>
-                <p className="mt-1.5 text-sm leading-relaxed text-muted">{step.body}</p>
+                <h3 className="mt-5 text-lg text-ink">{step.title}</h3>
+                <p className="mt-2 text-sm leading-relaxed text-muted">{step.body}</p>
               </li>
             ))}
           </ol>
@@ -252,12 +252,12 @@ export function LandingPage() {
                  lede="The parts that matter when a document has to be handed in, not just drafted.">
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {FEATURES.map((f) => (
-              <div key={f.title} className="rounded-lg border border-line bg-surface p-5">
-                <span className="flex h-9 w-9 items-center justify-center rounded-md border border-line bg-surface-2 text-muted" aria-hidden>
+              <div key={f.title} className="rounded-lg border border-line bg-surface p-6 transition-colors duration-fast hover:border-line-strong">
+                <span className="flex h-8 w-8 items-center justify-center rounded-md bg-surface-2 text-muted" aria-hidden>
                   {f.icon}
                 </span>
-                <h3 className="mt-4 text-base font-semibold text-ink">{f.title}</h3>
-                <p className="mt-1.5 text-sm leading-relaxed text-muted">{f.body}</p>
+                <h3 className="mt-5 text-lg text-ink">{f.title}</h3>
+                <p className="mt-2 text-sm leading-relaxed text-muted">{f.body}</p>
               </div>
             ))}
           </div>
@@ -272,11 +272,14 @@ export function LandingPage() {
                 key={plan.name}
                 className={cn(
                   'flex flex-col rounded-lg border bg-surface p-6',
-                  plan.highlighted ? 'border-brand shadow-md' : 'border-line',
+                  // The available plan is marked by its border, not by a
+                  // shadow: one of three cards lifting off the page for no
+                  // functional reason is decoration.
+                  plan.highlighted ? 'border-brand' : 'border-line',
                 )}
               >
                 <div className="flex items-center justify-between gap-2">
-                  <h3 className="text-base font-semibold text-ink">{plan.name}</h3>
+                  <h3 className="text-lg text-ink">{plan.name}</h3>
                   {plan.highlighted ? (
                     <Badge tone="brand">Available now</Badge>
                   ) : (
@@ -284,8 +287,8 @@ export function LandingPage() {
                   )}
                 </div>
 
-                <p className="mt-4 flex items-baseline gap-1.5">
-                  <span className="text-3xl font-semibold tracking-tight text-ink">{plan.price}</span>
+                <p className="mt-5 flex items-baseline gap-1.5">
+                  <span className="text-3xl text-ink">{plan.price}</span>
                   {plan.cadence && <span className="text-sm text-faint">{plan.cadence}</span>}
                 </p>
                 <p className="mt-2 text-sm text-muted">{plan.blurb}</p>
@@ -319,23 +322,23 @@ export function LandingPage() {
           <div className="mx-auto max-w-2xl divide-y divide-line overflow-hidden rounded-lg border border-line bg-surface">
             {FAQS.map((item) => (
               <details key={item.q} className="group">
-                <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-5 py-4 text-sm font-medium text-ink transition-colors duration-fast hover:bg-surface-2">
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-5 py-4 text-base font-medium text-ink transition-colors duration-fast hover:bg-surface-2">
                   {item.q}
                   <ChevronDownIcon className="h-4 w-4 shrink-0 text-faint transition-transform duration-fast group-open:rotate-180" />
                 </summary>
-                <p className="px-5 pb-4 text-sm leading-relaxed text-muted">{item.a}</p>
+                <p className="px-5 pb-5 text-sm leading-relaxed text-muted">{item.a}</p>
               </details>
             ))}
           </div>
         </Section>
 
         {/* ── Closing CTA ────────────────────────────────────────────────── */}
-        <section className="mx-auto max-w-6xl px-4 pb-20 sm:px-6">
-          <div className="rounded-xl border border-line bg-surface px-6 py-12 text-center shadow-sm">
-            <h2 className="text-2xl font-semibold tracking-tight text-ink">
+        <section className="mx-auto max-w-6xl px-4 pb-24 pt-16 sm:px-6 sm:pt-24">
+          <div className="rounded-xl border border-line bg-surface px-6 py-16 text-center">
+            <h2 className="text-2xl text-ink sm:text-3xl">
               Have something due?
             </h2>
-            <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-muted">
+            <p className="mx-auto mt-3 max-w-md text-md leading-relaxed text-muted">
               Paste what you have. You will have a formatted document, and a way to fix
               anything in it, in a couple of minutes.
             </p>
@@ -366,11 +369,11 @@ function Section({
   id, title, lede, children,
 }: { id: string; title: string; lede: string; children: ReactNode }) {
   return (
-    <section id={id} className="scroll-mt-16 border-t border-line py-14 sm:py-20">
+    <section id={id} className="scroll-mt-14 border-t border-line py-16 sm:py-24">
       <div className="mx-auto max-w-6xl px-4 sm:px-6">
-        <div className="mx-auto mb-8 max-w-2xl text-center">
-          <h2 className="text-2xl font-semibold tracking-tight text-ink sm:text-3xl">{title}</h2>
-          <p className="mt-2 text-sm leading-relaxed text-muted">{lede}</p>
+        <div className="mx-auto mb-10 max-w-2xl text-center sm:mb-12">
+          <h2 className="text-2xl text-ink sm:text-3xl">{title}</h2>
+          <p className="mt-3 text-md leading-relaxed text-muted">{lede}</p>
         </div>
         {children}
       </div>

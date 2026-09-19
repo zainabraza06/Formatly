@@ -63,21 +63,24 @@ export default {
         mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'Consolas', 'monospace'],
       },
 
-      /* A closed type scale. Nothing in the product should need a size that is
-         not on this list — 11px is the floor, and it is for badges only. */
+      /* A closed type scale, benchmarked against the systems this product sits
+         beside: 14px body, 13px for secondary text, and display sizes that
+         carry real negative tracking so a heading reads as engineered rather
+         than as large body text. Hierarchy comes from size and weight, which
+         is why there are big jumps between the last four. */
       fontSize: {
-        '2xs': ['0.6875rem', { lineHeight: '1rem', letterSpacing: '0.01em' }],   // 11
-        xs: ['0.75rem', { lineHeight: '1.125rem' }],                              // 12
-        sm: ['0.8125rem', { lineHeight: '1.25rem' }],                             // 13
-        base: ['0.875rem', { lineHeight: '1.5rem' }],                             // 14
-        md: ['0.9375rem', { lineHeight: '1.5rem' }],                              // 15
-        lg: ['1rem', { lineHeight: '1.625rem' }],                                 // 16
-        xl: ['1.125rem', { lineHeight: '1.75rem', letterSpacing: '-0.01em' }],    // 18
-        '2xl': ['1.375rem', { lineHeight: '1.875rem', letterSpacing: '-0.015em' }],
-        '3xl': ['1.75rem', { lineHeight: '2.125rem', letterSpacing: '-0.02em' }],
-        '4xl': ['2.25rem', { lineHeight: '2.5rem', letterSpacing: '-0.025em' }],
-        '5xl': ['3rem', { lineHeight: '1.08', letterSpacing: '-0.03em' }],
-        '6xl': ['3.75rem', { lineHeight: '1.05', letterSpacing: '-0.032em' }],
+        '2xs': ['0.6875rem', { lineHeight: '1rem', letterSpacing: '0.005em' }],       // 11 — badges only
+        xs: ['0.75rem', { lineHeight: '1.125rem' }],                                   // 12 — captions
+        sm: ['0.8125rem', { lineHeight: '1.25rem', letterSpacing: '-0.005em' }],       // 13 — secondary
+        base: ['0.875rem', { lineHeight: '1.375rem', letterSpacing: '-0.006em' }],     // 14 — body
+        md: ['0.9375rem', { lineHeight: '1.5rem', letterSpacing: '-0.008em' }],        // 15
+        lg: ['1rem', { lineHeight: '1.5rem', letterSpacing: '-0.011em' }],             // 16 — lead
+        xl: ['1.25rem', { lineHeight: '1.75rem', letterSpacing: '-0.014em' }],         // 20 — h3
+        '2xl': ['1.5rem', { lineHeight: '1.875rem', letterSpacing: '-0.018em' }],      // 24 — h2
+        '3xl': ['2rem', { lineHeight: '2.25rem', letterSpacing: '-0.022em' }],         // 32 — h1
+        '4xl': ['2.5rem', { lineHeight: '2.75rem', letterSpacing: '-0.024em' }],       // 40
+        '5xl': ['3rem', { lineHeight: '1.08', letterSpacing: '-0.026em' }],            // 48 — display
+        '6xl': ['3.75rem', { lineHeight: '1.04', letterSpacing: '-0.028em' }],         // 60
       },
 
       /* 4px grid. The defaults already are one; these fill the gaps we use. */
@@ -88,17 +91,28 @@ export default {
         22: '5.5rem',
       },
 
-      /* Radius has meaning: sm = chips, md = controls, lg = cards,
-         xl = panels and sheets. */
-      borderRadius: {
-        sm: '0.375rem',
-        DEFAULT: '0.5rem',
-        md: '0.5rem',
-        lg: '0.75rem',
-        xl: '1rem',
-        '2xl': '1.25rem',
+      /* Row heights, so every list in the product shares one rhythm rather
+         than each screen inventing its own padding. */
+      height: {
+        row: '2.25rem',      // 36 — list and nav rows
+        'row-lg': '2.75rem', // 44 — table rows with two lines
       },
 
+      /* Radius has meaning, and the steps are small: 4 for things inside
+         things, 6 for controls, 10 for cards, 14 for sheets. Anything rounder
+         reads as a consumer app rather than a tool. */
+      borderRadius: {
+        sm: '0.25rem',
+        DEFAULT: '0.375rem',
+        md: '0.375rem',
+        lg: '0.625rem',
+        xl: '0.875rem',
+        '2xl': '1.125rem',
+      },
+
+      /* Elevation is for things that float. A card that is simply on the page
+         gets a hairline and nothing else — stacking a border and a shadow on
+         every surface is what makes an interface look like a pile of boxes. */
       boxShadow: {
         xs: 'var(--shadow-xs)',
         sm: 'var(--shadow-sm)',

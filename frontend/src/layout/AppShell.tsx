@@ -87,7 +87,7 @@ export function AppShell({
           collapsed ? 'w-16' : 'w-60',
         )}
       >
-        <div className={cn('flex h-14 items-center gap-2 px-3', collapsed && 'justify-center px-0')}>
+        <div className={cn('flex h-12 items-center gap-2 px-3', collapsed && 'justify-center px-0')}>
           <Logo compact={collapsed} />
         </div>
         <div className="flex-1 overflow-y-auto px-2 py-2">{nav}</div>
@@ -123,7 +123,7 @@ export function AppShell({
             className="relative flex h-full w-64 max-w-[85vw] flex-col border-r border-line bg-surface shadow-xl"
             style={{ animation: 'fade-up 200ms cubic-bezier(0.16, 1, 0.3, 1)' }}
           >
-            <div className="flex h-14 items-center justify-between gap-2 border-b border-line px-3">
+            <div className="flex h-12 items-center justify-between gap-2 border-b border-line px-3">
               <Logo />
               <Button
                 variant="ghost"
@@ -145,7 +145,7 @@ export function AppShell({
 
       {/* ── Main ─────────────────────────────────────────────────────────── */}
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        <header className="flex h-14 shrink-0 items-center gap-2 border-b border-line bg-surface px-3 sm:px-4">
+        <header className="flex h-12 shrink-0 items-center gap-2 border-b border-line bg-surface px-3 sm:px-4">
           <Button
             ref={openerRef}
             variant="ghost"
@@ -167,12 +167,12 @@ export function AppShell({
             type="button"
             onClick={commands.open}
             className={cn(
-              'group ml-1 hidden h-9 max-w-sm flex-1 items-center gap-2 rounded-md border border-line bg-surface-2/60 px-3 text-sm text-faint',
+              'group ml-1 hidden h-8 max-w-xs flex-1 items-center gap-2 rounded-md border border-line bg-surface-2/50 px-2.5 text-sm text-faint',
               'transition-colors duration-fast hover:border-line-strong hover:text-muted sm:flex',
             )}
           >
             <SearchIcon className="h-4 w-4 shrink-0" />
-            <span className="flex-1 text-left">Search documents and commands</span>
+            <span className="flex-1 truncate text-left">Search or jump to…</span>
             <kbd className="rounded-sm border border-line bg-surface px-1.5 py-0.5 text-2xs">⌘K</kbd>
           </button>
 
@@ -223,7 +223,7 @@ export function AppShell({
         </header>
 
         <main id="main" className="flex-1 overflow-y-auto overflow-x-hidden">
-          <div className="mx-auto w-full max-w-content px-4 py-5 sm:px-6 sm:py-6 lg:px-8">
+          <div className="mx-auto w-full max-w-content px-4 py-6 sm:px-6 lg:px-8">
             <Outlet />
           </div>
         </main>
@@ -244,11 +244,14 @@ function SidebarNav({ collapsed, onNavigate }: { collapsed: boolean; onNavigate:
           title={collapsed ? label : undefined}
           className={({ isActive }) =>
             cn(
-              'flex h-9 items-center gap-2.5 rounded-md px-2.5 text-sm font-medium transition-colors duration-fast',
+              'flex h-row items-center gap-2.5 rounded-md px-2.5 text-sm transition-colors duration-fast',
               collapsed && 'justify-center px-0',
+              // The selected row is a surface change, not a block of colour:
+              // one item in a list of four should not be the loudest thing on
+              // the screen.
               isActive
-                ? 'bg-brand-soft text-brand-ink'
-                : 'text-muted hover:bg-surface-2 hover:text-ink',
+                ? 'bg-surface-2 font-medium text-ink'
+                : 'text-muted hover:bg-surface-2/60 hover:text-ink',
             )
           }
         >

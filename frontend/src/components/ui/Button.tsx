@@ -10,10 +10,9 @@ export type ButtonSize = 'sm' | 'md' | 'lg'
  *  else on the screen is `secondary`, `ghost` or `subtle`. */
 const VARIANTS: Record<ButtonVariant, string> = {
   primary:
-    'bg-brand text-brand-fg shadow-sm hover:bg-brand-hover active:bg-brand-hover ' +
-    'disabled:hover:bg-brand',
+    'bg-brand text-brand-fg hover:bg-brand-hover disabled:hover:bg-brand',
   secondary:
-    'border border-line bg-surface text-ink shadow-xs hover:bg-surface-2 ' +
+    'border border-line bg-surface text-ink hover:bg-surface-2 ' +
     'hover:border-line-strong disabled:hover:bg-surface',
   ghost:
     'text-muted hover:bg-surface-2 hover:text-ink disabled:hover:bg-transparent',
@@ -24,20 +23,24 @@ const VARIANTS: Record<ButtonVariant, string> = {
 }
 
 const SIZES: Record<ButtonSize, string> = {
-  sm: 'h-8 gap-1.5 rounded-md px-2.5 text-xs',
-  md: 'h-9 gap-2 rounded-md px-3.5 text-sm',
-  lg: 'h-11 gap-2 rounded-lg px-5 text-base',
+  sm: 'h-7 gap-1.5 rounded-md px-2 text-xs',
+  md: 'h-8 gap-1.5 rounded-md px-3 text-sm',
+  lg: 'h-10 gap-2 rounded-lg px-4 text-base',
 }
 
 const ICON_SIZES: Record<ButtonSize, string> = {
-  sm: 'h-8 w-8 rounded-md',
-  md: 'h-9 w-9 rounded-md',
-  lg: 'h-11 w-11 rounded-lg',
+  sm: 'h-7 w-7 rounded-md',
+  md: 'h-8 w-8 rounded-md',
+  lg: 'h-10 w-10 rounded-lg',
 }
 
+// `active:scale` is the one bit of movement a control gets: it is the press
+// itself, it lasts 150ms, and it is the difference between a button that
+// responds and a rectangle that changes colour.
 const BASE =
-  'inline-flex shrink-0 items-center justify-center whitespace-nowrap font-medium ' +
-  'transition-colors duration-fast ease-out ' +
+  'inline-flex shrink-0 select-none items-center justify-center whitespace-nowrap font-medium ' +
+  'transition-[background-color,border-color,color,transform] duration-fast ease-out ' +
+  'active:scale-[0.98] disabled:active:scale-100 ' +
   'disabled:cursor-not-allowed disabled:opacity-50'
 
 interface Shared {

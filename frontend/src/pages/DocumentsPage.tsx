@@ -12,12 +12,15 @@ import {
   Button, ButtonLink, ConfirmModal, Dropdown, EmptyState, Input, Select, Tabs, useToast,
 } from '../components/ui'
 import {
-  ComposeIcon, DocumentsIcon, MoreIcon, PlusIcon, SearchIcon, TrashIcon, UploadIcon,
+  ComposeIcon, DocumentsIcon, LayersIcon, MoreIcon, PlusIcon, SearchIcon, TrashIcon, UploadIcon,
 } from '../components/icons'
 import { DocumentCard, DocumentCardSkeleton } from '../components/documents/DocumentCard'
+import { DocumentTable, DocumentTableSkeleton } from '../components/documents/DocumentTable'
 import { UploadDropzone } from '../components/documents/UploadDropzone'
 
 type Filter = 'all' | DocumentSource
+
+const VIEW_KEY = 'formatly.library.view'
 
 /**
  * The library: everything the account has, whether the generator wrote it or
@@ -35,6 +38,11 @@ export function DocumentsPage() {
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<Filter>('all')
   const [sort, setSort] = useState<SortKey>('newest')
+  // A list is the right default for something that grows to hundreds of rows;
+  // the grid stays for anyone who prefers it, and the choice is remembered.
+  const [view, setView] = useState<'list' | 'grid'>(
+    () => (localStorage.getItem(VIEW_KEY) === 'grid' ? 'grid' : 'list'),
+  )
   const [busyId, setBusyId] = useState<{ id: string; what: string } | null>(null)
   const [uploading, setUploading] = useState<string | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<DocumentItem | null>(null)
@@ -181,11 +189,17 @@ export function DocumentsPage() {
       icon: <SearchIcon />, keywords: 'find filter',
       run: () => document.getElementById('document-search')?.focus(),
     },
+    {
+      id: 'toggle-view', group: 'Documents',
+      label: view === 'list' ? 'Show the library as a grid' : 'Show the library as a list',
+      icon: <LayersIcon />,
+      run: () => setView((v) => (v === 'list' ? 'grid' : 'list')),
+    },
     ...(['newest', 'oldest', 'title', 'versions'] as SortKey[]).map((key) => ({
       id: `sort-${key}`, group: 'Documents', label: `Sort: ${SORT_LABELS[key]}`,
       run: () => setSort(key),
     })),
-  ], [navigate])
+  ], [navigate, view])
 
   // "N" for a new document, the way every document product does it — but never
   // while someone is typing into a field.
@@ -221,13 +235,17 @@ export function DocumentsPage() {
   const nothingMatches = !loading && items.length > 0 && visible.length === 0
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       {/* ── Header: one primary action ─────────────────────────────────── */}
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-ink">Documents</h1>
+          <h1 className="text-2xl text-ink">Documents</h1>
           <p className="mt-1 text-sm text-muted">
-            Everything you have generated or uploaded, in one place.
+            {loading
+              ? 'Everything you have generated or uploaded, in one place.'
+              : visible.length === items.length
+                ? `${items.length} ${items.length === 1 ? 'document' : 'documents'}`
+                : `${visible.length} of ${items.length} documents`}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -317,24 +335,46 @@ export function DocumentsPage() {
 
           <div className="sm:ml-auto">
             <label htmlFor="document-sort" className="sr-only">Sort documents</label>
-            <Select
-              id="document-sort"
-              value={sort}
-              onChange={(e) => setSort(e.target.value as SortKey)}
-              className="sm:w-44"
-            >
-              {(Object.keys(SORT_LABELS) as SortKey[]).map((key) => (
-                <option key={key} value={key}>{SORT_LABELS[key]}</option>
-              ))}
-            </Select>
+            <div className="flex items-center gap-2">
+              <Select
+                id="document-sort"
+                value={sort}
+                onChange={(e) => setSort(e.target.value as SortKey)}
+                className="sm:w-44"
+              >
+                {(Object.keys(SORT_LABELS) as SortKey[]).map((key) => (
+                  <option key={key} value={key}>{SORT_LABELS[key]}</option>
+                ))}
+              </Select>
+
+              <Tabs
+                label="How to show the library"
+                size="sm"
+                value={view}
+                onChange={(next) => {
+                  setView(next)
+                  try { localStorage.setItem(VIEW_KEY, next) } catch { /* private mode */ }
+                }}
+                items={[
+                  { id: 'list', label: 'List' },
+                  { id: 'grid', label: 'Grid' },
+                ]}
+              />
+            </div>
           </div>
         </div>
       )}
 
       {/* ── The library ────────────────────────────────────────────────── */}
       {loading ? (
-        <div aria-busy="true" aria-label="Loading your documents" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-          {Array.from({ length: 6 }).map((_, i) => <DocumentCardSkeleton key={i} />)}
+        <div aria-busy="true" aria-label="Loading your documents">
+          {view === 'list' ? (
+            <DocumentTableSkeleton />
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+              {Array.from({ length: 6 }).map((_, i) => <DocumentCardSkeleton key={i} />)}
+            </div>
+          )}
         </div>
       ) : nothingAtAll ? (
         <div className="space-y-4">
@@ -365,19 +405,32 @@ export function DocumentsPage() {
         />
       ) : (
         <>
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-            {visible.map((doc) => (
-              <DocumentCard
-                key={`${doc.source}:${doc.id}`}
-                doc={doc}
-                busy={busyId?.id === doc.id ? busyId.what : null}
-                onOpen={() => open(doc)}
-                onExport={(format) => exportDoc(doc, format)}
-                onDuplicate={doc.source === 'upload' ? () => duplicate(doc) : undefined}
-                onDelete={() => setConfirmDelete(doc)}
-              />
-            ))}
-          </div>
+          {view === 'list' ? (
+            <DocumentTable
+              documents={visible}
+              busyId={busyId}
+              sort={sort}
+              onSort={setSort}
+              onOpen={open}
+              onExport={exportDoc}
+              onDuplicate={duplicate}
+              onDelete={setConfirmDelete}
+            />
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+              {visible.map((doc) => (
+                <DocumentCard
+                  key={`${doc.source}:${doc.id}`}
+                  doc={doc}
+                  busy={busyId?.id === doc.id ? busyId.what : null}
+                  onOpen={() => open(doc)}
+                  onExport={(format) => exportDoc(doc, format)}
+                  onDuplicate={doc.source === 'upload' ? () => duplicate(doc) : undefined}
+                  onDelete={() => setConfirmDelete(doc)}
+                />
+              ))}
+            </div>
+          )}
 
           <UploadDropzone onFile={upload} busy={uploading} compact className="pt-1">
             Drop a Word document to edit it with AI
