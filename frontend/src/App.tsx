@@ -1,12 +1,14 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
+import { Suspense, useEffect, useMemo, useState } from 'react'
 import { MotionConfig } from 'framer-motion'
 import { Navigate, Route, Routes, useNavigate } from 'react-router-dom'
+import { ErrorBoundary } from './components/ErrorBoundary'
 import { RequireAuth } from './components/RequireAuth'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { CommandProvider } from './context/CommandContext'
 import { Spinner, ToastProvider } from './components/ui'
 import type { Command } from './components/ui/CommandPalette'
 import { AppShell } from './layout/AppShell'
+import { lazyRoute } from './lib/lazyRoute'
 import { applyTheme, getInitialTheme, type ThemeMode } from './lib/theme'
 import {
   ComposeIcon, DocumentsIcon, EditorIcon, MoonIcon, SettingsIcon, SignOutIcon, SunIcon,
@@ -14,13 +16,17 @@ import {
 
 /* Each screen is its own chunk. The editor alone pulls in KaTeX and the whole
    document renderer, which nobody visiting the landing page should have to
-   download first. */
-const LandingPage = lazy(() => import('./pages/LandingPage').then((m) => ({ default: m.LandingPage })))
-const Login = lazy(() => import('./pages/Login').then((m) => ({ default: m.Login })))
-const DocumentsPage = lazy(() => import('./pages/DocumentsPage').then((m) => ({ default: m.DocumentsPage })))
-const ComposePaper = lazy(() => import('./pages/ComposePaper').then((m) => ({ default: m.ComposePaper })))
-const DocumentEditor = lazy(() => import('./pages/DocumentEditor').then((m) => ({ default: m.DocumentEditor })))
-const Settings = lazy(() => import('./pages/Settings').then((m) => ({ default: m.Settings })))
+   download first.
+
+   `lazyRoute` rather than `lazy`: a deploy replaces every hashed chunk, so a
+   tab left open across one asks for files that no longer exist. It reloads
+   once, which is all that is needed, and gives up rather than looping. */
+const LandingPage = lazyRoute(() => import('./pages/LandingPage').then((m) => ({ default: m.LandingPage })))
+const Login = lazyRoute(() => import('./pages/Login').then((m) => ({ default: m.Login })))
+const DocumentsPage = lazyRoute(() => import('./pages/DocumentsPage').then((m) => ({ default: m.DocumentsPage })))
+const ComposePaper = lazyRoute(() => import('./pages/ComposePaper').then((m) => ({ default: m.ComposePaper })))
+const DocumentEditor = lazyRoute(() => import('./pages/DocumentEditor').then((m) => ({ default: m.DocumentEditor })))
+const Settings = lazyRoute(() => import('./pages/Settings').then((m) => ({ default: m.Settings })))
 
 export default function App() {
   const [theme, setTheme] = useState<ThemeMode>(() => getInitialTheme())
@@ -38,7 +44,11 @@ export default function App() {
             animation in the app goes through Framer Motion or a CSS
             transition, and the stylesheet handles the second kind. */}
         <MotionConfig reducedMotion="user">
-          <Shell theme={theme} onToggleTheme={toggleTheme} />
+          {/* Outside the router, so a crash while rendering a screen still has
+              something to render. */}
+          <ErrorBoundary>
+            <Shell theme={theme} onToggleTheme={toggleTheme} />
+          </ErrorBoundary>
         </MotionConfig>
       </ToastProvider>
     </AuthProvider>
