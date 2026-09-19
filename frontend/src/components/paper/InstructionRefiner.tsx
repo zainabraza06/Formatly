@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { isAbort, paperApi, type RefinedInstructions } from '../../lib/paperApi'
-import { btnGhost, btnPrimary, textarea as uiTextarea } from '../../lib/ui'
+import { Button, Spinner, Textarea } from '../ui'
 
 /** Refines a loose instruction into one the writer can act on, and keeps
  *  refining until the user is happy: they can accept it, ask for another go, or
@@ -62,37 +62,33 @@ export function InstructionRefiner({
   }, [])
 
   return (
-    <div className="mt-2 rounded-xl border border-line bg-surface-2 p-3">
+    <div className="mt-2 rounded-lg border border-line bg-surface-2 p-3">
       <div className="flex items-center justify-between gap-3">
-        <span className="text-[11px] font-semibold uppercase tracking-wide text-muted">
+        <span className="text-2xs font-semibold uppercase tracking-wide text-muted">
           Suggested instructions{round > 1 && ` · attempt ${round}`}
         </span>
-        <button
-          onClick={onClose}
-          className="text-[11px] font-medium text-muted underline-offset-2 hover:text-ink hover:underline"
-        >
-          Close
-        </button>
+        <Button variant="ghost" size="sm" onClick={onClose}>Close</Button>
       </div>
 
       {busy && (
-        <p className="mt-3 text-xs text-muted">
+        <p className="mt-3 flex items-center gap-2 text-xs text-muted" aria-live="polite">
+          <Spinner size="sm" />
           {round === 0 ? 'Reading your instructions…' : 'Revising…'}
         </p>
       )}
 
       {error && !busy && (
-        <div className="mt-3">
+        <div className="mt-3" role="alert">
           <p className="text-xs text-danger">{error}</p>
-          <button onClick={() => run()} className={`${btnGhost} mt-2`}>
+          <Button variant="secondary" size="sm" className="mt-2" onClick={() => run()}>
             Try again
-          </button>
+          </Button>
         </div>
       )}
 
       {result && !busy && (
         <>
-          <pre className="mt-3 max-h-56 overflow-auto whitespace-pre-wrap rounded-lg border border-line bg-surface p-3 text-xs leading-relaxed text-ink">
+          <pre className="mt-3 max-h-56 overflow-auto whitespace-pre-wrap rounded-md border border-line bg-surface p-3 font-sans text-xs leading-relaxed text-ink">
             {result.improved}
           </pre>
 
@@ -108,24 +104,25 @@ export function InstructionRefiner({
           )}
 
           <div className="mt-3 space-y-2">
-            <textarea
+            <Textarea
               value={feedback}
               onChange={(e) => setFeedback(e.target.value)}
               rows={2}
+              aria-label="What to change about the suggestion"
               placeholder="Not quite? Say what to change — e.g. drop the table of contents, add my instructor's name."
-              className={uiTextarea}
             />
             <div className="flex flex-wrap gap-2">
-              <button onClick={() => onAccept(result.improved)} className={btnPrimary}>
+              <Button variant="primary" size="sm" onClick={() => onAccept(result.improved)}>
                 Use these
-              </button>
-              <button
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
                 onClick={() => run(feedback.trim() || undefined)}
                 disabled={busy}
-                className={btnGhost}
               >
                 {feedback.trim() ? 'Apply my feedback' : 'Try another'}
-              </button>
+              </Button>
             </div>
           </div>
         </>
@@ -145,18 +142,18 @@ function List({
 }) {
   return (
     <div className="mt-3">
-      <span className="text-[10px] font-semibold uppercase tracking-wide text-neutral-500">
+      <span className="text-2xs font-semibold uppercase tracking-wide text-muted">
         {label}
       </span>
       <ul className="mt-1 space-y-1">
         {items.map((c, i) => (
-          <li key={i} className="flex gap-2 text-[11px] leading-relaxed text-muted">
-            <span className="mt-[2px] text-ink">·</span>
+          <li key={i} className="flex gap-2 text-xs leading-relaxed text-muted">
+            <span className="mt-px text-ink" aria-hidden>·</span>
             <span>{c}</span>
           </li>
         ))}
       </ul>
-      {hint && <p className="mt-1 text-[10px] text-faint">{hint}</p>}
+      {hint && <p className="mt-1 text-2xs text-faint">{hint}</p>}
     </div>
   )
 }
@@ -181,7 +178,7 @@ export function RefineButton({
           ? 'Write an instruction first, then this can sharpen it'
           : 'Turn this into instructions the writer can act on'
       }
-      className="text-[11px] font-medium text-ink underline-offset-2 hover:underline disabled:cursor-not-allowed disabled:text-faint disabled:no-underline"
+      className="rounded-sm text-xs font-medium text-brand-ink underline-offset-2 hover:underline disabled:cursor-not-allowed disabled:text-faint disabled:no-underline"
     >
       {active ? 'Hide suggestion' : 'Improve'}
     </button>

@@ -1,23 +1,30 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import clsx from 'clsx'
-import { GlassCard } from '../components/GlassCard'
+import { cn } from '../lib/cn'
 import { docosApi } from '../lib/docosApi'
-import { DocumentPreview } from '../components/paper/DocumentPreview'
-import { GenerationStatus } from '../components/paper/GenerationStatus'
-import { InstructionRefiner, RefineButton } from '../components/paper/InstructionRefiner'
 import {
   downloadBlob, isAbort, paperApi,
   type ComposeRequest, type Depth, type PaperSpec, type StyleSummary,
 } from '../lib/paperApi'
 import {
-  btnGhost, btnPrimary,
-  field as uiField, select as uiSelect, selectOption as uiSelectOption,
-  textarea as uiTextarea,
-} from '../lib/ui'
+  outlineInstruction, replaceSection, sectionBlocksFrom, sectionRequest, sectionsOf,
+  suggestedOutline, type Section,
+} from '../lib/paperSections'
+import { useRegisterCommands } from '../context/command-context'
+import {
+  Button, Card, Field, Input, Select, Textarea, Tabs, useToast,
+} from '../components/ui'
+import {
+  ChevronLeftIcon, ChevronRightIcon, ComposeIcon, DownloadIcon, EditorIcon, SparkIcon,
+} from '../components/icons'
+import { ExactPreview } from '../components/paper/ExactPreview'
+import { GenerationStatus } from '../components/paper/GenerationStatus'
+import { InstructionRefiner, RefineButton } from '../components/paper/InstructionRefiner'
+import { OutlineEditor } from '../components/paper/OutlineEditor'
+import { SectionReview } from '../components/paper/SectionReview'
+import { Stepper, type Step } from '../components/paper/Stepper'
 
 // A model left to itself writes concisely, so depth has to be asked for.
-// "detailed" is written section-by-section because one call cannot hold it.
 const DEPTH_OPTIONS: { id: Depth; label: string; hint: string }[] = [
   { id: 'brief', label: 'Brief', hint: '1–2 paragraphs per section' },
   { id: 'standard', label: 'Standard', hint: '2–3 paragraphs per section' },
@@ -29,7 +36,6 @@ const DOC_KINDS = [
   'memo', 'white paper', 'technical documentation', 'essay', 'thesis chapter',
 ]
 
-// Sentinel for a document kind not in the list.
 const CUSTOM_KIND = '__custom_kind__'
 
 const BUILTIN_STYLES: StyleSummary[] = [
@@ -38,98 +44,135 @@ const BUILTIN_STYLES: StyleSummary[] = [
   { id: 'assignment', name: 'Formal Assignment', columns: '1', builtin: 'true', heading_scheme: 'decimal', table_borders: 'grid' },
 ]
 
-export function ComposePaper() {
-  const [styles, setStyles] = useState<StyleSummary[]>(BUILTIN_STYLES)
-  const [style, setStyle] = useState('ieee')
-  const [docKind, setDocKind] = useState('paper')
-  const [depth, setDepth] = useState<Depth>('standard')
+const STEPS: Step[] = [
+  { id: 'material', label: 'Material', hint: 'What it should be about' },
+  { id: 'structure', label: 'Structure', hint: 'Sections and style' },
+  { id: 'generate', label: 'Generate', hint: 'Write the document' },
+  { id: 'review', label: 'Review', hint: 'Read it and fix what you want' },
+]
 
-  const [rawText, setRawText] = useState('')
-  const [instructions, setInstructions] = useState('')
-  const [refining, setRefining] = useState(false)
-  const [handingOff, setHandingOff] = useState(false)
+const DRAFT_KEY = 'formatly.compose.draft'
+
+interface DraftForm {
+  rawText: string
+  instructions: string
+  docKind: string
+  depth: Depth
+  style: string
+  outline: string[]
+  titleHint: string
+  authorName: string
+  authorAffil: string
+}
+
+const EMPTY_FORM: DraftForm = {
+  rawText: '', instructions: '', docKind: 'paper', depth: 'standard',
+  style: 'ieee', outline: [], titleHint: '', authorName: '', authorAffil: '',
+}
+
+/**
+ * Generating a document, as four decisions rather than one long form.
+ *
+ * The form used to show everything at once — material, instructions, style,
+ * kind, depth, title, author, affiliation — and then hand back a finished
+ * document to accept or throw away whole. Here the structure is settled before
+ * anything is written, and afterwards each section can be rewritten on its own.
+ */
+export function ComposePaper() {
   const navigate = useNavigate()
-  const [titleHint, setTitleHint] = useState('')
-  const [authorName, setAuthorName] = useState('')
-  const [authorAffil, setAuthorAffil] = useState('')
+  const toast = useToast()
+
+  const [step, setStep] = useState(0)
+  const [furthest, setFurthest] = useState(0)
+  const [form, setForm] = useState<DraftForm>(() => loadDraft())
+  const [styles, setStyles] = useState<StyleSummary[]>(BUILTIN_STYLES)
+  const [refining, setRefining] = useState(false)
+  const [showMaterialError, setShowMaterialError] = useState(false)
 
   const [spec, setSpec] = useState<PaperSpec | null>(null)
   const [provider, setProvider] = useState('')
-  const [busy, setBusy] = useState<'idle' | 'generating' | 'rendering'>('idle')
+  const [busy, setBusy] = useState<'idle' | 'generating' | 'rendering' | 'section' | 'handoff'>('idle')
+  const [busySection, setBusySection] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [preview, setPreview] = useState<'exact' | 'reading'>('exact')
 
-  // Held for as long as a run is in flight, so Stop has something to abort.
   const runRef = useRef<AbortController | null>(null)
+  // Bumped whenever the spec changes, so the preview remounts and renders the
+  // document that is on screen rather than the one before it.
+  const [revision, setRevision] = useState(0)
 
-  // Exact preview: the real DOCX rendered to PDF. Falls back to the HTML view
-  // while it renders, or if LibreOffice is unavailable.
-  const [pdfUrl, setPdfUrl] = useState<string | null>(null)
-  const [pdfState, setPdfState] = useState<'idle' | 'loading' | 'ready' | 'unavailable'>('idle')
+  const set = <K extends keyof DraftForm>(key: K, value: DraftForm[K]) =>
+    setForm((f) => ({ ...f, [key]: value }))
 
-  const loadStyles = () => {
-    // Only replace the seeded built-ins when the server actually returns styles;
-    // a failure keeps the built-ins visible rather than emptying the dropdown.
+  // The form survives a reload: losing a page of pasted material to a stray
+  // refresh is the kind of thing people do not come back from.
+  useEffect(() => {
+    const id = window.setTimeout(() => {
+      try { localStorage.setItem(DRAFT_KEY, JSON.stringify(form)) } catch { /* private mode */ }
+    }, 400)
+    return () => window.clearTimeout(id)
+  }, [form])
+
+  useEffect(() => {
     paperApi.styles()
       .then((list) => { if (list.length) setStyles(list) })
-      .catch(() => {})
-  }
-  useEffect(loadStyles, [])
+      .catch(() => { /* the built-ins stay, rather than an empty dropdown */ })
+  }, [])
 
-  // Fetch the exact PDF whenever a new spec is ready.
-  useEffect(() => {
-    if (!spec) { setPdfUrl(null); setPdfState('idle'); return }
-    // Aborted on cleanup: a superseded preview would otherwise keep the server
-    // busy rendering a PDF nobody is waiting for any more.
-    const run = new AbortController()
-    let url: string | null = null
-    setPdfState('loading')
-    paperApi.previewPdf(spec, undefined, run.signal)
-      .then((b) => {
-        if (run.signal.aborted) return
-        url = URL.createObjectURL(b)
-        setPdfUrl(url)
-        setPdfState('ready')
-      })
-      .catch((e) => { if (!isAbort(e)) setPdfState('unavailable') })
-    return () => {
-      run.abort()
-      if (url) URL.revokeObjectURL(url)
-    }
-  }, [spec])
+  const sections = useMemo(() => sectionsOf(spec), [spec])
+  const styleName = styles.find((s) => s.id === form.style)?.name || form.style
+  const running = busy === 'generating'
 
-  // Everything goes in one box. The API still accepts labelled attachments —
-  // the CLI uses them for files — but the UI should not make a person decide
-  // which bucket their notes belong in.
   const buildRequest = (): ComposeRequest => ({
-    raw_text: rawText,
-    style,
-    doc_kind: docKind,
-    depth,
-    instructions: instructions.trim() || null,
-    title_hint: titleHint.trim() || null,
-    authors: authorName.trim()
-      ? [{ name: authorName.trim(), affiliation: authorAffil.trim() }]
+    raw_text: form.rawText,
+    style: form.style,
+    doc_kind: form.docKind,
+    depth: form.depth,
+    instructions: [form.instructions.trim() || null, outlineInstruction(form.outline)]
+      .filter(Boolean).join('\n\n') || null,
+    title_hint: form.titleHint.trim() || null,
+    authors: form.authorName.trim()
+      ? [{ name: form.authorName.trim(), affiliation: form.authorAffil.trim() }]
       : [],
   })
 
-  // Abandoning a run is the user's decision, so it is not reported as a failure.
+  // ── actions ───────────────────────────────────────────────────────────────
+
+  const go = (next: number) => {
+    if (next === 1 && !form.rawText.trim()) {
+      setShowMaterialError(true)
+      document.getElementById('compose-material')?.focus()
+      return
+    }
+    setStep(next)
+    setFurthest((f) => Math.max(f, next))
+  }
+
   const stop = () => {
     runRef.current?.abort()
     runRef.current = null
     setBusy('idle')
+    toast.info('Generation stopped', 'Nothing you typed was lost.')
   }
 
   const generate = async () => {
-    if (!rawText.trim()) return
+    if (!form.rawText.trim()) { go(0); setShowMaterialError(true); return }
     const run = new AbortController()
     runRef.current = run
     setBusy('generating')
     setError(null)
     setSpec(null)
+    setStep(2)
+    setFurthest((f) => Math.max(f, 2))
+
     try {
       const res = await paperApi.generate(buildRequest(), run.signal)
       setSpec(res.spec)
+      setRevision((r) => r + 1)
       setProvider(res.provider)
+      setStep(3)
+      setFurthest(3)
+      toast.success('Your document is ready', 'Read it through — any section can be rewritten on its own.')
     } catch (e) {
       if (!isAbort(e)) setError(e instanceof Error ? e.message : 'Generation failed')
     } finally {
@@ -140,18 +183,57 @@ export function ComposePaper() {
     }
   }
 
+  const regenerateSection = async (section: Section, note: string) => {
+    if (!spec) return
+    const before = spec
+    setBusy('section')
+    setBusySection(section.heading)
+    try {
+      const res = await paperApi.generate(sectionRequest(buildRequest(), spec, section, note))
+      const blocks = sectionBlocksFrom(res.spec, section.heading)
+      setSpec(replaceSection(spec, section, blocks))
+      setRevision((r) => r + 1)
+      toast.toast({
+        tone: 'success',
+        title: `“${section.heading}” rewritten`,
+        description: 'The rest of the document is untouched.',
+        action: {
+          label: 'Undo',
+          onClick: () => {
+            setSpec(before)
+            setRevision((r) => r + 1)
+            toast.info('Rewrite undone', `“${section.heading}” is back as it was.`)
+          },
+        },
+      })
+    } catch (e) {
+      toast.error(
+        `Could not rewrite “${section.heading}”`,
+        e instanceof Error ? e.message : 'Please try again.',
+      )
+    } finally {
+      setBusy('idle')
+      setBusySection(null)
+    }
+  }
+
   const download = async () => {
     const run = new AbortController()
     runRef.current = run
     setBusy('rendering')
-    setError(null)
+    const id = toast.loading('Preparing your DOCX…')
     try {
       const b = spec
         ? await paperApi.renderSpec(spec, undefined, run.signal)
         : await paperApi.compose(buildRequest(), run.signal)
-      downloadBlob(b, `${(spec?.meta.title || titleHint || 'document').slice(0, 60)}.docx`)
+      downloadBlob(b, `${(spec?.meta.title || form.titleHint || 'document').slice(0, 60)}.docx`)
+      toast.toast({ id, tone: 'success', title: 'DOCX downloaded' })
     } catch (e) {
-      if (!isAbort(e)) setError(e instanceof Error ? e.message : 'Render failed')
+      if (isAbort(e)) toast.dismiss(id)
+      else toast.toast({
+        id, tone: 'error', title: 'Could not prepare the DOCX',
+        description: e instanceof Error ? e.message : 'Please try again.',
+      })
     } finally {
       if (runRef.current === run) {
         runRef.current = null
@@ -161,307 +243,418 @@ export function ComposePaper() {
   }
 
   // The spec goes across directly rather than as a rendered .docx: the file
-  // format has no word for a listing, an equation or a chart, so routing through
-  // one would hand the editor loose paragraphs and anonymous pictures.
-  const openInDocumentOS = async () => {
+  // format has no word for a listing, an equation or a chart, so routing
+  // through one would hand the editor loose paragraphs and anonymous pictures.
+  const openInEditor = async () => {
     if (!spec) return
-    setHandingOff(true)
-    setError(null)
+    setBusy('handoff')
     try {
       const res = await docosApi.importSpec(spec, spec.meta.title || 'Document')
       navigate(`/app/editor?doc=${encodeURIComponent(res.document_id)}`)
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not open in Document OS')
+      toast.error('Could not open it in the editor', e instanceof Error ? e.message : 'Please try again.')
     } finally {
-      setHandingOff(false)
+      setBusy('idle')
     }
   }
 
-  const styleName = styles.find((s) => s.id === style)?.name || style
+  const startOver = () => {
+    setSpec(null)
+    setProvider('')
+    setError(null)
+    setForm(EMPTY_FORM)
+    try { localStorage.removeItem(DRAFT_KEY) } catch { /* private mode */ }
+    setStep(0)
+    setFurthest(0)
+  }
+
+  useRegisterCommands(() => [
+    { id: 'compose-generate', group: 'Generate', label: 'Generate the document',
+      icon: <ComposeIcon />, disabled: running || !form.rawText.trim(), run: generate },
+    { id: 'compose-download', group: 'Generate', label: 'Download as DOCX',
+      icon: <DownloadIcon />, disabled: !spec, run: download },
+    { id: 'compose-editor', group: 'Generate', label: 'Open in the editor',
+      icon: <EditorIcon />, disabled: !spec, run: openInEditor },
+    { id: 'compose-restart', group: 'Generate', label: 'Start a new document',
+      run: startOver },
+  ], [spec, running, form.rawText])
+
+  // ── render ────────────────────────────────────────────────────────────────
 
   return (
-    <div className="space-y-4">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight text-ink">Compose</h1>
-        <p className="mt-2 text-base text-muted">
-          Describe what you need and give it your material — the AI writes the document,
-          you get a formatted DOCX.
-        </p>
+    <div className="space-y-5">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight text-ink">Generate a document</h1>
+          <p className="mt-1 text-sm text-muted">{STEPS[step].hint}</p>
+        </div>
+        {spec && (
+          <Button variant="ghost" size="sm" onClick={startOver}>Start a new one</Button>
+        )}
       </div>
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_400px]">
-        {/* ── material ── */}
-        <GlassCard className="space-y-3">
-          <Field
-            label="Your material *"
-            hint="Everything goes here: what you want written, plus any notes, data, transcripts or code it should draw on. Numbers become tables and charts automatically."
-          >
-            <textarea
-              value={rawText}
-              onChange={(e) => setRawText(e.target.value)}
-              rows={20}
-              placeholder={`Say what you need, then paste everything it should be based on. For example:
+      <Stepper steps={STEPS} current={step} furthest={furthest} onGo={go} />
+
+      {/* ── 1. Material ──────────────────────────────────────────────────── */}
+      {step === 0 && (
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+          <Card className="space-y-4">
+            <Field
+              label="Your material"
+              required
+              error={showMaterialError && !form.rawText.trim()
+                ? 'Add something to work from — a brief, notes, data, or just a sentence saying what you need.'
+                : null}
+              hint="Everything goes here: what you want written, plus any notes, data, transcripts or code it should draw on. Numbers become tables and charts automatically."
+            >
+              {(props) => (
+                <Textarea
+                  {...props}
+                  id="compose-material"
+                  value={form.rawText}
+                  onChange={(e) => { set('rawText', e.target.value); setShowMaterialError(false) }}
+                  rows={16}
+                  placeholder={`Say what you need, then paste everything it should be based on. For example:
 
 Write a report on our Q3 customer churn for the leadership team.
 
 Survey: 412 cancelling customers. Price 63%, missing features 21%, support 11%, other 5%.
 Churn by month: July 4.2%, August 5.1%, September 6.8%.
 Interview: "The renewal price jumped 40% with no warning."`}
-              className={area}
-            />
-          </Field>
-
-          <div>
-            <div className="mb-1 flex items-center justify-between gap-3">
-              <span className="text-[11px] font-semibold uppercase tracking-wide text-muted">
-                Extra instructions
-              </span>
-              <RefineButton
-                disabled={!instructions.trim()}
-                active={refining}
-                onClick={() => setRefining((r) => !r)}
-              />
-            </div>
-            <textarea value={instructions} onChange={(e) => setInstructions(e.target.value)}
-                      rows={3}
-                      placeholder={`e.g. Bold the important keywords and technical terms.
-Keep it under 4 pages.
-Write in the first person plural.`}
-                      className={area} />
-            <span className="mt-1 block text-[10px] text-faint">
-              Followed as written, and they override the defaults. One per line is fine.
-            </span>
-
-            {refining && instructions.trim() && (
-              <InstructionRefiner
-                instructions={instructions}
-                rawText={rawText}
-                docKind={docKind}
-                style={style}
-                onAccept={(improved) => {
-                  setInstructions(improved)
-                  setRefining(false)
-                }}
-                onClose={() => setRefining(false)}
-              />
-            )}
-          </div>
-        </GlassCard>
-
-        {/* ── settings + actions ── */}
-        <div className="space-y-4">
-          <GlassCard className="space-y-3">
-            <div>
-              <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-neutral-500">
-                Style
-              </span>
-
-              <select
-                value={style}
-                onChange={(e) => setStyle(e.target.value)}
-                className={select}
-              >
-                <optgroup label="Built-in">
-                  {styles.filter((s) => s.builtin === 'true').map((s) => (
-                    <option key={s.id} value={s.id} className={option}>
-                      {s.name} ({s.columns} col)
-                    </option>
-                  ))}
-                </optgroup>
-                {styles.some((s) => s.builtin === 'false') && (
-                  <optgroup label="My styles">
-                    {styles.filter((s) => s.builtin === 'false').map((s) => (
-                      <option key={s.id} value={s.id} className={option}>{s.name}</option>
-                    ))}
-                  </optgroup>
-                )}
-              </select>
-            </div>
-
-            <Field label="Document kind">
-              <select
-                value={DOC_KINDS.includes(docKind) ? docKind : CUSTOM_KIND}
-                onChange={(e) => {
-                  const v = e.target.value
-                  setDocKind(v === CUSTOM_KIND ? '' : v)
-                }}
-                className={select}
-              >
-                {DOC_KINDS.map((k) => (
-                  <option key={k} value={k} className={option}>
-                    {k.charAt(0).toUpperCase() + k.slice(1)}
-                  </option>
-                ))}
-                <option value={CUSTOM_KIND} className={option}>Something else…</option>
-              </select>
-              {!DOC_KINDS.includes(docKind) && (
-                <input
-                  value={docKind}
-                  onChange={(e) => setDocKind(e.target.value)}
-                  placeholder="e.g. grant proposal, policy brief"
-                  className={`${input} mt-2`}
                 />
               )}
             </Field>
 
-            <Field label="Depth" hint={DEPTH_OPTIONS.find((d) => d.id === depth)?.hint}>
-              <div className="flex gap-1">
-                {DEPTH_OPTIONS.map((d) => (
-                  <button
-                    key={d.id}
-                    onClick={() => setDepth(d.id)}
-                    className={clsx(
-                      'flex-1 rounded-lg border px-2 py-1.5 text-[11px] font-medium transition-colors',
-                      depth === d.id
-                        ? 'border-ink bg-accent text-accent-fg'
-                        : 'border-line bg-surface text-muted hover:bg-surface-2 hover:text-ink',
-                    )}
-                  >
-                    {d.label}
-                  </button>
-                ))}
+            <div>
+              <div className="mb-1.5 flex items-center justify-between gap-3">
+                <span className="text-sm font-medium text-ink">Extra instructions</span>
+                <RefineButton
+                  disabled={!form.instructions.trim()}
+                  active={refining}
+                  onClick={() => setRefining((r) => !r)}
+                />
               </div>
-            </Field>
+              <Textarea
+                value={form.instructions}
+                onChange={(e) => set('instructions', e.target.value)}
+                rows={3}
+                aria-label="Extra instructions"
+                placeholder={`e.g. Bold the important keywords and technical terms.
+Keep it under 4 pages.
+Write in the first person plural.`}
+              />
+              <p className="mt-1.5 text-xs text-faint">
+                Followed as written, and they override the defaults. One per line is fine.
+              </p>
 
-            <Field label="Title hint">
-              <input value={titleHint} onChange={(e) => setTitleHint(e.target.value)}
-                     placeholder="Leave blank to let the AI title it" className={input} />
-            </Field>
-
-            <div className="grid grid-cols-2 gap-2">
-              <Field label="Author">
-                <input value={authorName} onChange={(e) => setAuthorName(e.target.value)}
-                       placeholder="Your name" className={input} />
-              </Field>
-              <Field label="Affiliation">
-                <input value={authorAffil} onChange={(e) => setAuthorAffil(e.target.value)}
-                       placeholder="Organisation" className={input} />
-              </Field>
-            </div>
-
-            <div className="flex gap-2 pt-1">
-              {/* While a run is in flight the only useful action is calling it
-                  off, so Stop replaces the rest. There is nothing to download
-                  until something has been written, so that button waits. */}
-              {busy !== 'idle' ? (
-                <button onClick={stop} className={`${btnGhost} flex-1`}>
-                  Stop
-                </button>
-              ) : (
-                <>
-                  <button
-                    onClick={generate}
-                    disabled={!rawText.trim()}
-                    className={`${btnPrimary} flex-1`}
-                  >
-                    {spec ? 'Regenerate' : 'Generate'}
-                  </button>
-                  {spec && (
-                    <button onClick={download} className={`${btnGhost} flex-1`}>
-                      Download DOCX
-                    </button>
-                  )}
-                </>
+              {refining && form.instructions.trim() && (
+                <InstructionRefiner
+                  instructions={form.instructions}
+                  rawText={form.rawText}
+                  docKind={form.docKind}
+                  style={form.style}
+                  onAccept={(improved) => { set('instructions', improved); setRefining(false) }}
+                  onClose={() => setRefining(false)}
+                />
               )}
             </div>
-            <div className="text-[10px] text-faint">
-              Rendering as <span className="font-medium text-muted">{styleName}</span>
-              {provider && <> · written by <span className="font-medium text-muted">{provider}</span></>}
-            </div>
-          </GlassCard>
+          </Card>
 
-          {/* Working / error status appears right where the result will, so
-              attention stays in one place instead of jumping to the top. */}
-          <GenerationStatus
-            state={
-              busy === 'generating' || (busy === 'rendering' && !spec)
-                ? 'generating'
-                : error
-                  ? 'error'
-                  : null
-            }
-            error={error}
-            onRetry={generate}
-          />
-        </div>
-      </div>
+          <div className="space-y-4">
+            <Card className="space-y-4">
+              <Field label="Document kind">
+                {(props) => (
+                  <>
+                    <Select
+                      {...props}
+                      value={DOC_KINDS.includes(form.docKind) ? form.docKind : CUSTOM_KIND}
+                      onChange={(e) => set('docKind', e.target.value === CUSTOM_KIND ? '' : e.target.value)}
+                    >
+                      {DOC_KINDS.map((k) => (
+                        <option key={k} value={k}>{k.charAt(0).toUpperCase() + k.slice(1)}</option>
+                      ))}
+                      <option value={CUSTOM_KIND}>Something else…</option>
+                    </Select>
+                    {!DOC_KINDS.includes(form.docKind) && (
+                      <Input
+                        value={form.docKind}
+                        onChange={(e) => set('docKind', e.target.value)}
+                        placeholder="e.g. grant proposal, policy brief"
+                        aria-label="Document kind"
+                        className="mt-2"
+                      />
+                    )}
+                  </>
+                )}
+              </Field>
 
-      {/* ── finished document, rendered in full ── */}
-      {spec && busy !== 'generating' && !error && (
-        <div className="space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h2 className="flex items-center gap-2 text-sm font-semibold text-ink">
-                Preview
-                <span className={clsx(
-                  'rounded-full px-2 py-0.5 text-[10px] font-medium',
-                  pdfState === 'ready'
-                    ? 'bg-ink/10 text-ink'
-                    : 'border border-line text-muted',
-                )}>
-                  {pdfState === 'ready' ? 'Exact document' : pdfState === 'loading' ? 'Rendering exact…' : 'Reading view'}
-                </span>
-              </h2>
-              <p className="text-xs text-muted">
-                {styleName}{provider && <> · written by <span className="font-medium">{provider}</span></>}
-              </p>
-            </div>
-            <div className="flex shrink-0 gap-2">
-              {/* The document is finished but not necessarily final — this is
-                  the point where someone wants to change something by hand. */}
-              <button
-                onClick={openInDocumentOS}
-                disabled={busy !== 'idle' || handingOff}
-                className={btnGhost}
-                title="Open this document in the editor to change it by hand"
-              >
-                {handingOff ? 'Opening…' : 'Edit in Document OS'}
-              </button>
-              <button
-                onClick={download}
-                disabled={busy !== 'idle' || handingOff}
-                className={`${btnPrimary} px-5`}
-              >
-                {busy === 'rendering' ? 'Preparing…' : 'Download DOCX'}
-              </button>
+              <div>
+                <p className="mb-1.5 text-sm font-medium text-ink">Depth</p>
+                <Tabs
+                  label="How much to write per section"
+                  value={form.depth}
+                  onChange={(id) => set('depth', id)}
+                  items={DEPTH_OPTIONS.map((d) => ({ id: d.id, label: d.label }))}
+                  className="w-full"
+                />
+                <p className="mt-1.5 text-xs text-faint">
+                  {DEPTH_OPTIONS.find((d) => d.id === form.depth)?.hint}
+                </p>
+              </div>
+            </Card>
+
+            <div className="flex justify-end">
+              <Button variant="primary" onClick={() => go(1)} trailingIcon={<ChevronRightIcon />}>
+                Continue
+              </Button>
             </div>
           </div>
+        </div>
+      )}
 
-          {pdfState === 'ready' && pdfUrl ? (
-            <iframe
-              title="Exact document preview"
-              src={pdfUrl}
-              className="h-[80vh] w-full rounded-xl border border-line bg-white"
+      {/* ── 2. Structure ─────────────────────────────────────────────────── */}
+      {step === 1 && (
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+          <Card className="space-y-4">
+            <div>
+              <h2 className="text-base font-semibold text-ink">Sections</h2>
+              <p className="mt-0.5 text-sm text-muted">
+                Decide the structure now, and the writer follows it exactly.
+              </p>
+            </div>
+            <OutlineEditor
+              sections={form.outline}
+              onChange={(next) => set('outline', next)}
+              suggestion={suggestedOutline(form.docKind)}
             />
-          ) : (
-            <div className="max-h-[80vh] overflow-auto rounded-xl border border-line bg-neutral-200/60 p-4 dark:bg-neutral-800/50 sm:p-8">
-              {pdfState === 'unavailable' && (
-                <div className="mb-3 text-center text-[11px] text-muted">
-                  Showing a reading view — the exact document render needs LibreOffice on the server.
-                </div>
+          </Card>
+
+          <div className="space-y-4">
+            <Card className="space-y-4">
+              <Field label="Style" hint={`Rendered as ${styleName}.`}>
+                {(props) => (
+                  <Select {...props} value={form.style} onChange={(e) => set('style', e.target.value)}>
+                    <optgroup label="Built-in">
+                      {styles.filter((s) => s.builtin === 'true').map((s) => (
+                        <option key={s.id} value={s.id}>{s.name} ({s.columns} col)</option>
+                      ))}
+                    </optgroup>
+                    {styles.some((s) => s.builtin === 'false') && (
+                      <optgroup label="My styles">
+                        {styles.filter((s) => s.builtin === 'false').map((s) => (
+                          <option key={s.id} value={s.id}>{s.name}</option>
+                        ))}
+                      </optgroup>
+                    )}
+                  </Select>
+                )}
+              </Field>
+
+              <Field label="Title" optional hint="Leave blank to let the AI title it.">
+                {(props) => (
+                  <Input
+                    {...props}
+                    value={form.titleHint}
+                    onChange={(e) => set('titleHint', e.target.value)}
+                    placeholder="Untitled"
+                  />
+                )}
+              </Field>
+
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Author" optional>
+                  {(props) => (
+                    <Input {...props} value={form.authorName}
+                           onChange={(e) => set('authorName', e.target.value)} placeholder="Your name" />
+                  )}
+                </Field>
+                <Field label="Affiliation" optional>
+                  {(props) => (
+                    <Input {...props} value={form.authorAffil}
+                           onChange={(e) => set('authorAffil', e.target.value)} placeholder="Organisation" />
+                  )}
+                </Field>
+              </div>
+            </Card>
+
+            <div className="flex justify-between gap-2">
+              <Button variant="ghost" onClick={() => go(0)} leadingIcon={<ChevronLeftIcon />}>
+                Back
+              </Button>
+              <Button variant="primary" onClick={() => go(2)} trailingIcon={<ChevronRightIcon />}>
+                Continue
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── 3. Generate ──────────────────────────────────────────────────── */}
+      {step === 2 && (
+        <div className="mx-auto w-full max-w-2xl space-y-4">
+          <Card className="space-y-4">
+            <div>
+              <h2 className="text-base font-semibold text-ink">Ready to write</h2>
+              <p className="mt-0.5 text-sm text-muted">
+                This is what the document will be made from. Anything here can still be changed.
+              </p>
+            </div>
+
+            <dl className="divide-y divide-line rounded-md border border-line">
+              <Summary label="Material" value={`${words(form.rawText)} words of material`} onEdit={() => go(0)} />
+              <Summary
+                label="Structure"
+                value={form.outline.length ? form.outline.join(' · ') : 'Planned by the AI'}
+                onEdit={() => go(1)}
+              />
+              <Summary label="Style" value={styleName} onEdit={() => go(1)} />
+              <Summary label="Kind & depth" value={`${form.docKind || 'document'} · ${form.depth}`} onEdit={() => go(0)} />
+              {form.instructions.trim() && (
+                <Summary label="Instructions" value={form.instructions.trim()} onEdit={() => go(0)} />
               )}
-              <DocumentPreview spec={spec} />
+            </dl>
+
+            {!running && (
+              <Button variant="primary" size="lg" fullWidth onClick={generate} leadingIcon={<SparkIcon />}>
+                {spec ? 'Write it again' : 'Write the document'}
+              </Button>
+            )}
+          </Card>
+
+          <GenerationStatus
+            state={running ? 'working' : error ? 'error' : null}
+            error={error}
+            onRetry={generate}
+            onStop={stop}
+          />
+
+          {!running && !error && (
+            <div className="flex justify-start">
+              <Button variant="ghost" onClick={() => go(1)} leadingIcon={<ChevronLeftIcon />}>Back</Button>
             </div>
           )}
         </div>
+      )}
+
+      {/* ── 4. Review ────────────────────────────────────────────────────── */}
+      {step === 3 && spec && (
+        <div className="space-y-4">
+          <Card className="flex flex-wrap items-center justify-between gap-3">
+            <div className="min-w-0">
+              <h2 className="truncate text-base font-semibold text-ink">
+                {spec.meta.title || 'Untitled document'}
+              </h2>
+              <p className="mt-0.5 text-xs text-muted">
+                {styleName}
+                {provider && <> · written by {provider}</>}
+                {' · '}{sections.length} {sections.length === 1 ? 'section' : 'sections'}
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="secondary"
+                onClick={openInEditor}
+                loading={busy === 'handoff'}
+                leadingIcon={<EditorIcon />}
+              >
+                Edit in the editor
+              </Button>
+              <Button
+                variant="primary"
+                onClick={download}
+                loading={busy === 'rendering'}
+                leadingIcon={<DownloadIcon />}
+              >
+                Download DOCX
+              </Button>
+            </div>
+          </Card>
+
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <Tabs
+                  label="How to show the document"
+                  size="sm"
+                  value={preview}
+                  onChange={setPreview}
+                  items={[
+                    { id: 'exact', label: 'Exact page' },
+                    { id: 'reading', label: 'Reading view' },
+                  ]}
+                />
+                <p className="text-2xs text-faint">
+                  {preview === 'exact'
+                    ? 'This is the file you will download.'
+                    : 'A plain reading view — quicker, but not the exact layout.'}
+                </p>
+              </div>
+
+              <ExactPreview key={`${revision}-${preview}`} spec={spec} mode={preview} />
+            </div>
+
+            <div className="space-y-2">
+              <div>
+                <h2 className="text-base font-semibold text-ink">Sections</h2>
+                <p className="mt-0.5 text-sm text-muted">
+                  Rewrite any one of them without touching the rest.
+                </p>
+              </div>
+              <SectionReview
+                sections={sections}
+                busyHeading={busySection}
+                disabled={busy !== 'idle'}
+                onRegenerate={regenerateSection}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* The review step with nothing to review: only reachable by jumping
+          back to it after starting over. */}
+      {step === 3 && !spec && (
+        <Card>
+          <p className="text-sm text-muted">
+            Nothing has been written yet.{' '}
+            <button onClick={() => go(2)} className="font-medium text-brand-ink hover:underline">
+              Go back and generate the document
+            </button>
+            .
+          </p>
+        </Card>
       )}
     </div>
   )
 }
 
-const input = uiField
-const area = uiTextarea
-const select = uiSelect
-const option = uiSelectOption
-
-function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+function Summary({ label, value, onEdit }: { label: string; value: string; onEdit: () => void }) {
   return (
-    <label className="block">
-      <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-muted">
-        {label}
-      </span>
-      {children}
-      {hint && <span className="mt-1 block text-xs text-faint">{hint}</span>}
-    </label>
+    <div className="flex items-start gap-3 px-3 py-2.5">
+      <dt className="w-28 shrink-0 text-xs font-medium text-muted">{label}</dt>
+      <dd className={cn('min-w-0 flex-1 text-sm text-ink', 'line-clamp-2')}>{value}</dd>
+      <button
+        type="button"
+        onClick={onEdit}
+        className="shrink-0 text-xs font-medium text-brand-ink hover:underline"
+      >
+        Change
+      </button>
+    </div>
   )
+}
+
+function words(text: string): number {
+  return text.trim().split(/\s+/).filter(Boolean).length
+}
+
+function loadDraft(): DraftForm {
+  try {
+    const raw = localStorage.getItem(DRAFT_KEY)
+    if (!raw) return EMPTY_FORM
+    const parsed = JSON.parse(raw) as Partial<DraftForm>
+    return { ...EMPTY_FORM, ...parsed, outline: Array.isArray(parsed.outline) ? parsed.outline : [] }
+  } catch {
+    return EMPTY_FORM
+  }
 }
