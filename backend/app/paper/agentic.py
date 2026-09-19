@@ -28,7 +28,6 @@ from app.paper.jsonx import extract_json
 from app.paper.prompt import (
     build_plan_message, build_section_message, plan_system_prompt, section_system_prompt,
 )
-from app.paper.schema import Block, PaperSpec
 from app.services.router import GenerationCancelled
 
 # Budgets per pass. Each is generous for its job yet far below any ceiling,

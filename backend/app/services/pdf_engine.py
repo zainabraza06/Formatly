@@ -166,7 +166,6 @@ def build_pdf(
     margin_in   = float(ts.get("margin_in") or extracted_rules.get("margin_in") or preset.margin_in)
     margin_mm   = margin_in * 25.4
     heading1_pt = int(ts.get("heading1_pt") or extracted_rules.get("heading_size_pt") or preset.heading1_pt)
-    heading2_pt = max(heading1_pt - 2, 10)
     body_pt     = preset.body_pt
 
     pdf = _Doc(font=font, margin_mm=margin_mm)

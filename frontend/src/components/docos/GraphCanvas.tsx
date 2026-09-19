@@ -216,7 +216,12 @@ export function GraphCanvas({
   // Keep the page index in range as the document changes, and follow the
   // assistant to the page it is working on. A node split across a page boundary
   // carries a suffixed id, so the base id is what is matched.
+  //
+  // A deliberate setState in an effect: the page to show depends on the
+  // pagination, which is measured from the DOM and so cannot be derived during
+  // render. The updater returns the same value when nothing has changed.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setPage((current) => {
       const clamped = Math.min(Math.max(current, 0), pages.length - 1)
       if (!focusId) return clamped

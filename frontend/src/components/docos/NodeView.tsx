@@ -4,7 +4,7 @@ import type { CSSProperties } from 'react'
 import type { GraphNode, Run, Style } from '../../types/docos'
 import { inlineRuns } from '../../types/docos'
 import { Maths } from './Maths'
-import { knownEquations, splitMaths } from '../../lib/maths'
+import { knownEquations, splitMaths, type MathsPiece } from '../../lib/maths'
 import type { DiffMark } from '../../lib/diffMarks'
 import { NODE_LABEL } from '../../lib/graphUtils'
 
@@ -269,14 +269,23 @@ function Text({ node, mark, renderAll }: {
     // Where each piece starts in the node's text, so the words in it can be
     // drawn with the formatting they actually have. The dollars count: they
     // are in `content` even though they are not shown once the maths is drawn.
-    let at = 0
+    // Each piece's offset is where the ones before it end. Summed here rather
+    // than carried in a variable across the map, so the offsets do not depend
+    // on the order React happens to call the children in.
+    const rawOf = (piece: MathsPiece) =>
+      piece.kind === 'text' ? piece.value
+        : piece.kind === 'display' ? `$$${piece.value}$$` : `$${piece.value}$`
+    const offsets = pieces.reduce<number[]>((acc, _, i) => {
+      acc.push(i === 0 ? 0 : acc[i - 1] + rawOf(pieces[i - 1]).length)
+      return acc
+    }, [])
+
     return (
       <>
         {pieces.map((piece, i) => {
-          const raw = piece.kind === 'text' ? piece.value
-            : piece.kind === 'display' ? `$$${piece.value}$$` : `$${piece.value}$`
-          const from = at
-          at += raw.length
+          const raw = rawOf(piece)
+          const from = offsets[i]
+          const at = from + raw.length
           const isMaths = piece.kind !== 'text' && (renderAll || known.has(piece.value))
           if (isMaths) {
             return <Maths key={i} latex={piece.value} display={alone || piece.kind === 'display'} />

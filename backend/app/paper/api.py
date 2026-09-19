@@ -10,7 +10,6 @@ from __future__ import annotations
 import anyio
 import anyio.to_thread
 import threading
-from datetime import datetime, timezone
 from typing import Any, Callable, Optional, TypeVar
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Request
@@ -20,7 +19,7 @@ from pydantic import BaseModel, Field, ValidationError
 from app.docos.auth import get_current_user
 from app.docos.auth.store import User
 from app.paper.generator import PaperGenerationError, generate_paper
-from app.paper.prompt import DEFAULT_DEPTH, DEPTHS
+from app.paper.prompt import DEFAULT_DEPTH
 from app.paper.refine import InstructionRefinementError, refine_instructions
 from app.paper.renderer import render_paper
 from app.paper.schema import PaperSpec

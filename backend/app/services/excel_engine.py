@@ -17,7 +17,6 @@ from openpyxl.styles import (
     Alignment,
     Border,
     Font,
-    GradientFill,
     PatternFill,
     Side,
 )
@@ -111,7 +110,6 @@ def _build_chart_data_sheet(wb: Workbook, specs: list[ChartSpec]) -> None:
     col = 1
     for idx, spec in enumerate(specs, 1):
         # chart title
-        title_cell = f"{get_column_letter(col)}1"
         _cell(ws, 1, col, f"Chart {idx}: {spec.title}",
               font=_HEADER_FONT, fill=_HEADER_FILL, align="center", border=True)
         ws.merge_cells(

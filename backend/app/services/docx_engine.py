@@ -18,7 +18,7 @@ from docx import Document
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
-from docx.shared import Inches, Pt, RGBColor
+from docx.shared import Inches, RGBColor
 
 from app.schemas import ChartSpec, DocumentSection
 from app.services.presets import StyleConfig, get_preset, pt

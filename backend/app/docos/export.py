@@ -23,7 +23,7 @@ from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Inches, Pt, RGBColor
 
-from app.docos.graph import DocumentGraph, Node, NodeType
+from app.docos.graph import DocumentGraph, Node, NodeType, Style
 from app.docos.parser.omml_write import latex_to_omml
 
 _ALIGN = {

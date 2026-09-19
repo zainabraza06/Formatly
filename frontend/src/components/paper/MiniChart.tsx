@@ -4,7 +4,7 @@
 
 const PALETTE = ['#4f86f7', '#22c55e', '#f43f5e', '#a855f7', '#f59e0b', '#06b6d4', '#84cc16', '#ec4899']
 
-interface Chart {
+export interface Chart {
   kind: string
   title?: string
   x_label?: string
@@ -162,16 +162,24 @@ function Pie({ chart }: { chart: Chart }) {
   const cx = PAD.left + plotW / 2 - 40
   const cy = PAD.top + plotH / 2
   const r = Math.min(plotW, plotH) / 2 - 6
-  let angle = -Math.PI / 2
+  // Each slice starts where the ones before it end. Summing the earlier
+  // values says that directly, rather than carrying a variable across renders
+  // that are not guaranteed to happen in order.
+  const START = -Math.PI / 2
+  const sliceAt = (i: number) => (values[i] / total) * Math.PI * 2
+  const startAt = (i: number) =>
+    START + values.slice(0, i).reduce((sum, v) => sum + (v / total) * Math.PI * 2, 0)
+
   return (
     <>
-      {values.map((v, i) => {
-        const slice = (v / total) * Math.PI * 2
-        const x1 = cx + r * Math.cos(angle)
-        const y1 = cy + r * Math.sin(angle)
-        angle += slice
-        const x2 = cx + r * Math.cos(angle)
-        const y2 = cy + r * Math.sin(angle)
+      {values.map((_, i) => {
+        const slice = sliceAt(i)
+        const from = startAt(i)
+        const to = from + slice
+        const x1 = cx + r * Math.cos(from)
+        const y1 = cy + r * Math.sin(from)
+        const x2 = cx + r * Math.cos(to)
+        const y2 = cy + r * Math.sin(to)
         const large = slice > Math.PI ? 1 : 0
         return <path key={i} d={`M${cx},${cy} L${x1},${y1} A${r},${r} 0 ${large} 1 ${x2},${y2} Z`}
                      fill={PALETTE[i % PALETTE.length]} />

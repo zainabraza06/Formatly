@@ -1,12 +1,15 @@
 import type { ReactNode } from 'react'
-import { MiniChart } from './MiniChart'
+import { MiniChart, type Chart } from './MiniChart'
 import type { PaperSpec } from '../../lib/paperApi'
 
 /** Renders the finished document as a readable page — the way it will look once
  *  exported — so the result appears in full when ready, not just as stats. Always
  *  light "paper" regardless of the app theme. */
 export function DocumentPreview({ spec }: { spec: PaperSpec }) {
-  const counters = { h1: 0, h2: 0, h3: 0, table: 0, figure: 0, equation: 0 }
+  // Numbered in one pass before anything renders. Counting while rendering
+  // means the numbers depend on the order React happens to call the children
+  // in, which is not a promise React makes.
+  const numbered = numberBlocks(spec.blocks)
 
   return (
     <div
@@ -45,8 +48,8 @@ export function DocumentPreview({ spec }: { spec: PaperSpec }) {
 
         {/* body */}
         <div className="space-y-3">
-          {spec.blocks.map((b, i) => (
-            <Block key={i} block={b} counters={counters} />
+          {numbered.map(({ block, numbering }, i) => (
+            <Block key={i} block={block} numbering={numbering} />
           ))}
         </div>
 
@@ -68,35 +71,73 @@ export function DocumentPreview({ spec }: { spec: PaperSpec }) {
   )
 }
 
-type Counters = { h1: number; h2: number; h3: number; table: number; figure: number; equation: number }
+/** What a block is called in the finished document: its heading number, or
+ *  its figure, table or equation number. */
+interface Numbering {
+  heading?: string
+  table?: number
+  figure?: number
+  equation?: number
+}
 
-function Block({ block, counters }: { block: Record<string, any>; counters: Counters }) {
+type Block = Record<string, unknown>
+
+/** Walk the blocks once, working out every number the page will show. */
+function numberBlocks(blocks: Block[]): { block: Block; numbering: Numbering }[] {
+  let h1 = 0
+  let h2 = 0
+  let h3 = 0
+  let table = 0
+  let figure = 0
+  let equation = 0
+
+  return blocks.map((block) => {
+    switch (block.type) {
+      case 'heading': {
+        const level = Math.min(3, Math.max(1, Number(block.level) || 1))
+        if (level === 1) { h1 += 1; h2 = 0; h3 = 0; return { block, numbering: { heading: `${h1}. ` } } }
+        if (level === 2) { h2 += 1; h3 = 0; return { block, numbering: { heading: `${h1}.${h2} ` } } }
+        h3 += 1
+        return { block, numbering: { heading: `${h1}.${h2}.${h3} ` } }
+      }
+      case 'table':
+        table += 1
+        return { block, numbering: { table } }
+      case 'figure':
+        figure += 1
+        return { block, numbering: { figure } }
+      case 'equation':
+        equation += 1
+        return { block, numbering: { equation } }
+      default:
+        return { block, numbering: {} }
+    }
+  })
+}
+
+function Block({ block, numbering }: { block: Block; numbering: Numbering }) {
   switch (block.type) {
     case 'heading': {
-      const level = Math.min(3, Math.max(1, block.level || 1))
-      let label = ''
-      if (level === 1) { counters.h1++; counters.h2 = 0; counters.h3 = 0; label = `${counters.h1}. ` }
-      else if (level === 2) { counters.h2++; counters.h3 = 0; label = `${counters.h1}.${counters.h2} ` }
-      else { counters.h3++; label = `${counters.h1}.${counters.h2}.${counters.h3} ` }
+      const level = Math.min(3, Math.max(1, Number(block.level) || 1))
+      const label = numbering.heading ?? ''
       const cls = level === 1 ? 'mt-4 text-[16px] font-bold'
         : level === 2 ? 'mt-3 text-[14px] font-bold'
         : 'mt-2 text-[13px] font-bold italic'
-      return <h2 className={cls}>{label}{block.text}</h2>
+      return <h2 className={cls}>{label}{String(block.text ?? '')}</h2>
     }
     case 'paragraph':
-      return <p className="text-justify text-[13px] leading-relaxed" style={{ textIndent: '1.4em' }}>{inline(block.text || '')}</p>
+      return <p className="text-justify text-[13px] leading-relaxed" style={{ textIndent: '1.4em' }}>{inline(String(block.text ?? ''))}</p>
     case 'list':
       return (
         <ul className="ml-5 list-disc space-y-1 text-[13px] leading-relaxed">
-          {(block.items || []).map((it: string, i: number) => <li key={i}>{inline(it)}</li>)}
+          {((block.items as string[] | undefined) ?? []).map((it, i) => <li key={i}>{inline(it)}</li>)}
         </ul>
       )
     case 'equation': {
-      counters.equation++
       return (
         <div className="flex items-center gap-2 text-[13px]">
-          <div className="flex-1 text-center italic">{block.text}</div>
-          {block.numbered !== false && <div className="text-neutral-500">({counters.equation})</div>}
+          <div className="flex-1 text-center italic">{String(block.text ?? '')}</div>
+          {block.numbered !== false && <div className="text-neutral-500">({numbering.equation})</div>}
         </div>
       )
     }
@@ -104,17 +145,16 @@ function Block({ block, counters }: { block: Record<string, any>; counters: Coun
       return (
         <pre className="overflow-x-auto rounded bg-neutral-100 p-3 text-[11px] leading-relaxed text-neutral-800"
              style={{ fontFamily: 'Consolas, "Courier New", monospace' }}>
-          {block.text}
+          {String(block.text ?? '')}
         </pre>
       )
     case 'table': {
-      counters.table++
-      const cols: string[] = block.columns || []
-      const rows: string[][] = block.rows || []
+      const cols = (block.columns as string[] | undefined) ?? []
+      const rows = (block.rows as string[][] | undefined) ?? []
       return (
         <figure className="my-2">
           <figcaption className="mb-1 text-center text-[11px] font-semibold uppercase tracking-wide">
-            Table {counters.table}{block.caption ? ` — ${block.caption}` : ''}
+            Table {numbering.table}{block.caption ? ` — ${String(block.caption)}` : ''}
           </figcaption>
           <table className="mx-auto border-collapse text-[12px]">
             <thead>
@@ -130,13 +170,12 @@ function Block({ block, counters }: { block: Record<string, any>; counters: Coun
       )
     }
     case 'figure': {
-      counters.figure++
       return (
         <figure className="my-3 flex flex-col items-center">
-          {block.chart ? <MiniChart chart={block.chart} />
+          {block.chart ? <MiniChart chart={block.chart as Chart} />
             : <div className="flex h-32 w-full max-w-md items-center justify-center rounded border border-dashed border-neutral-300 text-neutral-400">figure</div>}
           <figcaption className="mt-1 text-center text-[11px]">
-            <span className="font-semibold">Fig. {counters.figure}.</span> {block.caption}
+            <span className="font-semibold">Fig. {numbering.figure}.</span> {String(block.caption ?? '')}
           </figcaption>
         </figure>
       )

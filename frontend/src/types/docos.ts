@@ -117,9 +117,56 @@ export type DocOSEventName =
   | 'reading_started' | 'reading_progress' | 'reading_finished' | 'section_located'
   | 'control_noop' | 'compare_result' | 'error'
 
+/**
+ * Everything an event can carry, as the server sends it.
+ *
+ * One type with optional fields rather than a union per event name: the
+ * payload genuinely is a loose bag on the wire, and this at least names every
+ * key the client reads and says what type it arrives as — which `any` did not,
+ * and which is what let `p.total` be read where the server sends `p.count`.
+ */
+export interface DocOSPayload {
+  /** The node an event is about, and the set a step covers. */
+  id?: string
+  ids?: string[]
+  /** What was asked for, in the planner's words. */
+  target?: string
+  /** Sizes and tallies. `total` is what a step will do; `count` what it did. */
+  total?: number
+  count?: number
+  index?: number
+  /** Formatting carried by a format_progress. */
+  style?: Style
+  highlight?: string
+  /** The plan, before any of it has run. */
+  actions?: { type: string; target?: string }[]
+  provider?: string
+  source?: string
+  fell_back_because?: string
+  /** Reading the document through, page by page. */
+  page?: number
+  of?: number
+  pass?: number
+  edited?: number
+  read?: number
+  /** Where the assistant decided an instruction pointed. */
+  heading?: string
+  /** Outcomes. */
+  summary?: string
+  reason?: string
+  warnings?: string[]
+  error?: string
+  detail?: string
+  /** Version control: the two ends of a comparison, and its result. */
+  a?: number
+  b?: number
+  diff?: GraphDiff
+  op?: string
+}
+
 export interface DocOSEvent {
   event: DocOSEventName
-  payload: Record<string, any>
+  payload: DocOSPayload
 }
 
 export interface DiffNode {

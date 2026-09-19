@@ -117,28 +117,46 @@ export function useDocOS() {
   const docIdRef = useRef<string | null>(null)
 
   // ── event queue (paced) ───────────────────────────────────────────────────
-  const enqueue = useCallback((ev: DocOSEvent) => {
-    queueRef.current.push(ev)
-    if (!drainingRef.current) void drain()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  const drain = useCallback(async () => {
-    drainingRef.current = true
-    while (queueRef.current.length) {
-      const ev = queueRef.current.shift()!
-      const delay = handleEvent(ev)
-      // eslint-disable-next-line no-await-in-loop
-      await sleep(delay)
+  // Defined in the order they call each other — sync, then the handler that
+  // triggers it, then the drain that runs the handler, then the enqueue that
+  // starts the drain — so none of them refers to a binding declared below it.
+  const syncAfterCommit = useCallback(async () => {
+    const id = docIdRef.current
+    if (!id) return
+    try {
+      const [doc, hist] = await Promise.all([docosApi.getDocument(id), docosApi.history(id)])
+      setGraph(doc.graph)
+      setVersions(hist)
+      setStatus('ready')
+      // Record the prompt and its outcome. Several events (batch_finished,
+      // version_committed) sync, so update the current prompt's entry in place
+      // rather than logging it repeatedly.
+      setPanel((s) => {
+        if (!s.task) return s
+        const rest = s.history[0]?.prompt === s.task ? s.history.slice(1) : s.history
+        // An edit the reader has not seen yet is not finished. Offering it for
+        // review is what makes an AI change reversible in one click rather
+        // than something to go hunting for in the timeline afterwards.
+        const command = trackingRef.current
+        const before = beforeRef.current
+        const after = hist.find((v) => v.is_current)?.seq ?? null
+        if (command && before !== null && after !== null && after !== before) {
+          setReview({ command, summary: s.summary || s.currentAction, before, after })
+          trackingRef.current = null
+          beforeRef.current = null
+        }
+        return { ...s, history: [{ prompt: s.task, outcome: s.currentAction }, ...rest].slice(0, 20) }
+      })
+    } catch {
+      setStatus('ready')
     }
-    drainingRef.current = false
   }, [])
 
   const handleEvent = useCallback((ev: DocOSEvent): number => {
     const p = ev.payload || {}
     switch (ev.event) {
       case 'command_parsed': {
-        const actions: any[] = p.actions || []
+        const actions = p.actions ?? []
         setPanel((s) => ({
           ...s,
           summary: '',
@@ -167,8 +185,11 @@ export function useDocOS() {
         }))
         return STEP_DELAY
       case 'selection_item':
-        setActiveId(p.id)
-        setSelectedIds((ids) => (ids.includes(p.id) ? ids : [...ids, p.id]))
+        setActiveId(p.id ?? null)
+        if (p.id) {
+          const id = p.id
+          setSelectedIds((ids) => (ids.includes(id) ? ids : [...ids, id]))
+        }
         setPanel((s) => ({ ...s, progress: s.progress ? { ...s.progress, done: s.progress.done + 1 } : null }))
         return ITEM_DELAY
       case 'selection_finished':
@@ -183,12 +204,16 @@ export function useDocOS() {
           progress: { done: 0, total: p.total ?? 0 },
         }))
         return STEP_DELAY
-      case 'format_progress':
-        setActiveId(p.id)
-        setGraph((g) => (g && p.id && p.style ? updateNode(g, p.id, (n) => ({ ...n, style: p.style })) : g))
-        if (p.highlight) setGraph((g) => (g && p.id ? updateNode(g, p.id, (n) => patchStyle(n, { highlight: p.highlight })) : g))
+      case 'format_progress': {
+        setActiveId(p.id ?? null)
+        const { id, style, highlight } = p
+        if (id && style) setGraph((g) => (g ? updateNode(g, id, (n) => ({ ...n, style })) : g))
+        if (id && highlight) {
+          setGraph((g) => (g ? updateNode(g, id, (n) => patchStyle(n, { highlight })) : g))
+        }
         setPanel((s) => ({ ...s, progress: s.progress ? { ...s.progress, done: s.progress.done + 1 } : null }))
         return ITEM_DELAY
+      }
       case 'format_finished':
         setActiveId(null)
         setPanel((s) => ({ ...s, currentAction: `Formatted ${p.count} node(s)` }))
@@ -197,16 +222,18 @@ export function useDocOS() {
       case 'delete_started':
         setPanel((s) => ({ ...s, currentAction: `Deleting ${p.target ?? ''}…`.trim(), progress: { done: 0, total: p.total ?? 0 } }))
         return STEP_DELAY
-      case 'delete_item':
-        setActiveId(p.id)
-        setRemovingIds((ids) => [...ids, p.id])
+      case 'delete_item': {
+        setActiveId(p.id ?? null)
+        const removing = p.id
+        if (removing) setRemovingIds((ids) => [...ids, removing])
         setPanel((s) => ({ ...s, progress: s.progress ? { ...s.progress, done: s.progress.done + 1 } : null }))
         // remove from graph after the fade-out
         window.setTimeout(() => {
-          setGraph((g) => (g && p.id ? removeNode(g, p.id) : g))
-          setRemovingIds((ids) => ids.filter((x) => x !== p.id))
+          setGraph((g) => (g && removing ? removeNode(g, removing) : g))
+          setRemovingIds((ids) => ids.filter((x) => x !== removing))
         }, ITEM_DELAY)
         return ITEM_DELAY
+      }
       case 'delete_finished':
         setActiveId(null)
         setPanel((s) => ({ ...s, currentAction: `Deleted ${p.count} node(s)` }))
@@ -215,7 +242,7 @@ export function useDocOS() {
       case 'replace_item':
       case 'insert_item':
       case 'move_item':
-        setActiveId(p.id)
+        setActiveId(p.id ?? null)
         return ITEM_DELAY
 
       case 'reading_started':
@@ -226,7 +253,7 @@ export function useDocOS() {
         // line in the panel because it runs on its own schedule: writing it
         // into the line a command uses meant a reading that finished mid-command
         // replaced "Deleting…" with "Idle", and the command looked dead.
-        const ids: string[] = Array.isArray(p.ids) ? p.ids : []
+        const ids = p.ids ?? []
         // Only follow the reading around the document when nothing else is
         // using the page; a command's own focus outranks it.
         if (ids.length && statusRef.current !== 'running') setFocusId(ids[0])
@@ -253,7 +280,7 @@ export function useDocOS() {
       case 'rewrite_progress': {
         // The assistant reads a long document a page at a time. Following it
         // there turns "nothing seems to be happening" into visible progress.
-        const ids: string[] = Array.isArray(p.ids) ? p.ids : []
+        const ids = p.ids ?? []
         if (ids.length) {
           setFocusId(ids[0])
           setSelectedIds(ids)
@@ -307,7 +334,10 @@ export function useDocOS() {
         return STEP_DELAY
 
       case 'compare_result':
-        setDiff({ a: p.a, b: p.b, diff: p.diff })
+        // Sent together or not at all; a partial compare result is not one.
+        if (p.a !== undefined && p.b !== undefined && p.diff) {
+          setDiff({ a: p.a, b: p.b, diff: p.diff })
+        }
         return STEP_DELAY
       case 'control_noop':
         setPanel((s) => ({ ...s, currentAction: `Nothing to ${p.op}` }))
@@ -321,37 +351,22 @@ export function useDocOS() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const syncAfterCommit = useCallback(async () => {
-    const id = docIdRef.current
-    if (!id) return
-    try {
-      const [doc, hist] = await Promise.all([docosApi.getDocument(id), docosApi.history(id)])
-      setGraph(doc.graph)
-      setVersions(hist)
-      setStatus('ready')
-      // Record the prompt and its outcome. Several events (batch_finished,
-      // version_committed) sync, so update the current prompt's entry in place
-      // rather than logging it repeatedly.
-      setPanel((s) => {
-        if (!s.task) return s
-        const rest = s.history[0]?.prompt === s.task ? s.history.slice(1) : s.history
-        // An edit the reader has not seen yet is not finished. Offering it for
-        // review is what makes an AI change reversible in one click rather
-        // than something to go hunting for in the timeline afterwards.
-        const command = trackingRef.current
-        const before = beforeRef.current
-        const after = hist.find((v) => v.is_current)?.seq ?? null
-        if (command && before !== null && after !== null && after !== before) {
-          setReview({ command, summary: s.summary || s.currentAction, before, after })
-          trackingRef.current = null
-          beforeRef.current = null
-        }
-        return { ...s, history: [{ prompt: s.task, outcome: s.currentAction }, ...rest].slice(0, 20) }
-      })
-    } catch {
-      setStatus('ready')
+  const drain = useCallback(async () => {
+    drainingRef.current = true
+    while (queueRef.current.length) {
+      const ev = queueRef.current.shift()!
+      const delay = handleEvent(ev)
+      // Deliberately serial: the pacing is the point. Each event is shown,
+      // then the next one.
+      await sleep(delay)
     }
-  }, [])
+    drainingRef.current = false
+  }, [handleEvent])
+
+  const enqueue = useCallback((ev: DocOSEvent) => {
+    queueRef.current.push(ev)
+    if (!drainingRef.current) void drain()
+  }, [drain])
 
   // ── websocket lifecycle ────────────────────────────────────────────────────
   // The socket opener, reachable from its own close handler without the

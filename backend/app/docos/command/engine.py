@@ -13,7 +13,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
-from app.docos.actions import ActionBatch, ActionValidationError, validate_batch
+from app.docos.actions import ActionBatch, validate_batch
 from app.docos.command.prompt import (SYSTEM, build_short_message,
                                       build_user_message)
 from app.docos.graph import DocumentGraph

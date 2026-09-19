@@ -22,6 +22,9 @@ export function ExactView({ docId, graph }: { docId: string | null; graph: Docum
     if (!docId) return
     const run = new AbortController()
     let objectUrl: string | null = null
+    // Announcing the request before making it. The rest of this effect's state
+    // arrives from the server, which is the case the rule exists to allow.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setState('loading')
 
     docosApi.exactPdf(docId, run.signal)

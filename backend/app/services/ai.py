@@ -89,7 +89,7 @@ def generate_structured_document(
     )
 
     try:
-        from app.services.router import get_router, AllProvidersFailed
+        from app.services.router import get_router
 
         text, _provider, _elapsed = get_router().chat(
             [
@@ -128,7 +128,7 @@ def rewrite_paragraph(*, text: str, tone: Tone) -> str:
         return ""
 
     try:
-        from app.services.router import get_router, AllProvidersFailed
+        from app.services.router import get_router
 
         result, _provider, _elapsed = get_router().chat(
             [

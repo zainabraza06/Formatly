@@ -9,7 +9,6 @@ import matplotlib
 matplotlib.use("Agg")  # non-interactive backend — must be before pyplot import
 
 import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
 import numpy as np
 from pathlib import Path
 

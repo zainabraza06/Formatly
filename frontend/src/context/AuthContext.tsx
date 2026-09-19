@@ -15,15 +15,16 @@ const AuthContext = createContext<AuthState | null>(null)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null)
-  const [loading, setLoading] = useState(true)
+  // Only "loading" if there is in fact a session to restore. Starting at true
+  // and immediately setting it false for a signed-out visitor is a render for
+  // nothing, and it is what made the login page flash on the way to itself.
+  const [loading, setLoading] = useState(() => getToken() !== null)
 
-  // restore session from a stored token
+  // Restore the session behind a stored token.
   useEffect(() => {
     const token = getToken()
-    if (!token) {
-      setLoading(false)
-      return
-    }
+    if (!token) return
+
     authApi
       .me(token)
       .then(setUser)
