@@ -95,6 +95,7 @@ export function UploadDropzone({
           ref={inputRef}
           type="file"
           accept=".docx"
+          aria-label="Choose a Word document to upload"
           className="sr-only"
           onChange={(e) => {
             accept(e.target.files?.[0])

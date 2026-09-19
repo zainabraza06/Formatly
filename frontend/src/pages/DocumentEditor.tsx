@@ -5,11 +5,9 @@ import { diffMarks } from '../lib/diffMarks'
 import { useDocOS } from '../hooks/useDocOS'
 import { useRegisterCommands } from '../context/command-context'
 import { useReportError } from '../hooks/useReportError'
+import { Button, Dropdown, Tabs, Tooltip, useToast } from '../components/ui'
 import {
-  Button, Dropdown, EmptyState, Tabs, Tooltip, useToast,
-} from '../components/ui'
-import {
-  DownloadIcon, EditorIcon, LayersIcon, MoreIcon, SparkIcon, UndoIcon, UploadIcon,
+  DownloadIcon, LayersIcon, MoreIcon, SparkIcon, UndoIcon, UploadIcon,
 } from '../components/icons'
 import { AICommandBar } from '../components/docos/AICommandBar'
 import { ChangeReview } from '../components/docos/ChangeReview'
@@ -103,14 +101,19 @@ export function DocumentEditor() {
 
   // ── the document, whichever way it is being shown ────────────────────────
   const canvas = noDoc ? (
+    // One empty state, not two: the dropzone is the action, and saying "no
+    // document open" above a box that says "drop a document here" was the same
+    // sentence twice.
     <div className="flex h-full items-center justify-center p-4">
-      <div className="w-full max-w-md space-y-4">
-        <EmptyState
-          icon={<EditorIcon className="h-5 w-5" />}
-          title="No document open"
-          description="Bring in a Word document and tell the assistant what to change — “make all headings consistent”, “reformat the citations”. Every change is versioned, and every one can be undone."
-        />
-        <UploadDropzone onFile={importFile} busy={importing} />
+      <div className="w-full max-w-md text-center">
+        <UploadDropzone onFile={importFile} busy={importing}>
+          Open a Word document
+        </UploadDropzone>
+        <p className="mt-3 text-xs leading-relaxed text-muted">
+          Then tell the assistant what to change — “make all headings consistent”,
+          “reformat the citations”. Every change is versioned, and every one can be
+          undone.
+        </p>
       </div>
     </div>
   ) : view === 'exact' ? (
@@ -234,6 +237,7 @@ export function DocumentEditor() {
         id="editor-import"
         type="file"
         accept=".docx"
+        aria-label="Import another Word document"
         className="sr-only"
         onChange={(e) => {
           const file = e.target.files?.[0]
@@ -285,7 +289,12 @@ export function DocumentEditor() {
           panelOpen ? 'lg:grid-cols-[minmax(0,1fr)_360px]' : 'lg:grid-cols-[minmax(0,1fr)_auto]',
         )}
       >
+        {/* Focusable because it scrolls: a region a mouse can scroll and a
+            keyboard cannot is a part of the document somebody cannot reach. */}
         <div
+          tabIndex={noDoc ? undefined : 0}
+          role={noDoc ? undefined : 'region'}
+          aria-label={noDoc ? undefined : `${doc.title || 'Document'} — page view`}
           className={cn(
             'doc-desk min-h-0 overflow-auto rounded-lg border border-line',
             noDoc ? 'p-0' : 'p-3 sm:p-6',

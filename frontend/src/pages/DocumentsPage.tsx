@@ -50,6 +50,7 @@ export function DocumentsPage() {
   // Emptying the whole library is a separate question, asked separately.
   const [confirmClear, setConfirmClear] = useState(false)
   const [clearing, setClearing] = useState(false)
+  const [dragging, setDragging] = useState(false)
 
   const refresh = useCallback(async () => {
     const result = await loadDocuments()
@@ -235,7 +236,24 @@ export function DocumentsPage() {
   const nothingMatches = !loading && items.length > 0 && visible.length === 0
 
   return (
-    <div className="space-y-6">
+    <div
+      className="relative space-y-4"
+      onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
+      onDragLeave={(e) => { if (e.currentTarget === e.target) setDragging(false) }}
+      onDrop={(e) => {
+        e.preventDefault()
+        setDragging(false)
+        const file = e.dataTransfer.files?.[0]
+        if (file) void upload(file)
+      }}
+    >
+      {dragging && (
+        <div className="pointer-events-none fixed inset-0 z-40 flex items-center justify-center bg-brand/5 backdrop-blur-[1px]">
+          <p className="rounded-lg border-2 border-dashed border-brand bg-surface px-6 py-4 text-sm font-medium text-brand-ink shadow-lg">
+            Drop to open it in the editor
+          </p>
+        </div>
+      )}
       {/* ── Header: one primary action ─────────────────────────────────── */}
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
@@ -282,6 +300,7 @@ export function DocumentsPage() {
         id="library-upload"
         type="file"
         accept=".docx"
+        aria-label="Upload a Word document"
         className="sr-only"
         onChange={(e) => {
           const file = e.target.files?.[0]
@@ -310,7 +329,7 @@ export function DocumentsPage() {
 
       {/* ── Controls ───────────────────────────────────────────────────── */}
       {!nothingAtAll && (
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           <Input
             id="document-search"
             type="search"
@@ -432,9 +451,20 @@ export function DocumentsPage() {
             </div>
           )}
 
-          <UploadDropzone onFile={upload} busy={uploading} compact className="pt-1">
-            Drop a Word document to edit it with AI
-          </UploadDropzone>
+          {/* A quiet strip once there are documents: the library is what this
+              screen is for, and a dropzone the size of the list said otherwise.
+              The whole page still accepts a drop. */}
+          <p className="flex items-center justify-center gap-1.5 py-1 text-xs text-faint">
+            <UploadIcon className="h-3.5 w-3.5" />
+            Drop a Word document anywhere to edit it with AI, or
+            <button
+              type="button"
+              onClick={() => document.getElementById('library-upload')?.click()}
+              className="rounded-sm font-medium text-brand-ink hover:underline"
+            >
+              choose a file
+            </button>
+          </p>
         </>
       )}
 

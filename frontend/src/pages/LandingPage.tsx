@@ -192,38 +192,59 @@ export function LandingPage() {
 
       <main id="main">
         {/* ── Hero ───────────────────────────────────────────────────────── */}
-        <section className="mx-auto max-w-6xl px-4 pb-16 pt-16 sm:px-6 sm:pt-24">
-          <div className="mx-auto max-w-3xl text-center">
-            <Badge tone="brand" icon={<SparkIcon className="h-3.5 w-3.5" />}>
-              AI that formats, not just writes
-            </Badge>
+        <section className="relative overflow-hidden">
+          {/* Decoration, behind everything and announced to nobody. */}
+          <div className="hero-wash pointer-events-none absolute inset-x-0 top-0 h-[42rem]" aria-hidden />
+          <div className="hero-grid pointer-events-none absolute inset-x-0 top-0 h-[42rem]" aria-hidden />
 
-            <h1 className="mt-5 text-4xl text-ink sm:text-5xl lg:text-6xl">
-              Documents that come out{' '}
-              <span className="text-brand-ink">properly formatted</span>
-            </h1>
+          <div className="relative mx-auto max-w-6xl px-4 pb-20 pt-16 sm:px-6 sm:pt-24">
+            <div className="mx-auto max-w-3xl text-center">
+              <Badge tone="brand" icon={<SparkIcon className="h-3.5 w-3.5" />}>
+                AI that formats, not just writes
+              </Badge>
 
-            <p className="mx-auto mt-6 max-w-xl text-lg leading-relaxed text-muted">
-              Write a paper from your own material, or bring a Word document and tell it
-              what to fix in plain English. Every change is shown, versioned, and
-              reversible.
-            </p>
+              <h1 className="mt-6 text-5xl text-ink sm:text-6xl">
+                Documents that come out{' '}
+                <span className="bg-gradient-to-br from-brand to-info bg-clip-text text-transparent">
+                  properly formatted
+                </span>
+              </h1>
 
-            <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-              <ButtonLink to="/app/compose" variant="primary" size="lg">
-                Write a document
-              </ButtonLink>
-              <ButtonLink to="/app" variant="secondary" size="lg" leadingIcon={<EditorIcon />}>
-                Edit one I have
-              </ButtonLink>
+              <p className="mx-auto mt-6 max-w-xl text-lg leading-relaxed text-muted">
+                Write a paper from your own material, or bring a Word document and tell it
+                what to fix in plain English. Every change is shown, versioned, and
+                reversible.
+              </p>
+
+              <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+                <ButtonLink to="/app/compose" variant="primary" size="lg">
+                  Write a document
+                </ButtonLink>
+                <ButtonLink to="/app" variant="secondary" size="lg" leadingIcon={<EditorIcon />}>
+                  Edit one I have
+                </ButtonLink>
+              </div>
+
+              <p className="mt-4 text-xs text-faint">Free while in beta · no card, no credits</p>
             </div>
 
-            <p className="mt-3 text-xs text-faint">
-              Free while in beta · no card, no credits
-            </p>
-          </div>
+            {/* The product, at the size you can actually read it. */}
+            <div className="relative mx-auto mt-16 max-w-5xl">
+              <ProductMock className="hero-frame !border-0" />
+            </div>
 
-          <ProductMock className="mx-auto mt-14 max-w-4xl sm:mt-16" />
+            {/* What it knows how to produce — capabilities, not customer logos
+                we do not have. */}
+            <div className="mt-14 flex flex-wrap items-center justify-center gap-x-6 gap-y-3">
+              <span className="text-2xs font-medium uppercase tracking-wide text-faint">
+                Formats it writes
+              </span>
+              {['IEEE two-column', 'Formal assignment', 'Reports', 'Proposals', 'Thesis chapters', 'Your own stylesheet']
+                .map((label) => (
+                  <span key={label} className="text-sm text-muted">{label}</span>
+                ))}
+            </div>
+          </div>
         </section>
 
         {/* ── How it works ───────────────────────────────────────────────── */}
@@ -248,12 +269,18 @@ export function LandingPage() {
         </Section>
 
         {/* ── Features ───────────────────────────────────────────────────── */}
-        <Section id="features" title="What it actually does"
+        <Section id="features" tinted title="What it actually does"
                  lede="The parts that matter when a document has to be handed in, not just drafted.">
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {FEATURES.map((f) => (
-              <div key={f.title} className="rounded-lg border border-line bg-surface p-6 transition-colors duration-fast hover:border-line-strong">
-                <span className="flex h-8 w-8 items-center justify-center rounded-md bg-surface-2 text-muted" aria-hidden>
+              <div
+                key={f.title}
+                className="group rounded-lg border border-line bg-surface p-6 transition-[border-color,box-shadow,transform] duration-slow ease-out hover:-translate-y-0.5 hover:border-line-strong hover:shadow-md"
+              >
+                <span
+                  className="flex h-9 w-9 items-center justify-center rounded-md border border-brand/15 bg-brand-soft text-brand-ink transition-colors duration-fast group-hover:border-brand/30"
+                  aria-hidden
+                >
                   {f.icon}
                 </span>
                 <h3 className="mt-5 text-lg text-ink">{f.title}</h3>
@@ -288,7 +315,9 @@ export function LandingPage() {
                 </div>
 
                 <p className="mt-5 flex items-baseline gap-1.5">
-                  <span className="text-3xl text-ink">{plan.price}</span>
+                  <span className={cn(plan.highlighted ? 'text-3xl text-ink' : 'text-lg text-muted')}>
+                    {plan.price}
+                  </span>
                   {plan.cadence && <span className="text-sm text-faint">{plan.cadence}</span>}
                 </p>
                 <p className="mt-2 text-sm text-muted">{plan.blurb}</p>
@@ -318,7 +347,7 @@ export function LandingPage() {
         </Section>
 
         {/* ── FAQ ────────────────────────────────────────────────────────── */}
-        <Section id="faq" title="Questions" lede="The ones worth answering before you sign up.">
+        <Section id="faq" tinted title="Questions" lede="The ones worth answering before you sign up.">
           <div className="mx-auto max-w-2xl divide-y divide-line overflow-hidden rounded-lg border border-line bg-surface">
             {FAQS.map((item) => (
               <details key={item.q} className="group">
@@ -334,17 +363,29 @@ export function LandingPage() {
 
         {/* ── Closing CTA ────────────────────────────────────────────────── */}
         <section className="mx-auto max-w-6xl px-4 pb-24 pt-16 sm:px-6 sm:pt-24">
-          <div className="rounded-xl border border-line bg-surface px-6 py-16 text-center">
-            <h2 className="text-2xl text-ink sm:text-3xl">
-              Have something due?
-            </h2>
-            <p className="mx-auto mt-3 max-w-md text-md leading-relaxed text-muted">
-              Paste what you have. You will have a formatted document, and a way to fix
-              anything in it, in a couple of minutes.
-            </p>
-            <ButtonLink to="/app/compose" variant="primary" size="lg" className="mt-6">
-              Write a document
-            </ButtonLink>
+          <div className="relative overflow-hidden rounded-xl bg-accent px-6 py-16 text-center">
+            <div
+              className="pointer-events-none absolute inset-0 opacity-90"
+              style={{
+                background:
+                  'radial-gradient(40rem 20rem at 50% -20%, rgb(var(--brand) / 0.55), transparent 70%)',
+              }}
+              aria-hidden
+            />
+            <div className="relative">
+              <h2 className="text-2xl text-accent-fg sm:text-3xl">Have something due?</h2>
+              <p className="mx-auto mt-3 max-w-md text-md leading-relaxed text-accent-fg/70">
+                Paste what you have. You will have a formatted document, and a way to fix
+                anything in it, in a couple of minutes.
+              </p>
+              <ButtonLink
+                to="/app/compose"
+                size="lg"
+                className="mt-7 bg-surface text-ink hover:bg-surface-2"
+              >
+                Write a document
+              </ButtonLink>
+            </div>
           </div>
         </section>
       </main>
@@ -366,10 +407,19 @@ export function LandingPage() {
 }
 
 function Section({
-  id, title, lede, children,
-}: { id: string; title: string; lede: string; children: ReactNode }) {
+  id, title, lede, children, tinted,
+}: { id: string; title: string; lede: string; children: ReactNode; tinted?: boolean }) {
   return (
-    <section id={id} className="scroll-mt-14 border-t border-line py-16 sm:py-24">
+    <section
+      id={id}
+      className={cn(
+        'scroll-mt-14 border-t border-line py-16 sm:py-24',
+        // Alternating surfaces give the page a rhythm. Four identical bands of
+        // white cards on white is what makes a marketing page read as a
+        // template.
+        tinted && 'bg-surface-2/40',
+      )}
+    >
       <div className="mx-auto max-w-6xl px-4 sm:px-6">
         <div className="mx-auto mb-10 max-w-2xl text-center sm:mb-12">
           <h2 className="text-2xl text-ink sm:text-3xl">{title}</h2>

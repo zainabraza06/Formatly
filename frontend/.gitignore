@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Screenshots and audits from `npm run shots`
+ui-shots/

@@ -74,6 +74,22 @@ export function AppShell({
     <SidebarNav collapsed={collapsed} onNavigate={() => setDrawerOpen(false)} />
   )
 
+  const accountItems = [
+    {
+      id: 'settings',
+      label: 'Account settings',
+      icon: <SettingsIcon />,
+      onSelect: () => navigate('/app/settings'),
+    },
+    {
+      id: 'signout',
+      label: 'Sign out',
+      icon: <SignOutIcon />,
+      destructive: true,
+      onSelect: logout,
+    },
+  ]
+
   return (
     <div className="flex h-screen overflow-hidden bg-canvas text-ink">
       <a href="#main" className="skip-link rounded-md bg-brand px-3 py-2 text-sm font-medium text-brand-fg shadow-lg">
@@ -90,8 +106,23 @@ export function AppShell({
         <div className={cn('flex h-12 items-center gap-2 px-3', collapsed && 'justify-center px-0')}>
           <Logo compact={collapsed} />
         </div>
-        <div className="flex-1 overflow-y-auto px-2 py-2">{nav}</div>
+        <div className="flex-1 overflow-y-auto px-2 py-1">{nav}</div>
+
         <div className="border-t border-line p-2">
+          {user && (
+            <div className={cn('mb-1', collapsed && 'flex justify-center')}>
+              <Dropdown
+                label="Account menu"
+                align="start"
+                triggerVariant="ghost"
+                triggerSize="md"
+                triggerClassName={cn('w-full justify-start gap-2 px-2', collapsed && 'w-auto px-1')}
+                triggerIcon={<Avatar user={user} />}
+                triggerLabel={collapsed ? undefined : user.name || user.email || 'Account'}
+                items={accountItems}
+              />
+            </div>
+          )}
           <Tooltip content={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} side="right">
             <Button
               variant="ghost"
@@ -199,27 +230,6 @@ export function AppShell({
             />
           </Tooltip>
 
-          <Dropdown
-            label="Account menu"
-            triggerVariant="ghost"
-            triggerClassName="px-1"
-            triggerIcon={<Avatar user={user} />}
-            items={[
-              {
-                id: 'settings',
-                label: 'Account settings',
-                icon: <SettingsIcon />,
-                onSelect: () => navigate('/app/settings'),
-              },
-              {
-                id: 'signout',
-                label: 'Sign out',
-                icon: <SignOutIcon />,
-                destructive: true,
-                onSelect: logout,
-              },
-            ]}
-          />
         </header>
 
         <main id="main" className="flex-1 overflow-y-auto overflow-x-hidden">

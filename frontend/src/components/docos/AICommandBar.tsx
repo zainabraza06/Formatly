@@ -4,13 +4,12 @@ import { Button, Progress, Spinner } from '../ui'
 import { SparkIcon, WarningIcon } from '../icons'
 import type { PanelState } from '../../hooks/useDocOS'
 
+// Three, not six. A wall of chips is a menu nobody reads, and the field above
+// them already says anything is allowed.
 const SUGGESTIONS = [
   'Make all headings consistent',
-  'Justify every body paragraph',
   'Reformat the citations',
-  'Highlight all figures',
-  'Remove every horizontal line',
-  'Centre every image',
+  'Justify every body paragraph',
 ]
 
 /**
@@ -59,41 +58,34 @@ export function AICommandBar({
             disabled && 'opacity-60',
           )}
         >
-          <textarea
-            id="ai-command"
-            ref={inputRef}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => {
-              // Enter sends; Shift+Enter is a new line, as in every chat box.
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault()
-                submit()
-              }
-            }}
-            disabled={disabled}
-            rows={2}
-            placeholder={
-              disabled
-                ? 'Open a document first…'
-                : 'e.g. Make all headings consistent'
-            }
-            className="w-full resize-none bg-transparent px-3 pt-2.5 text-sm text-ink outline-none placeholder:text-faint"
-          />
-          <div className="flex items-center justify-between gap-2 px-2 pb-2">
-            <span className="pl-1 text-2xs text-faint">
-              <kbd className="font-sans">Enter</kbd> to run
-            </span>
+          <div className="flex items-end gap-1.5 p-1.5">
+            <textarea
+              id="ai-command"
+              ref={inputRef}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => {
+                // Enter sends; Shift+Enter is a new line, as in every chat box.
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault()
+                  submit()
+                }
+              }}
+              disabled={disabled}
+              rows={2}
+              placeholder={disabled ? 'Open a document first…' : 'Tell the assistant what to change…'}
+              className="min-h-[3.25rem] w-full flex-1 resize-none bg-transparent px-1.5 py-1.5 text-sm text-ink outline-none placeholder:text-faint"
+            />
             <Button
               variant="primary"
-              size="sm"
+              size="md"
+              iconOnly
+              aria-label={running ? 'Working' : 'Run this instruction'}
               onClick={submit}
               disabled={disabled || !input.trim()}
               loading={running}
               leadingIcon={running ? undefined : <SparkIcon />}
-            >
-              {running ? 'Working…' : 'Run'}
-            </Button>
+            />
           </div>
         </div>
       </div>
@@ -120,6 +112,12 @@ export function AICommandBar({
       )}
 
       {/* ── What it is doing ────────────────────────────────────────────── */}
+      {!running && !panel.task && !panel.error && !panel.reading ? (
+        <p className="rounded-lg border border-dashed border-line px-3 py-2.5 text-xs leading-relaxed text-faint">
+          Every instruction is shown step by step here, and lands as a version you can
+          keep or undo.
+        </p>
+      ) : (
       <div className="rounded-lg border border-line bg-surface-2/60 p-3">
         {panel.task && (
           <p className="mb-2 truncate text-2xs text-faint">
@@ -170,6 +168,7 @@ export function AICommandBar({
           </p>
         )}
       </div>
+      )}
 
       {/* ── Plan and history ────────────────────────────────────────────── */}
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto">

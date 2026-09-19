@@ -1,6 +1,6 @@
 import { cn } from '../../lib/cn'
 import { formatDate, SORT_LABELS, type DocumentItem, type SortKey } from '../../lib/documents'
-import { Badge, Dropdown, Spinner, type MenuItem } from '../ui'
+import { Dropdown, Spinner, type MenuItem } from '../ui'
 import {
   ChevronDownIcon, ComposeIcon, CopyIcon, DownloadIcon, EditorIcon, FileIcon, MoreIcon, TrashIcon,
 } from '../icons'
@@ -103,7 +103,7 @@ export function DocumentTable({
                     type="button"
                     onClick={() => onOpen(doc)}
                     disabled={Boolean(busy)}
-                    className="flex h-row-lg w-full items-center gap-2.5 text-left"
+                    className="flex h-10 w-full items-center gap-2.5 text-left"
                   >
                     <span
                       className={cn('shrink-0', generated ? 'text-brand-ink' : 'text-faint')}
@@ -123,10 +123,16 @@ export function DocumentTable({
                   </button>
                 </td>
 
-                <td className="hidden px-3 md:table-cell">
-                  <Badge tone={generated ? 'brand' : 'neutral'}>
+                {/* Text, not a badge: three identical pills down a column is
+                    decoration, and the column header already says what it is. */}
+                <td className="hidden px-3 text-sm text-muted md:table-cell">
+                  <span className="flex items-center gap-1.5">
+                    <span
+                      className={cn('h-1.5 w-1.5 rounded-full', generated ? 'bg-brand' : 'bg-line-strong')}
+                      aria-hidden
+                    />
                     {generated ? doc.stylePreset || 'Generated' : 'Upload'}
-                  </Badge>
+                  </span>
                 </td>
 
                 <td className="hidden px-3 text-sm tabular-nums text-muted lg:table-cell">
@@ -209,7 +215,7 @@ export function DocumentTableSkeleton({ rows = 6 }: { rows?: number }) {
   return (
     <div className="overflow-hidden rounded-lg border border-line bg-surface" aria-hidden>
       {Array.from({ length: rows }).map((_, i) => (
-        <div key={i} className="flex h-row-lg items-center gap-3 border-b border-line px-3 last:border-b-0">
+        <div key={i} className="flex h-10 items-center gap-3 border-b border-line px-3 last:border-b-0">
           <div className="h-4 w-4 shrink-0 animate-pulse rounded-sm bg-surface-2" />
           <div className="h-3 flex-1 animate-pulse rounded-sm bg-surface-2" style={{ maxWidth: `${30 + ((i * 17) % 40)}%` }} />
           <div className="hidden h-4 w-16 animate-pulse rounded-sm bg-surface-2 md:block" />

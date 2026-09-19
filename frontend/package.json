@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "shots": "node scripts/ui-screens.mjs"
   },
   "dependencies": {
     "@fontsource-variable/inter": "^5.3.0",
@@ -19,7 +20,9 @@
     "react-router-dom": "^7.15.1"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.63.0",
     "@types/katex": "^0.16.8",
     "@types/node": "^24.12.3",
     "@types/react": "^19.2.14",
