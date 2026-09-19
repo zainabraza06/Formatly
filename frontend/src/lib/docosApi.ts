@@ -6,6 +6,7 @@ import type {
   VersionInfo,
 } from '../types/docos'
 import { getToken } from './auth'
+import { apiErrorFrom } from './errors'
 
 // Where the API is. Set VITE_API_URL when it lives somewhere else; otherwise
 // a built page calls the origin it was served from — an empty base makes every
@@ -40,28 +41,9 @@ function authHeaders(extra?: Record<string, string>): Record<string, string> {
   return { ...(extra || {}), ...(token ? { Authorization: `Bearer ${token}` } : {}) }
 }
 
-/** The server's `detail`, so a failure reads as a sentence. */
-async function failure(res: Response): Promise<string> {
-  try {
-    const body = await res.clone().json()
-    if (typeof body?.detail === 'string') return body.detail
-  } catch {
-    /* not JSON — fall through to the text */
-  }
-  return (await res.text().catch(() => '')) || `Request failed: ${res.status}`
-}
-
-
+/** The parsed body, or the failure the server described. */
 async function json<T>(res: Response): Promise<T> {
-  if (!res.ok) {
-    let detail = ''
-    try {
-      detail = (await res.clone().json()).detail
-    } catch {
-      detail = await res.text().catch(() => '')
-    }
-    throw new Error(detail || `Request failed: ${res.status}`)
-  }
+  if (!res.ok) throw await apiErrorFrom(res)
   return (await res.json()) as T
 }
 
@@ -85,9 +67,7 @@ export const docosApi = {
     const res = await fetch(
       `${API_URL}/docos/${id}/download.${format}${maths ? '?maths=1' : ''}`,
       { headers: authHeaders() })
-    if (!res.ok) {
-      throw new Error(await failure(res) || `Could not export the ${format.toUpperCase()}`)
-    }
+    if (!res.ok) throw await apiErrorFrom(res)
     return res.blob()
   },
 
@@ -98,9 +78,7 @@ export const docosApi = {
     const res = await fetch(
       `${API_URL}/docos/${id}/download.${format}${maths ? '?maths=1' : ''}`,
       { headers: authHeaders() })
-    if (!res.ok) {
-      throw new Error(await failure(res) || `Could not export the ${format.toUpperCase()}`)
-    }
+    if (!res.ok) throw await apiErrorFrom(res)
     // A protected route cannot be reached by a plain link, so the bytes are
     // fetched with the token and handed to the browser to save.
     const match = /filename="?([^";]+)"?/i.exec(res.headers.get('content-disposition') || '')
@@ -142,10 +120,7 @@ export const docosApi = {
     const res = await fetch(`${API_URL}/docos/${id}/exact.pdf`, {
       headers: authHeaders(), signal,
     })
-    if (!res.ok) {
-      const detail = await res.text().catch(() => '')
-      throw new Error(detail || `Request failed: ${res.status}`)
-    }
+    if (!res.ok) throw await apiErrorFrom(res)
     return res.blob()
   },
 

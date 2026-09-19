@@ -4,6 +4,7 @@ import { cn } from '../lib/cn'
 import { diffMarks } from '../lib/diffMarks'
 import { useDocOS } from '../hooks/useDocOS'
 import { useRegisterCommands } from '../context/command-context'
+import { useReportError } from '../hooks/useReportError'
 import {
   Button, Dropdown, EmptyState, Tabs, Tooltip, useToast,
 } from '../components/ui'
@@ -41,6 +42,7 @@ const PANELS: { id: Panel; label: string }[] = [
 export function DocumentEditor() {
   const doc = useDocOS()
   const toast = useToast()
+  const report = useReportError()
   const [searchParams] = useSearchParams()
 
   const [view, setView] = useState<'edit' | 'exact'>('edit')
@@ -62,9 +64,7 @@ export function DocumentEditor() {
   const requestedId = searchParams.get('doc')
   useEffect(() => {
     if (requestedId && requestedId !== doc.docId) {
-      doc.loadDocument(requestedId).catch((e) =>
-        toast.error('Could not open that document', e instanceof Error ? e.message : 'Please try again.'),
-      )
+      doc.loadDocument(requestedId).catch((e) => report(e, 'open that document'))
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [requestedId])
@@ -75,7 +75,7 @@ export function DocumentEditor() {
       await doc.importFile(file)
       toast.success('Document imported', 'The assistant is reading it through now.')
     } catch (e) {
-      toast.error('Could not import that file', e instanceof Error ? e.message : 'Please try again.')
+      report(e, 'import that file', () => void importFile(file))
     } finally {
       setImporting(null)
     }

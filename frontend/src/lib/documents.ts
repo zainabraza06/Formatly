@@ -1,5 +1,6 @@
 import { api } from './api'
 import { docosApi } from './docosApi'
+import { explain } from './errors'
 import type { RecentDocument } from '../types/api'
 
 /**
@@ -144,5 +145,6 @@ function time(d: DocumentItem): number {
 }
 
 function messageOf(reason: unknown): string {
-  return reason instanceof Error ? reason.message : 'Could not load'
+  const { title, detail } = explain(reason, 'load your documents')
+  return `${title}. ${detail}`
 }

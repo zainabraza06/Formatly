@@ -1,4 +1,5 @@
 import { getToken } from './auth'
+import { apiErrorFrom, isAbort } from './errors'
 
 // Where the API is. Set VITE_API_URL when it lives somewhere else; otherwise
 // a built page calls the origin it was served from — an empty base makes every
@@ -25,28 +26,12 @@ function authHeaders(extra?: Record<string, string>): Record<string, string> {
 }
 
 async function json<T>(res: Response): Promise<T> {
-  if (!res.ok) {
-    let detail = ''
-    try {
-      detail = (await res.clone().json()).detail
-    } catch {
-      detail = await res.text().catch(() => '')
-    }
-    throw new Error(detail || `Request failed: ${res.status}`)
-  }
+  if (!res.ok) throw await apiErrorFrom(res)
   return (await res.json()) as T
 }
 
 async function blob(res: Response): Promise<Blob> {
-  if (!res.ok) {
-    let detail = ''
-    try {
-      detail = (await res.clone().json()).detail
-    } catch {
-      detail = await res.text().catch(() => '')
-    }
-    throw new Error(detail || `Request failed: ${res.status}`)
-  }
+  if (!res.ok) throw await apiErrorFrom(res)
   return await res.blob()
 }
 
@@ -185,10 +170,6 @@ export const paperApi = {
     })),
 }
 
-export function isAbort(e: unknown): boolean {
-  return e instanceof DOMException && e.name === 'AbortError'
-}
-
 export function downloadBlob(b: Blob, filename: string): void {
   const url = URL.createObjectURL(b)
   const a = document.createElement('a')
@@ -199,3 +180,5 @@ export function downloadBlob(b: Blob, filename: string): void {
   a.remove()
   URL.revokeObjectURL(url)
 }
+
+export { isAbort }

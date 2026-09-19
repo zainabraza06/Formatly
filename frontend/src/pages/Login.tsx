@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { ApiError, explain } from '../lib/errors'
 import { Button, Field, Input } from '../components/ui'
 import { Logo } from '../components/Logo'
 import { WarningIcon } from '../components/icons'
@@ -51,7 +52,15 @@ export function Login() {
       else await signup(email.trim(), password, name.trim())
       navigate(from, { replace: true })
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.')
+      // On this screen a 401 is not an expired session — it is the password.
+      if (err instanceof ApiError && err.status === 401) {
+        setError('That email and password do not match an account.')
+      } else if (err instanceof ApiError && err.status === 409) {
+        setError('An account with that email already exists. Sign in instead.')
+      } else {
+        const { title, detail } = explain(err, mode === 'login' ? 'sign you in' : 'create your account')
+        setError(`${title}. ${detail}`)
+      }
     } finally {
       setBusy(false)
     }

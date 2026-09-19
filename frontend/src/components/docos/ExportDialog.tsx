@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { cn } from '../../lib/cn'
 import { docosApi } from '../../lib/docosApi'
 import { Button, Modal, Progress, useToast } from '../ui'
+import { useReportError } from '../../hooks/useReportError'
 import { CheckIcon, DownloadIcon, FileIcon, WarningIcon } from '../icons'
 
 type Format = 'docx' | 'pdf'
@@ -34,6 +35,7 @@ export function ExportDialog({
   maths: boolean
 }) {
   const toast = useToast()
+  const report = useReportError()
   const [format, setFormat] = useState<Format>('docx')
   const [saving, setSaving] = useState(false)
 
@@ -58,10 +60,7 @@ export function ExportDialog({
                 toast.success(`${format.toUpperCase()} saved`, title)
                 onClose()
               } catch (e) {
-                toast.error(
-                  `Could not export the ${format.toUpperCase()}`,
-                  e instanceof Error ? e.message : 'Please try again.',
-                )
+                report(e, `export the ${format.toUpperCase()}`)
               } finally {
                 setSaving(false)
               }

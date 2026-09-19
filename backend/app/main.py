@@ -9,9 +9,9 @@ from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")  # backend/.env
 
-from fastapi import Body, FastAPI, HTTPException
+from fastapi import Body, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 
 from app.schemas import (ChartSpec, GenerateRequest, GenerateResponse, Tone)
 from app.services import ai
@@ -24,6 +24,7 @@ from app.services.doc_pipeline import (
     save_draft,
 )
 from app.services.export_engine import export_docx, export_excel, export_pdf
+from app.services.db import DatabaseUnavailable, database_url
 from app.services.storage import get_paths
 
 app = FastAPI(title="Formatly API", version="1.0.0")
@@ -61,6 +62,27 @@ app.include_router(docos_router)
 app.include_router(paper_router)
 
 
+@app.exception_handler(DatabaseUnavailable)
+def _database_unavailable(request: Request, exc: DatabaseUnavailable) -> JSONResponse:
+    """A database that cannot be reached is not a bug in the request.
+
+    It used to escape as a 500 carrying psycopg's own text — four paragraphs of
+    host addresses — which the browser showed as "Internal Server Error" and
+    nobody could act on. 503 says the server is fine and its database is not,
+    which is both true and the thing a client should retry.
+    """
+    return JSONResponse(
+        status_code=503,
+        content={
+            "detail": exc.message,
+            # One line, no credentials: enough for whoever runs this to know
+            # which of the several possible causes it was.
+            "cause": exc.cause,
+            "retryable": True,
+        },
+    )
+
+
 @app.get("/health")
 def health() -> dict[str, Any]:
     """Liveness plus the capabilities a client cannot detect for itself.
@@ -75,7 +97,27 @@ def health() -> dict[str, Any]:
         "status": "ok",
         "version": app.version,
         "exact_preview": libreoffice_available(),
+        # Checked, not assumed: the point of a health route is to find out.
+        "database": _database_health(),
     }
+
+
+def _database_health() -> dict[str, Any]:
+    """Whether the configured database answers, and which one it is."""
+    engine = "postgres" if database_url() else "sqlite"
+    if not database_url():
+        return {"engine": engine, "ok": True}
+
+    from app.services.db import connect
+
+    try:
+        with connect() as conn:
+            conn.execute("SELECT 1")
+        return {"engine": engine, "ok": True}
+    except DatabaseUnavailable as exc:
+        return {"engine": engine, "ok": False, "detail": exc.message, "cause": exc.cause}
+    except Exception as exc:  # a health check never fails the health route
+        return {"engine": engine, "ok": False, "detail": str(exc).splitlines()[0]}
 
 
 @app.get("/providers/status")

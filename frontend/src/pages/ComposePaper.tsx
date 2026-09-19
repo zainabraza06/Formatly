@@ -11,6 +11,8 @@ import {
   suggestedOutline, type Section,
 } from '../lib/paperSections'
 import { useRegisterCommands } from '../context/command-context'
+import { useReportError } from '../hooks/useReportError'
+import { explain } from '../lib/errors'
 import {
   Button, Card, Field, Input, Select, Textarea, Tabs, useToast,
 } from '../components/ui'
@@ -81,6 +83,7 @@ const EMPTY_FORM: DraftForm = {
 export function ComposePaper() {
   const navigate = useNavigate()
   const toast = useToast()
+  const report = useReportError()
 
   const [step, setStep] = useState(0)
   const [furthest, setFurthest] = useState(0)
@@ -174,7 +177,10 @@ export function ComposePaper() {
       setFurthest(3)
       toast.success('Your document is ready', 'Read it through — any section can be rewritten on its own.')
     } catch (e) {
-      if (!isAbort(e)) setError(e instanceof Error ? e.message : 'Generation failed')
+      if (!isAbort(e)) {
+        const { title, detail } = explain(e, 'write the document')
+        setError(`${title}. ${detail}`)
+      }
     } finally {
       if (runRef.current === run) {
         runRef.current = null
@@ -207,10 +213,7 @@ export function ComposePaper() {
         },
       })
     } catch (e) {
-      toast.error(
-        `Could not rewrite “${section.heading}”`,
-        e instanceof Error ? e.message : 'Please try again.',
-      )
+      report(e, `rewrite “${section.heading}”`, () => void regenerateSection(section, note))
     } finally {
       setBusy('idle')
       setBusySection(null)
@@ -229,11 +232,8 @@ export function ComposePaper() {
       downloadBlob(b, `${(spec?.meta.title || form.titleHint || 'document').slice(0, 60)}.docx`)
       toast.toast({ id, tone: 'success', title: 'DOCX downloaded' })
     } catch (e) {
-      if (isAbort(e)) toast.dismiss(id)
-      else toast.toast({
-        id, tone: 'error', title: 'Could not prepare the DOCX',
-        description: e instanceof Error ? e.message : 'Please try again.',
-      })
+      toast.dismiss(id)
+      report(e, 'prepare the DOCX', download)
     } finally {
       if (runRef.current === run) {
         runRef.current = null
@@ -252,7 +252,7 @@ export function ComposePaper() {
       const res = await docosApi.importSpec(spec, spec.meta.title || 'Document')
       navigate(`/app/editor?doc=${encodeURIComponent(res.document_id)}`)
     } catch (e) {
-      toast.error('Could not open it in the editor', e instanceof Error ? e.message : 'Please try again.')
+      report(e, 'open it in the editor', openInEditor)
     } finally {
       setBusy('idle')
     }

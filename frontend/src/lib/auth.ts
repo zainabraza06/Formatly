@@ -1,4 +1,5 @@
 // Token storage + auth API client.
+import { apiErrorFrom } from './errors'
 
 const API_URL = import.meta.env.VITE_API_URL || sameOriginOrDevServer()
 
@@ -31,11 +32,10 @@ export function clearToken(): void {
 
 async function json<T>(p: Promise<Response>): Promise<T> {
   const res = await p
-  const body = await res.json().catch(() => ({}))
-  if (!res.ok) {
-    throw new Error((body as { detail?: string }).detail || `Request failed: ${res.status}`)
-  }
-  return body as T
+  // The same ApiError the rest of the app throws, so the sign-in screen can
+  // tell a wrong password (401) from a database that is down (503).
+  if (!res.ok) throw await apiErrorFrom(res)
+  return (await res.json()) as T
 }
 
 export const authApi = {

@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { authApi, getToken, type AuthUser } from '../lib/auth'
 import { Button, Card, CardHeader, Field, Input, useToast } from '../components/ui'
+import { useReportError } from '../hooks/useReportError'
 import { SignOutIcon } from '../components/icons'
 
 const MIN_PASSWORD = 6
@@ -37,6 +38,7 @@ export function Settings() {
 
 function ProfileCard({ user, onSaved }: { user: AuthUser | null; onSaved: (u: AuthUser) => void }) {
   const toast = useToast()
+  const report = useReportError()
   const [name, setName] = useState(user?.name || '')
   const [busy, setBusy] = useState(false)
 
@@ -51,7 +53,7 @@ function ProfileCard({ user, onSaved }: { user: AuthUser | null; onSaved: (u: Au
       onSaved(await authApi.updateName(token, name.trim()))
       toast.success('Name updated')
     } catch (err) {
-      toast.error('Could not update your name', message(err))
+      report(err, 'update your name')
     } finally {
       setBusy(false)
     }
@@ -89,6 +91,7 @@ function ProfileCard({ user, onSaved }: { user: AuthUser | null; onSaved: (u: Au
 
 function PasswordCard() {
   const toast = useToast()
+  const report = useReportError()
   const [current, setCurrent] = useState('')
   const [next, setNext] = useState('')
   const [confirm, setConfirm] = useState('')
@@ -114,7 +117,7 @@ function PasswordCard() {
       setConfirm('')
       toast.success('Password changed', 'Use the new one next time you sign in.')
     } catch (err) {
-      toast.error('Could not change your password', message(err))
+      report(err, 'change your password')
     } finally {
       setBusy(false)
     }
@@ -190,8 +193,4 @@ function Row({ label, value }: { label: string; value: string }) {
       <dd className="truncate text-sm text-ink">{value}</dd>
     </div>
   )
-}
-
-function message(err: unknown): string {
-  return err instanceof Error ? err.message : 'Something went wrong. Please try again.'
 }

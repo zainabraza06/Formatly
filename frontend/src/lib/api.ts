@@ -6,6 +6,7 @@ import type {
   RecentDocument,
 } from '../types/api'
 import { getToken } from './auth'
+import { apiErrorFrom } from './errors'
 
 // Where the API is. Set VITE_API_URL when it lives somewhere else; otherwise
 // a built page calls the origin it was served from — an empty base makes every
@@ -42,7 +43,7 @@ async function http<T>(path: string, init?: RequestInit): Promise<T> {
   })
 
   if (!res.ok) {
-    throw new Error(await failure(res))
+    throw await apiErrorFrom(res)
   }
 
   const ct = res.headers.get('content-type') || ''
@@ -50,19 +51,6 @@ async function http<T>(path: string, init?: RequestInit): Promise<T> {
     return (await res.json()) as T
   }
   return (await res.text()) as unknown as T
-}
-
-/** The server's `detail`, so a failure reads as a sentence rather than as the
- *  raw `{"detail":"..."}` body. */
-async function failure(res: Response): Promise<string> {
-  try {
-    const body = await res.clone().json()
-    if (typeof body?.detail === 'string') return body.detail
-  } catch {
-    /* not JSON — fall through to the text */
-  }
-  const text = await res.text().catch(() => '')
-  return text || `Request failed: ${res.status}`
 }
 
 export const api = {
@@ -108,18 +96,23 @@ export const api = {
   exportExcel: (documentId: string, title?: string) =>
     download(`/documents/${documentId}/export/excel`, filenameFor(title, documentId, 'xlsx')),
 
+  /** Delete a generated paper. Not undoable: a paper is its spec, and there is
+   *  no version history behind it the way there is for an imported document. */
+  deletePaper: (documentId: string) =>
+    http<{ deleted: boolean }>(`/paper/${documentId}`, { method: 'DELETE' }),
+
   /** The exported bytes without saving them — for the export preview, and for
    *  opening a generated paper in the editor, which imports its own .docx. */
   exportBlob: async (path: string): Promise<Blob> => {
     const res = await fetch(`${API_URL}${path}`, { headers: authHeaders() })
-    if (!res.ok) throw new Error(await failure(res))
+    if (!res.ok) throw await apiErrorFrom(res)
     return res.blob()
   },
 }
 
 /** The name to save under when the server's own is unreadable. */
 function filenameFor(title: string | undefined, documentId: string, ext: string): string {
-  const base = (title || documentId).replace(/[\/:*?"<>|]/g, '').trim() || documentId
+  const base = (title || documentId).replace(/[/:*?"<>|]/g, '').trim() || documentId
   return `${base}.${ext}`
 }
 
@@ -127,7 +120,7 @@ function filenameFor(title: string | undefined, documentId: string, ext: string)
  *  falling back to `fallback` when the header is missing or hidden by CORS. */
 async function download(path: string, fallback: string): Promise<void> {
   const res = await fetch(`${API_URL}${path}`, { headers: authHeaders() })
-  if (!res.ok) throw new Error(await failure(res))
+  if (!res.ok) throw await apiErrorFrom(res)
 
   const disposition = res.headers.get('content-disposition') || ''
   const match = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(disposition)

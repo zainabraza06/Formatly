@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { docosApi } from '../lib/docosApi'
+import { explain } from '../lib/errors'
 import { patchStyle, removeNode, updateNode } from '../lib/graphUtils'
 import type {
   DocOSEvent,
@@ -473,7 +474,12 @@ export function useDocOS() {
       docosApi.command(docId, command)
         .then((r) => { (r.events || []).forEach((ev) => enqueue(ev as DocOSEvent)) })
         // Without this a failed request left the panel saying "Planning…" for ever.
-        .catch((e) => failed(e instanceof Error ? e.message : 'the request failed'))
+        // The words are the same ones the rest of the app uses for the same
+        // failure — a database outage should not read differently in here.
+        .catch((e) => {
+          const { title, detail } = explain(e, 'run that instruction')
+          failed(`${title}. ${detail}`)
+        })
     }
   }, [docId, enqueue])
 

@@ -33,6 +33,65 @@ _FILE_LOCK = threading.Lock()
 _BUSY_SECONDS = 10.0
 
 
+class DatabaseUnavailable(RuntimeError):
+    """The database could not be reached, or refused the connection.
+
+    Raised instead of letting the driver's own exception escape, because that
+    one reaches the browser as an unexplained 500 and reads, in full, as a
+    stack trace about hostaddrs. This carries a sentence a person can act on;
+    `cause` carries the one technical line worth passing on.
+    """
+
+    def __init__(self, message: str, cause: str = ""):
+        super().__init__(message)
+        self.message = message
+        self.cause = cause
+
+
+def _redacted(url: str) -> str:
+    """The connection string with its password removed, for a log line."""
+    return re.sub(r"://([^:/@]+):[^@]*@", lambda m: f"://{m.group(1)}:***@", url)
+
+
+def describe_connection_failure(url: str, exc: Exception) -> DatabaseUnavailable:
+    """Turn a driver error into something worth reading.
+
+    The three below are the ones that actually happen in a deployment, and each
+    has a different answer: the wrong project, a paused one, and a network that
+    cannot see it at all. Anything else keeps the driver's first line, which is
+    usually the useful one.
+    """
+    text = str(exc)
+    first = text.strip().splitlines()[0] if text.strip() else exc.__class__.__name__
+
+    if "tenant or user not found" in text.lower() or "ENOTFOUND" in text:
+        return DatabaseUnavailable(
+            "The database rejected this server's credentials: the Postgres it "
+            "is pointed at does not recognise that project or user. This is a "
+            "DATABASE_URL that needs correcting, not something that will clear "
+            "on its own.",
+            first,
+        )
+    if "password authentication failed" in text.lower():
+        return DatabaseUnavailable(
+            "The database refused this server's password. DATABASE_URL needs "
+            "updating with the current one.",
+            first,
+        )
+    if "could not translate host name" in text.lower() or "Name or service not known" in text:
+        return DatabaseUnavailable(
+            "The database host in DATABASE_URL could not be resolved. Check the "
+            "hostname, and that this server has a way out to it.",
+            first,
+        )
+
+    return DatabaseUnavailable(
+        "The database could not be reached. It may be starting up, paused, or "
+        "unreachable from this server.",
+        first,
+    )
+
+
 def database_url() -> Optional[str]:
     """The Postgres to use, if one is configured."""
     url = (os.environ.get("DATABASE_URL") or "").strip()
@@ -83,8 +142,17 @@ def connect(path: Optional[Path] = None) -> Iterator[Any]:
         # most hosts need. The prepared statement belongs to a server
         # connection the next query may not get, and the failure reads as
         # "prepared statement does not exist" from nowhere.
-        with psycopg.connect(url, row_factory=dict_row,
-                             prepare_threshold=None) as conn:
+        try:
+            connection = psycopg.connect(url, row_factory=dict_row,
+                                         prepare_threshold=None)
+        except psycopg.OperationalError as exc:
+            # Logged with the target so an operator can see which database was
+            # meant, and without the password so a log is not a credential.
+            print(f"database unreachable: {_redacted(url)}: "
+                  f"{str(exc).strip().splitlines()[0]}", flush=True)
+            raise describe_connection_failure(url, exc) from exc
+
+        with connection as conn:
             yield _Postgres(conn)
         return
 

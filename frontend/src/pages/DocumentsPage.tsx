@@ -7,6 +7,7 @@ import {
   SORT_LABELS, type DocumentItem, type DocumentSource, type SortKey,
 } from '../lib/documents'
 import { useRegisterCommands } from '../context/command-context'
+import { useReportError } from '../hooks/useReportError'
 import {
   Button, ButtonLink, ConfirmModal, EmptyState, Input, Select, Tabs, useToast,
 } from '../components/ui'
@@ -24,6 +25,7 @@ type Filter = 'all' | DocumentSource
 export function DocumentsPage() {
   const navigate = useNavigate()
   const toast = useToast()
+  const report = useReportError()
 
   const [items, setItems] = useState<DocumentItem[]>([])
   const [failures, setFailures] = useState<{ source: DocumentSource; message: string }[]>([])
@@ -63,7 +65,7 @@ export function DocumentsPage() {
       toast.success('Document imported', 'Opening it in the editor.')
       navigate(`/app/editor?doc=${encodeURIComponent(res.document_id)}`)
     } catch (e) {
-      toast.error('Could not import that file', message(e))
+      report(e, 'import that file', () => void upload(file))
       setUploading(null)
     }
   }
@@ -81,7 +83,7 @@ export function DocumentsPage() {
       toast.success('Copy opened in the editor', 'The generated paper itself is unchanged.')
       navigate(`/app/editor?doc=${encodeURIComponent(id)}`)
     } catch (e) {
-      toast.error('Could not open that document', message(e))
+      report(e, 'open that document', () => void open(doc))
     } finally {
       setBusyId(null)
     }
@@ -96,11 +98,8 @@ export function DocumentsPage() {
       else await api.exportPdf(doc.id, doc.title)
       toast.toast({ id, tone: 'success', title: `${format.toUpperCase()} downloaded`, description: doc.title })
     } catch (e) {
-      toast.toast({
-        id, tone: 'error', title: `Could not export the ${format.toUpperCase()}`,
-        description: message(e),
-        action: { label: 'Try again', onClick: () => void exportDoc(doc, format) },
-      })
+      toast.dismiss(id)
+      report(e, `export the ${format.toUpperCase()}`, () => void exportDoc(doc, format))
     } finally {
       setBusyId(null)
     }
@@ -113,7 +112,7 @@ export function DocumentsPage() {
       await refresh()
       toast.success('Duplicated', `A copy of “${doc.title}” is in your library.`)
     } catch (e) {
-      toast.error('Could not duplicate that document', message(e))
+      report(e, 'duplicate that document', () => void duplicate(doc))
     } finally {
       setBusyId(null)
     }
@@ -124,12 +123,18 @@ export function DocumentsPage() {
     if (!doc) return
     setDeleting(true)
     try {
-      await docosApi.deleteDocument(doc.id)
+      if (doc.source === 'upload') await docosApi.deleteDocument(doc.id)
+      else await api.deletePaper(doc.id)
       setItems((all) => all.filter((d) => d.id !== doc.id))
-      toast.success('Deleted', `“${doc.title}” and its version history are gone.`)
+      toast.success(
+        'Deleted',
+        doc.source === 'upload'
+          ? `“${doc.title}” and its version history are gone.`
+          : `“${doc.title}” is gone.`,
+      )
       setConfirmDelete(null)
     } catch (e) {
-      toast.error('Could not delete that document', message(e))
+      report(e, 'delete that document')
     } finally {
       setDeleting(false)
     }
@@ -203,14 +208,21 @@ export function DocumentsPage() {
       </div>
 
       {failures.map((f) => (
-        <p
+        <div
           key={f.source}
           role="alert"
-          className="rounded-md border border-warning/25 bg-warning-soft px-3 py-2 text-xs text-warning"
+          className="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-md border border-warning/25 bg-warning-soft px-3 py-2 text-xs text-warning"
         >
-          {f.source === 'upload' ? 'Your uploads' : 'Your generated papers'} could not be
-          loaded: {f.message}. Everything else is listed below.
-        </p>
+          <span className="min-w-0 flex-1">
+            <strong className="font-medium">
+              {f.source === 'upload' ? 'Your uploads' : 'Your generated papers'} could not be loaded.
+            </strong>{' '}
+            {f.message}
+          </span>
+          <Button variant="secondary" size="sm" onClick={() => { setLoading(true); void refresh() }}>
+            Try again
+          </Button>
+        </div>
       ))}
 
       {/* ── Controls ───────────────────────────────────────────────────── */}
@@ -297,7 +309,7 @@ export function DocumentsPage() {
                 onOpen={() => open(doc)}
                 onExport={(format) => exportDoc(doc, format)}
                 onDuplicate={doc.source === 'upload' ? () => duplicate(doc) : undefined}
-                onDelete={doc.source === 'upload' ? () => setConfirmDelete(doc) : undefined}
+                onDelete={() => setConfirmDelete(doc)}
               />
             ))}
           </div>
@@ -315,17 +327,13 @@ export function DocumentsPage() {
         busy={deleting}
         title={`Delete “${confirmDelete?.title ?? ''}”?`}
         description={
-          <>
-            This deletes the document and all{' '}
-            {confirmDelete?.versions ?? 0} of its versions. It cannot be undone.
-          </>
+          confirmDelete?.source === 'upload'
+            ? `This deletes the document and all ${confirmDelete.versions ?? 0} of its versions. It cannot be undone.`
+            : 'This deletes the generated paper. It cannot be undone — a paper has no version history to fall back on.'
         }
-        confirmLabel="Delete document"
+        confirmLabel={confirmDelete?.source === 'upload' ? 'Delete document' : 'Delete paper'}
       />
     </div>
   )
 }
 
-function message(e: unknown): string {
-  return e instanceof Error ? e.message : 'Something went wrong. Please try again.'
-}
