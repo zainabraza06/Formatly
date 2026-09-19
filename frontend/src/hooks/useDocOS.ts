@@ -33,11 +33,25 @@ export interface PanelState {
   reading: { page: number; of: number } | null
 }
 
+/** An assistant edit that has landed but has not been looked at yet. */
+export interface ReviewState {
+  /** The instruction that caused it, in the reader's own words. */
+  command: string
+  /** What the assistant says it did. */
+  summary: string
+  /** The versions either side of the change, for the diff. */
+  before: number
+  after: number
+}
+
 const EMPTY_PANEL: PanelState = {
   task: '', summary: '', provider: '', source: '',
   currentAction: 'Idle', progress: null, history: [], upcoming: [], error: null,
   reading: null,
 }
+
+/** Timeline controls are not edits to review — they are the review. */
+const UNTRACKED = { track: false } as const
 
 // pacing (ms) so operations animate one-by-one rather than instantly
 const ITEM_DELAY = 220
@@ -60,7 +74,10 @@ export function useDocOS() {
   useEffect(() => {
     graphRef.current = graph
   }, [graph])
-  const [connected, setConnected] = useState(false)
+  /** live: the socket is open. connecting: it dropped and is being retried.
+   *  offline: no socket — commands still run over REST, just without the
+   *  step-by-step commentary. */
+  const [connection, setConnection] = useState<'live' | 'connecting' | 'offline'>('offline')
 
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [activeId, setActiveId] = useState<string | null>(null)
@@ -71,8 +88,29 @@ export function useDocOS() {
   const [panel, setPanel] = useState<PanelState>(EMPTY_PANEL)
   const [versions, setVersions] = useState<VersionInfo[]>([])
   const [diff, setDiff] = useState<{ a: number; b: number; diff: GraphDiff } | null>(null)
+  /** The last thing the assistant did to the document, waiting to be kept or
+   *  undone. Every AI edit passes through here, so none of them is final until
+   *  the reader has seen it. */
+  const [review, setReview] = useState<ReviewState | null>(null)
+
+  // The version the document was on when the current command started, so the
+  // review can name both ends of what changed.
+  const beforeRef = useRef<number | null>(null)
+  const trackingRef = useRef<string | null>(null)
+
+  // The version list as it is right now, for the same reason: runCommand is
+  // rebuilt only when the document changes, not on every commit.
+  const versionsRef = useRef<VersionInfo[]>([])
+  useEffect(() => {
+    versionsRef.current = versions
+  }, [versions])
 
   const wsRef = useRef<WebSocket | null>(null)
+  const retryRef = useRef<number | null>(null)
+  const attemptsRef = useRef(0)
+  /** Set while the socket is being replaced on purpose, so the close handler
+   *  does not treat it as a drop and start reconnecting to a closed document. */
+  const closingRef = useRef(false)
   const queueRef = useRef<DocOSEvent[]>([])
   const drainingRef = useRef(false)
   const docIdRef = useRef<string | null>(null)
@@ -296,6 +334,17 @@ export function useDocOS() {
       setPanel((s) => {
         if (!s.task) return s
         const rest = s.history[0]?.prompt === s.task ? s.history.slice(1) : s.history
+        // An edit the reader has not seen yet is not finished. Offering it for
+        // review is what makes an AI change reversible in one click rather
+        // than something to go hunting for in the timeline afterwards.
+        const command = trackingRef.current
+        const before = beforeRef.current
+        const after = hist.find((v) => v.is_current)?.seq ?? null
+        if (command && before !== null && after !== null && after !== before) {
+          setReview({ command, summary: s.summary || s.currentAction, before, after })
+          trackingRef.current = null
+          beforeRef.current = null
+        }
         return { ...s, history: [{ prompt: s.task, outcome: s.currentAction }, ...rest].slice(0, 20) }
       })
     } catch {
@@ -304,20 +353,59 @@ export function useDocOS() {
   }, [])
 
   // ── websocket lifecycle ────────────────────────────────────────────────────
+  // The socket opener, reachable from its own close handler without the
+  // callback referring to itself while it is still being defined.
+  const openRef = useRef<((id: string) => void) | null>(null)
+
   const openSocket = useCallback((id: string) => {
+    closingRef.current = true
     wsRef.current?.close()
+    closingRef.current = false
+    if (retryRef.current) window.clearTimeout(retryRef.current)
+
+    setConnection('connecting')
     const ws = new WebSocket(docosApi.wsUrl(id))
-    ws.onopen = () => setConnected(true)
-    ws.onclose = () => setConnected(false)
+
+    ws.onopen = () => {
+      attemptsRef.current = 0
+      setConnection('live')
+    }
+
+    ws.onclose = () => {
+      if (closingRef.current || docIdRef.current !== id) return
+      // A dropped socket used to stay dropped: the dot went grey and the
+      // commentary never came back, while commands quietly fell through to
+      // REST. Retry, backing off, and say which of the two is happening.
+      setConnection('connecting')
+      const wait = Math.min(1000 * 2 ** attemptsRef.current, 10_000)
+      attemptsRef.current += 1
+      retryRef.current = window.setTimeout(() => {
+        if (docIdRef.current === id) openRef.current?.(id)
+      }, wait)
+    }
+
+    ws.onerror = () => {
+      // onclose follows, which is where the retry lives.
+    }
+
     ws.onmessage = (e) => {
       try {
         enqueue(JSON.parse(e.data) as DocOSEvent)
       } catch { /* ignore malformed */ }
     }
+
     wsRef.current = ws
   }, [enqueue])
 
-  useEffect(() => () => wsRef.current?.close(), [])
+  useEffect(() => {
+    openRef.current = openSocket
+  }, [openSocket])
+
+  useEffect(() => () => {
+    closingRef.current = true
+    if (retryRef.current) window.clearTimeout(retryRef.current)
+    wsRef.current?.close()
+  }, [])
 
   const bindDoc = useCallback((id: string, g: DocumentGraph, t: string) => {
     docIdRef.current = id
@@ -327,6 +415,7 @@ export function useDocOS() {
     setSelectedIds([])
     setDiff(null)
     setPanel(EMPTY_PANEL)
+    setReview(null)
     setStatus('ready')
     openSocket(id)
     docosApi.history(id).then(setVersions).catch(() => {})
@@ -345,7 +434,7 @@ export function useDocOS() {
     bindDoc(id, doc.graph, doc.title)
   }, [bindDoc])
 
-  const runCommand = useCallback((command: string) => {
+  const runCommand = useCallback((command: string, options?: { track?: boolean }) => {
     if (!docId) return
     // Say so immediately. The first event cannot arrive until the planner has
     // answered, and a planner can take a minute or time out — during which the
@@ -355,6 +444,17 @@ export function useDocOS() {
     }))
     setStatus('running')
     setDiff(null)
+    setReview(null)
+
+    // Undo, Redo and the timeline controls are not edits to review — they are
+    // the review. Only an instruction the reader typed is tracked.
+    if (options?.track !== false) {
+      trackingRef.current = command
+      beforeRef.current = versionsRef.current.find((v) => v.is_current)?.seq ?? null
+    } else {
+      trackingRef.current = null
+      beforeRef.current = null
+    }
 
     const failed = (detail: string) => {
       setStatus('ready')
@@ -377,17 +477,38 @@ export function useDocOS() {
     }
   }, [docId, enqueue])
 
-  const undo = useCallback(() => runCommand('Undo'), [runCommand])
-  const redo = useCallback(() => runCommand('Redo'), [runCommand])
-  const rewind = useCallback((seq: number) => runCommand(`Rewind to version ${seq}`), [runCommand])
-  const restore = useCallback((seq: number) => runCommand(`Restore version ${seq}`), [runCommand])
-  const compare = useCallback((a: number, b: number) => runCommand(`Compare version ${a} and ${b}`), [runCommand])
+  const undo = useCallback(() => runCommand('Undo', UNTRACKED), [runCommand])
+  const redo = useCallback(() => runCommand('Redo', UNTRACKED), [runCommand])
+  const rewind = useCallback((seq: number) => runCommand(`Rewind to version ${seq}`, UNTRACKED), [runCommand])
+  const restore = useCallback((seq: number) => runCommand(`Restore version ${seq}`, UNTRACKED), [runCommand])
+  const compare = useCallback((a: number, b: number) => runCommand(`Compare version ${a} and ${b}`, UNTRACKED), [runCommand])
   const clearDiff = useCallback(() => setDiff(null), [])
 
+  /** Keep what the assistant did. Nothing to undo — the change is already in
+   *  the document; this only takes the question off the screen. */
+  const acceptChanges = useCallback(() => setReview(null), [])
+
+  /** Put the document back as it was before the last instruction. */
+  const rejectChanges = useCallback(() => {
+    setReview(null)
+    runCommand('Undo', UNTRACKED)
+  }, [runCommand])
+
+  /** Turn the canvas to a node — the outline clicking through to a heading.
+   *  Local: nothing is sent, because nothing about the document changes. */
+  const focusNode = useCallback((id: string) => setFocusId(id), [])
+
+  /** Show exactly what the last instruction changed. */
+  const showChanges = useCallback(() => {
+    if (review) compare(review.before, review.after)
+  }, [review, compare])
+
   return {
-    docId, title, graph, status, connected,
-    selectedIds, activeId, focusId, removingIds, panel, versions, diff,
-    importFile, loadDocument, runCommand, undo, redo, rewind, restore, compare, clearDiff,
+    docId, title, graph, status, connection,
+    selectedIds, activeId, focusId, removingIds, panel, versions, diff, review,
+    importFile, loadDocument, runCommand, focusNode,
+    undo, redo, rewind, restore, compare, clearDiff,
+    acceptChanges, rejectChanges, showChanges,
   }
 }
 
