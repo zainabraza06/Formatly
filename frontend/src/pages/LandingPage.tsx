@@ -1,401 +1,379 @@
+import { useEffect, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { motion } from 'framer-motion'
-import { ThemeToggle } from '../components/ThemeToggle'
-import { getInitialTheme, applyTheme } from '../lib/theme'
-import { useState, useEffect } from 'react'
+import { cn } from '../lib/cn'
+import { applyTheme, getInitialTheme } from '../lib/theme'
+import { Badge, Button, ButtonLink } from '../components/ui'
+import { Logo } from '../components/Logo'
+import { ProductMock } from '../components/landing/ProductMock'
+import {
+  CheckIcon, ChevronDownIcon, ComposeIcon, DocumentsIcon, DownloadIcon, EditorIcon,
+  LayersIcon, MoonIcon, SparkIcon, SunIcon,
+} from '../components/icons'
 
-const features = [
- {
- icon: (
- <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="h-5 w-5">
- <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25z" />
- </svg>
- ),
- title: 'Edit What It Wrote',
- desc: 'Open any generated document in Document OS and change it by hand, or tell the AI what to change. Every edit is versioned.',
- accent: 'bg-surface-2',
- border: 'border-line',
- },
- {
- icon: (
- <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="h-5 w-5">
- <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
- </svg>
- ),
- title: 'Formatting Automation',
- desc: 'Describe fonts, margins, spacing in plain English. The engine parses and applies rules to every section.',
- accent: 'bg-surface-2',
- border: 'border-line',
- },
- {
- icon: (
- <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="h-5 w-5">
- <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" />
- </svg>
- ),
- title: 'Embedded Charts',
- desc: 'Generate bar, line, and pie charts from manual data or AI suggestions — embedded directly in exports.',
- accent: 'bg-surface-2',
- border: 'border-line',
- },
- {
- icon: (
- <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="h-5 w-5">
- <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
- </svg>
- ),
- title: 'One-Click Export',
- desc: 'Download polished DOCX and PDF outputs with all formatting, charts, and structure fully preserved.',
- accent: 'bg-surface-2',
- border: 'border-line',
- },
- {
- icon: (
- <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="h-5 w-5">
- <path strokeLinecap="round" strokeLinejoin="round" d="M4.26 10.147a60.436 60.436 0 00-.491 6.347A48.627 48.627 0 0112 20.904a48.627 48.627 0 018.232-4.41 60.46 60.46 0 00-.491-6.347m-15.482 0a50.57 50.57 0 00-2.658-.813A59.905 59.905 0 0112 3.493a59.902 59.902 0 0110.399 5.84c-.896.248-1.783.52-2.658.814m-15.482 0A50.697 50.697 0 0112 13.489a50.702 50.702 0 017.74-3.342M6.75 15a.75.75 0 100-1.5.75.75 0 000 1.5zm0 0v-3.675A55.378 55.378 0 0112 8.443m-7.007 11.55A5.981 5.981 0 006.75 15.75v-1.5" />
- </svg>
- ),
- title: 'Style Presets',
- desc: 'Academic, Business, Research, Technical, Resume, Presentation — each preset wires the right typography and layout.',
- accent: 'bg-surface-2',
- border: 'border-line',
- },
- {
- icon: (
- <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="h-5 w-5">
- <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" />
- </svg>
- ),
- title: 'AI Chat Assistant',
- desc: 'Refine sections, change tone, or regenerate content with an integrated AI assistant.',
- accent: 'bg-surface-2',
- border: 'border-line',
- },
+const STEPS = [
+  {
+    title: 'Bring what you have',
+    body: 'Paste a brief, your notes, a table of numbers — or upload a Word document you already wrote.',
+    icon: <DocumentsIcon className="h-5 w-5" />,
+  },
+  {
+    title: 'Say what it should be',
+    body: 'Fix the sections before a word is written, pick a style, and add any rule it must follow.',
+    icon: <ComposeIcon className="h-5 w-5" />,
+  },
+  {
+    title: 'Read it, fix it, export it',
+    body: 'Rewrite any section on its own, tell the editor what to change in plain English, then download the DOCX or PDF.',
+    icon: <DownloadIcon className="h-5 w-5" />,
+  },
 ]
 
-const pipeline = [
- { label: 'User Prompt', desc: 'Natural language input', color: 'bg-ink' },
- { label: 'Intent Extraction', desc: 'AI reads requirements', color: 'bg-ink' },
- { label: 'Document Planning', desc: 'Outline & structure built', color: 'bg-ink' },
- { label: 'Content Generation', desc: 'Sections written by AI', color: 'bg-ink' },
- { label: 'Formatting Engine', desc: 'Rules applied precisely', color: 'bg-ink' },
- { label: 'Export Engine', desc: 'DOCX & PDF rendered', color: 'bg-ink' },
+const FEATURES = [
+  {
+    title: 'Plain-English formatting',
+    body: '“Make all headings consistent.” “Reformat the citations.” The editor works on the document’s real structure, not a find-and-replace.',
+    icon: <EditorIcon className="h-5 w-5" />,
+  },
+  {
+    title: 'Every change is reversible',
+    body: 'Each instruction is a version. See exactly what changed, keep it, or undo it — nothing the AI does is final until you say so.',
+    icon: <LayersIcon className="h-5 w-5" />,
+  },
+  {
+    title: 'Rewrite one section',
+    body: 'A weak conclusion does not mean regenerating the document. Rewrite that section alone and leave the rest untouched.',
+    icon: <SparkIcon className="h-5 w-5" />,
+  },
+  {
+    title: 'Real document styles',
+    body: 'IEEE two-column, formal assignment, or your own stylesheet — applied to headings, tables, figures and captions alike.',
+    icon: <DocumentsIcon className="h-5 w-5" />,
+  },
+  {
+    title: 'Tables, charts and equations',
+    body: 'Numbers in your material become tables and charts. LaTeX becomes mathematics. Both survive the export.',
+    icon: <ComposeIcon className="h-5 w-5" />,
+  },
+  {
+    title: 'Exports that hold together',
+    body: 'DOCX and PDF from the same render, with the page preview shown before you save — so the file is what you saw.',
+    icon: <DownloadIcon className="h-5 w-5" />,
+  },
 ]
 
-const testimonials = [
- {
- quote: 'Formatly turned our research prompt into a client-ready report in minutes. Incredible.',
- author: 'Dr. A. Rahman',
- role: 'Research Lead',
- },
- {
- quote: 'It writes the report, the listings and the figures, and I edit the wording where I want to.',
- author: 'Sarah K.',
- role: 'Talent Ops Manager',
- },
- {
- quote: 'The formatting engine actually respects my university style guide. Finally.',
- author: 'Marcus T.',
- role: 'Graduate Student',
- },
+const PLANS = [
+  {
+    name: 'Free',
+    price: 'Free',
+    cadence: 'while in beta',
+    blurb: 'Everything, for anyone with a document to write.',
+    features: [
+      'Generate documents from your own material',
+      'Edit Word documents with AI instructions',
+      'Full version history, undo and diffs',
+      'DOCX and PDF export',
+    ],
+    cta: 'Start writing',
+    highlighted: true,
+  },
+  {
+    name: 'Team',
+    price: 'Planned',
+    cadence: '',
+    blurb: 'Shared libraries and house styles for a group.',
+    features: [
+      'Everything in Free',
+      'Shared document library',
+      'Your organisation’s stylesheet',
+      'Comments and review',
+    ],
+    cta: 'Start writing',
+    highlighted: false,
+  },
+  {
+    name: 'Institution',
+    price: 'Planned',
+    cadence: '',
+    blurb: 'For departments with a style guide to enforce.',
+    features: [
+      'Everything in Team',
+      'Enforced submission templates',
+      'Single sign-on',
+      'Self-hosted deployment',
+    ],
+    cta: 'Start writing',
+    highlighted: false,
+  },
 ]
 
+const FAQS = [
+  {
+    q: 'Does it change my document without asking?',
+    a: 'It applies what you asked for, then shows you what it did. Every instruction becomes a version, the change is named as it lands with Keep and Undo beside it, and you can compare any two versions word by word. Nothing is lost, and nothing is hidden.',
+  },
+  {
+    q: 'What happens to my formatting when I upload a .docx?',
+    a: 'The document is read into a structure that knows what a heading, a table, a figure and an equation are — not a wall of text. That is what lets an instruction like “make all headings consistent” find the headings, and what lets the export come back out as a real Word document.',
+  },
+  {
+    q: 'Can I control the structure, or does the AI decide?',
+    a: 'Either. List the sections yourself and the writer follows them exactly; leave the outline empty and it plans its own, and tells you what it chose.',
+  },
+  {
+    q: 'What if one section is wrong but the rest is fine?',
+    a: 'Rewrite that section on its own, optionally saying what should change about it. The other sections are not touched, and the rewrite can be undone.',
+  },
+  {
+    q: 'Which formats can I export?',
+    a: 'DOCX and PDF, from the same render, with a preview of the page before you save. PDF export needs LibreOffice on the server; where it is unavailable the app says so rather than failing quietly.',
+  },
+  {
+    q: 'Is my work private?',
+    a: 'Your documents belong to your account and are only listed and exported for you. Text you submit is sent to the language model that writes or edits it, so treat it as you would any hosted AI tool.',
+  },
+]
+
+/**
+ * The public page. Its job is to say what the product does, show it, and get
+ * out of the way — so the first thing below the headline is the editor itself
+ * rather than a stock illustration.
+ */
 export function LandingPage() {
- const [theme, setTheme] = useState<'light' | 'dark'>(() => getInitialTheme())
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => getInitialTheme())
 
- useEffect(() => {
- applyTheme(theme)
- }, [theme])
+  useEffect(() => {
+    applyTheme(theme)
+  }, [theme])
 
- return (
- <div className="min-h-screen bg-canvas selection:bg-ink/20">
+  return (
+    <div className="min-h-screen bg-canvas">
+      <a href="#main" className="skip-link rounded-md bg-brand px-3 py-2 text-sm font-medium text-brand-fg shadow-lg">
+        Skip to content
+      </a>
 
- {/* ── Ambient glow removed for minimalist style ── */}
+      {/* ── Nav ──────────────────────────────────────────────────────────── */}
+      <header className="sticky top-0 z-40 border-b border-line bg-canvas/85 backdrop-blur">
+        <div className="mx-auto flex h-14 max-w-6xl items-center gap-4 px-4 sm:px-6">
+          <Logo to="/" />
 
- <div className="relative mx-auto max-w-6xl px-4 pb-20">
+          <nav aria-label="Sections" className="ml-4 hidden items-center gap-1 md:flex">
+            {[
+              ['How it works', '#how'],
+              ['Features', '#features'],
+              ['Pricing', '#pricing'],
+              ['FAQ', '#faq'],
+            ].map(([label, href]) => (
+              <a
+                key={href}
+                href={href}
+                className="rounded-md px-2.5 py-1.5 text-sm text-muted transition-colors duration-fast hover:bg-surface-2 hover:text-ink"
+              >
+                {label}
+              </a>
+            ))}
+          </nav>
 
- {/* ── Nav ── */}
- <header className="flex items-center justify-between py-5">
- <motion.div
- initial={{ opacity: 0, x: -10 }}
- animate={{ opacity: 1, x: 0 }}
- transition={{ duration: 0.3 }}
- className="flex items-center gap-2"
- >
- <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-accent shadow-lg ">
- <span className="text-sm font-semibold text-accent-fg">F</span>
- </div>
- <span className="text-sm font-bold tracking-tight text-ink">
- Formatly
- </span>
- </motion.div>
+          <div className="ml-auto flex items-center gap-2">
+            <Button
+              variant="ghost" size="md" iconOnly
+              aria-label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+              onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
+              leadingIcon={theme === 'dark' ? <SunIcon /> : <MoonIcon />}
+            />
+            <ButtonLink to="/login" variant="ghost" className="hidden sm:inline-flex">
+              Log in
+            </ButtonLink>
+            <ButtonLink to="/app/compose" variant="primary">
+              Get started
+            </ButtonLink>
+          </div>
+        </div>
+      </header>
 
- <div className="flex items-center gap-3">
- <ThemeToggle mode={theme} onToggle={() => setTheme(t => t === 'dark' ? 'light' : 'dark')} />
- <Link
- to="/app/compose"
- className="rounded-xl bg-accent px-4 py-2 text-xs font-medium text-accent-fg transition hover:opacity-90"
- >
- Open App →
- </Link>
- </div>
- </header>
+      <main id="main">
+        {/* ── Hero ───────────────────────────────────────────────────────── */}
+        <section className="mx-auto max-w-6xl px-4 pb-10 pt-12 sm:px-6 sm:pt-20">
+          <div className="mx-auto max-w-3xl text-center">
+            <Badge tone="brand" icon={<SparkIcon className="h-3.5 w-3.5" />}>
+              AI that formats, not just writes
+            </Badge>
 
- {/* ── Hero ── */}
- <section className="mt-20 flex flex-col items-center text-center">
- <motion.div
- initial={{ opacity: 0, scale: 0.9 }}
- animate={{ opacity: 1, scale: 1 }}
- transition={{ duration: 0.5, ease: 'easeOut' }}
- className="mb-4 inline-flex items-center gap-2 rounded-full border border-line bg-surface-2 px-4 py-1.5 text-xs font-semibold text-ink shadow-sm"
- >
- <span className="flex h-2 w-2 items-center justify-center">
- <span className="absolute inline-flex h-2 w-2 animate-ping rounded-full bg-focus opacity-75"></span>
- <span className="relative inline-flex h-2 w-2 rounded-full bg-focus"></span>
- </span>
- The Future of AI Documents
- </motion.div>
+            <h1 className="mt-4 text-4xl font-semibold tracking-tight text-ink sm:text-5xl lg:text-6xl">
+              Documents that come out{' '}
+              <span className="text-brand-ink">properly formatted</span>
+            </h1>
 
- <motion.h1
- initial={{ opacity: 0, y: 20 }}
- animate={{ opacity: 1, y: 0 }}
- transition={{ duration: 0.6, delay: 0.1, ease: 'easeOut' }}
- className="mt-2 max-w-4xl text-5xl font-extrabold tracking-tight text-ink sm:text-7xl leading-tight"
- >
- Generate <span className="bg-gradient-to-r from-focus to-accent bg-clip-text text-transparent">Professional</span>
- <br />
- Documents with AI
- </motion.h1>
+            <p className="mx-auto mt-5 max-w-xl text-lg leading-relaxed text-muted">
+              Write a paper from your own material, or bring a Word document and tell it
+              what to fix in plain English. Every change is shown, versioned, and
+              reversible.
+            </p>
 
- <motion.p
- initial={{ opacity: 0, y: 20 }}
- animate={{ opacity: 1, y: 0 }}
- transition={{ duration: 0.6, delay: 0.2, ease: 'easeOut' }}
- className="mt-6 mx-auto max-w-2xl text-lg leading-8 text-muted"
- >
- From prompts to fully formatted reports, resumes, and proposals in seconds.
- Formatly acts like an autonomous document-production platform, designed to save you hours.
- </motion.p>
+            <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+              <ButtonLink to="/app/compose" variant="primary" size="lg">
+                Write a document
+              </ButtonLink>
+              <ButtonLink to="/app" variant="secondary" size="lg" leadingIcon={<EditorIcon />}>
+                Edit one I have
+              </ButtonLink>
+            </div>
 
- <motion.div
- initial={{ opacity: 0, y: 20 }}
- animate={{ opacity: 1, y: 0 }}
- transition={{ duration: 0.6, delay: 0.3, ease: 'easeOut' }}
- className="mt-10 flex flex-wrap items-center justify-center gap-4"
- >
- <Link
- to="/app/compose"
- className="rounded-2xl bg-focus px-8 py-3.5 text-base font-bold text-white shadow-lg shadow-focus/30 transition-all hover:-translate-y-0.5 hover:shadow-xl hover:shadow-focus/40 active:translate-y-0"
- >
- Start a New Document
- </Link>
- <Link
- to="/login"
- className="rounded-2xl bg-surface-2 px-8 py-3.5 text-base font-bold text-ink border border-line shadow-sm transition-all hover:-translate-y-0.5 hover:bg-surface hover:shadow-md active:translate-y-0"
- >
- Log In
- </Link>
- </motion.div>
- </section>
+            <p className="mt-3 text-xs text-faint">
+              Free while in beta · no card, no credits
+            </p>
+          </div>
 
- {/* ── Feature grid ── */}
- <section className="mt-32">
- <motion.div
- initial={{ opacity: 0, y: 15 }}
- whileInView={{ opacity: 1, y: 0 }}
- viewport={{ once: true }}
- transition={{ duration: 0.4 }}
- className="mb-10 text-center"
- >
- <h2 className="text-2xl font-bold text-ink">Everything you need</h2>
- <p className="mt-2 text-sm text-muted">
- A complete document-production pipeline in one tool.
- </p>
- </motion.div>
+          <ProductMock className="mx-auto mt-12 max-w-4xl" />
+        </section>
 
- <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
- {features.map((f, i) => (
- <motion.div
- key={f.title}
- initial={{ opacity: 0, y: 16 }}
- whileInView={{ opacity: 1, y: 0 }}
- viewport={{ once: true }}
- transition={{ duration: 0.35, delay: i * 0.05 }}
- whileHover={{ y: -3 }}
- className={`group rounded-2xl border ${f.border} ${f.accent} p-5 transition-shadow hover:shadow-lg`}
- >
- <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-surface text-ink shadow-sm border border-line">
- {f.icon}
- </div>
- <div className="mt-4 text-sm font-semibold text-ink">{f.title}</div>
- <div className="mt-1.5 text-xs leading-5 text-muted">{f.desc}</div>
- </motion.div>
- ))}
- </div>
- </section>
+        {/* ── How it works ───────────────────────────────────────────────── */}
+        <Section id="how" title="Three steps, start to finish"
+                 lede="No template to pick, no settings to learn first.">
+          <ol className="grid gap-4 md:grid-cols-3">
+            {STEPS.map((step, i) => (
+              <li key={step.title} className="rounded-lg border border-line bg-surface p-5">
+                <div className="flex items-center gap-3">
+                  <span className="flex h-9 w-9 items-center justify-center rounded-md border border-brand/20 bg-brand-soft text-brand-ink" aria-hidden>
+                    {step.icon}
+                  </span>
+                  <span className="text-2xs font-semibold uppercase tracking-wide text-faint">
+                    Step {i + 1}
+                  </span>
+                </div>
+                <h3 className="mt-4 text-base font-semibold text-ink">{step.title}</h3>
+                <p className="mt-1.5 text-sm leading-relaxed text-muted">{step.body}</p>
+              </li>
+            ))}
+          </ol>
+        </Section>
 
- {/* ── Pipeline + Demo ── */}
- <section className="mt-24 grid grid-cols-1 gap-6 lg:grid-cols-2">
- {/* Pipeline visualization */}
- <motion.div
- initial={{ opacity: 0, x: -16 }}
- whileInView={{ opacity: 1, x: 0 }}
- viewport={{ once: true }}
- transition={{ duration: 0.45 }}
- className="rounded-2xl border border-line bg-surface p-6 "
- >
- <div className="text-sm font-semibold text-ink">AI Document Pipeline</div>
- <div className="mt-1 text-xs text-muted">
- Each request passes through a multi-stage agent.
- </div>
- <div className="mt-5 space-y-2.5">
- {pipeline.map((step, i) => (
- <motion.div
- key={step.label}
- initial={{ opacity: 0, x: -10 }}
- whileInView={{ opacity: 1, x: 0 }}
- viewport={{ once: true }}
- transition={{ duration: 0.28, delay: i * 0.06 }}
- className="flex items-center gap-3 rounded-xl border border-line bg-surface px-4 py-2.5 "
- >
- <div className={`h-2 w-2 shrink-0 rounded-full ${step.color}`} />
- <div className="flex-1">
- <div className="text-xs font-medium text-ink">{step.label}</div>
- <div className="text-[11px] text-muted">{step.desc}</div>
- </div>
- <div className="text-[10px] font-medium text-faint">
- {i === 3 ? '✦ AI' : '✓'}
- </div>
- </motion.div>
- ))}
- </div>
- </motion.div>
+        {/* ── Features ───────────────────────────────────────────────────── */}
+        <Section id="features" title="What it actually does"
+                 lede="The parts that matter when a document has to be handed in, not just drafted.">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {FEATURES.map((f) => (
+              <div key={f.title} className="rounded-lg border border-line bg-surface p-5">
+                <span className="flex h-9 w-9 items-center justify-center rounded-md border border-line bg-surface-2 text-muted" aria-hidden>
+                  {f.icon}
+                </span>
+                <h3 className="mt-4 text-base font-semibold text-ink">{f.title}</h3>
+                <p className="mt-1.5 text-sm leading-relaxed text-muted">{f.body}</p>
+              </div>
+            ))}
+          </div>
+        </Section>
 
- {/* Demo flow */}
- <motion.div
- initial={{ opacity: 0, x: 16 }}
- whileInView={{ opacity: 1, x: 0 }}
- viewport={{ once: true }}
- transition={{ duration: 0.45 }}
- className="flex flex-col gap-4"
- >
- {/* Demo 1 */}
- <div className="rounded-2xl border border-line bg-surface p-5 ">
- <div className="flex items-center gap-2">
- <span className="rounded-lg bg-surface-2 px-2 py-0.5 text-[11px] font-semibold text-ink border border-line">
- Demo A
- </span>
- <div className="text-sm font-semibold text-ink">Coursework or Assignment</div>
- </div>
- <ol className="mt-3 space-y-2 text-xs text-muted">
- {['Paste the brief and your material', 'Say anything extra it must do', 'Code, screenshots and tables are written in', 'Download the DOCX'].map((step, i) => (
- <li key={i} className="flex items-center gap-2">
- <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-surface-2 text-[10px] font-bold text-ink border border-line">
- {i + 1}
- </span>
- {step}
- </li>
- ))}
- </ol>
- </div>
+        {/* ── Pricing ────────────────────────────────────────────────────── */}
+        <Section id="pricing" title="Pricing"
+                 lede="Formatly is in beta and everything in it is free. The paid tiers below are what is planned, not what is charged — there is no billing to sign up to yet.">
+          <div className="grid gap-4 lg:grid-cols-3">
+            {PLANS.map((plan) => (
+              <div
+                key={plan.name}
+                className={cn(
+                  'flex flex-col rounded-lg border bg-surface p-6',
+                  plan.highlighted ? 'border-brand shadow-md' : 'border-line',
+                )}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <h3 className="text-base font-semibold text-ink">{plan.name}</h3>
+                  {plan.highlighted ? (
+                    <Badge tone="brand">Available now</Badge>
+                  ) : (
+                    <Badge>Not yet available</Badge>
+                  )}
+                </div>
 
- {/* Demo 2 */}
- <div className="rounded-2xl border border-line bg-surface p-5 ">
- <div className="flex items-center gap-2">
- <span className="rounded-lg bg-surface-2 px-2 py-0.5 text-[11px] font-semibold text-ink border border-line">
- Demo B
- </span>
- <div className="text-sm font-semibold text-ink">Academic Report</div>
- </div>
- <ol className="mt-3 space-y-2 text-xs text-muted">
- {['Enter topic + formatting rules', 'AI plans & structures report', 'Sections + charts generated', 'Export DOCX or PDF'].map((step, i) => (
- <li key={i} className="flex items-center gap-2">
- <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-surface-2 text-[10px] font-bold text-ink border border-line">
- {i + 1}
- </span>
- {step}
- </li>
- ))}
- </ol>
- <Link
- to="/app/compose"
- className="mt-4 inline-flex items-center gap-1 text-xs font-semibold text-ink hover:text-muted"
- >
- Try it → New Document
- </Link>
- </div>
- </motion.div>
- </section>
+                <p className="mt-4 flex items-baseline gap-1.5">
+                  <span className="text-3xl font-semibold tracking-tight text-ink">{plan.price}</span>
+                  {plan.cadence && <span className="text-sm text-faint">{plan.cadence}</span>}
+                </p>
+                <p className="mt-2 text-sm text-muted">{plan.blurb}</p>
 
- {/* ── Testimonials ── */}
- <section className="mt-24">
- <motion.div
- initial={{ opacity: 0, y: 10 }}
- whileInView={{ opacity: 1, y: 0 }}
- viewport={{ once: true }}
- transition={{ duration: 0.4 }}
- className="mb-8 text-center"
- >
- <h2 className="text-2xl font-bold text-ink">What people say</h2>
- </motion.div>
+                <ul className="mt-5 flex-1 space-y-2.5">
+                  {plan.features.map((f) => (
+                    <li key={f} className="flex gap-2 text-sm text-muted">
+                      <CheckIcon
+                        className={cn('mt-0.5 h-4 w-4 shrink-0', plan.highlighted ? 'text-brand-ink' : 'text-faint')}
+                      />
+                      {f}
+                    </li>
+                  ))}
+                </ul>
 
- <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
- {testimonials.map((t, i) => (
- <motion.div
- key={i}
- initial={{ opacity: 0, y: 14 }}
- whileInView={{ opacity: 1, y: 0 }}
- viewport={{ once: true }}
- transition={{ duration: 0.35, delay: i * 0.07 }}
- className="rounded-2xl border border-line bg-surface p-5 "
- >
- <svg className="h-5 w-5 text-faint" fill="currentColor" viewBox="0 0 24 24">
- <path d="M14.017 21v-7.391c0-5.704 3.731-9.57 8.983-10.609l.995 2.151c-2.432.917-3.995 3.638-3.995 5.849h4v10h-9.983zm-14.017 0v-7.391c0-5.704 3.748-9.57 9-10.609l.996 2.151c-2.433.917-3.996 3.638-3.996 5.849h3.983v10h-9.983z" />
- </svg>
- <p className="mt-3 text-xs leading-5 text-muted">"{t.quote}"</p>
- <div className="mt-4">
- <div className="text-xs font-semibold text-ink">{t.author}</div>
- <div className="text-[11px] text-muted">{t.role}</div>
- </div>
- </motion.div>
- ))}
- </div>
- </section>
+                <ButtonLink
+                  to="/app/compose"
+                  variant={plan.highlighted ? 'primary' : 'secondary'}
+                  fullWidth
+                  className="mt-6"
+                >
+                  {plan.cta}
+                </ButtonLink>
+              </div>
+            ))}
+          </div>
+        </Section>
 
- {/* ── Bottom CTA ── */}
- <motion.section
- initial={{ opacity: 0, y: 16 }}
- whileInView={{ opacity: 1, y: 0 }}
- viewport={{ once: true }}
- transition={{ duration: 0.4 }}
- className="mt-24 rounded-2xl border border-line bg-surface-2 p-10 text-center "
- >
- <h2 className="text-2xl font-bold text-ink">
- Ready to generate your first document?
- </h2>
- <p className="mt-2 text-sm text-muted">
- No configuration needed — just describe what you want.
- </p>
- <Link
- to="/app/compose"
- className="mt-6 inline-flex items-center gap-2 rounded-xl bg-accent px-8 py-3 text-sm font-semibold text-accent-fg transition hover: hover:scale-[1.02] active:scale-[0.98]"
- >
- Open Formatly App →
- </Link>
- </motion.section>
+        {/* ── FAQ ────────────────────────────────────────────────────────── */}
+        <Section id="faq" title="Questions" lede="The ones worth answering before you sign up.">
+          <div className="mx-auto max-w-2xl divide-y divide-line overflow-hidden rounded-lg border border-line bg-surface">
+            {FAQS.map((item) => (
+              <details key={item.q} className="group">
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-5 py-4 text-sm font-medium text-ink transition-colors duration-fast hover:bg-surface-2">
+                  {item.q}
+                  <ChevronDownIcon className="h-4 w-4 shrink-0 text-faint transition-transform duration-fast group-open:rotate-180" />
+                </summary>
+                <p className="px-5 pb-4 text-sm leading-relaxed text-muted">{item.a}</p>
+              </details>
+            ))}
+          </div>
+        </Section>
 
- {/* ── Footer ── */}
- <footer className="mt-14 flex flex-wrap items-center justify-between gap-2 border-t border-line pt-6 text-xs text-muted 0">
- <div className="flex items-center gap-2">
- <div className="flex h-5 w-5 items-center justify-center rounded-lg bg-accent">
- <span className="text-[9px] font-semibold text-accent-fg">F</span>
- </div>
- <span>© {new Date().getFullYear()} Formatly</span>
- </div>
- <div>AI-powered document production platform</div>
- </footer>
+        {/* ── Closing CTA ────────────────────────────────────────────────── */}
+        <section className="mx-auto max-w-6xl px-4 pb-20 sm:px-6">
+          <div className="rounded-xl border border-line bg-surface px-6 py-12 text-center shadow-sm">
+            <h2 className="text-2xl font-semibold tracking-tight text-ink">
+              Have something due?
+            </h2>
+            <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-muted">
+              Paste what you have. You will have a formatted document, and a way to fix
+              anything in it, in a couple of minutes.
+            </p>
+            <ButtonLink to="/app/compose" variant="primary" size="lg" className="mt-6">
+              Write a document
+            </ButtonLink>
+          </div>
+        </section>
+      </main>
 
- </div>
- </div>
- )
+      <footer className="border-t border-line">
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-6 text-xs text-muted sm:px-6">
+          <div className="flex items-center gap-2">
+            <Logo to={null} compact />
+            <span>© {new Date().getFullYear()} Formatly</span>
+          </div>
+          <div className="flex items-center gap-4">
+            <Link to="/login" className="rounded-sm hover:text-ink">Log in</Link>
+            <a href="#faq" className="rounded-sm hover:text-ink">FAQ</a>
+          </div>
+        </div>
+      </footer>
+    </div>
+  )
+}
+
+function Section({
+  id, title, lede, children,
+}: { id: string; title: string; lede: string; children: ReactNode }) {
+  return (
+    <section id={id} className="scroll-mt-16 border-t border-line py-14 sm:py-20">
+      <div className="mx-auto max-w-6xl px-4 sm:px-6">
+        <div className="mx-auto mb-8 max-w-2xl text-center">
+          <h2 className="text-2xl font-semibold tracking-tight text-ink sm:text-3xl">{title}</h2>
+          <p className="mt-2 text-sm leading-relaxed text-muted">{lede}</p>
+        </div>
+        {children}
+      </div>
+    </section>
+  )
 }

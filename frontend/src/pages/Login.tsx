@@ -1,97 +1,163 @@
 import { useState } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
-import { motion } from 'framer-motion'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { btnPrimary, field } from '../lib/ui'
+import { Button, Field, Input } from '../components/ui'
+import { Logo } from '../components/Logo'
+import { WarningIcon } from '../components/icons'
 
+const MIN_PASSWORD = 6
+
+/**
+ * Sign in, or sign up — the same form either way, because at this size the
+ * difference is one field.
+ *
+ * Validation happens where the mistake is, before the round trip: an empty
+ * email and a five-character password are answered by the field itself rather
+ * than by the server a second later.
+ */
 export function Login() {
   const { login, signup } = useAuth()
   const navigate = useNavigate()
   const location = useLocation() as { state?: { from?: string } }
-  const from = location.state?.from || '/app/compose'
+  const from = location.state?.from || '/app'
 
   const [mode, setMode] = useState<'login' | 'signup'>('login')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [name, setName] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [touched, setTouched] = useState(false)
   const [busy, setBusy] = useState(false)
+
+  const emailError = touched && !email.trim()
+    ? 'Enter the email address you signed up with.'
+    : touched && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())
+      ? 'That does not look like an email address.'
+      : null
+
+  const passwordError = touched && password.length < MIN_PASSWORD
+    ? `Passwords are at least ${MIN_PASSWORD} characters.`
+    : null
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
+    setTouched(true)
     setError(null)
+    if (!email.trim() || password.length < MIN_PASSWORD) return
+
     setBusy(true)
     try {
-      if (mode === 'login') await login(email, password)
-      else await signup(email, password, name)
+      if (mode === 'login') await login(email.trim(), password)
+      else await signup(email.trim(), password, name.trim())
       navigate(from, { replace: true })
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Something went wrong')
+      setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.')
     } finally {
       setBusy(false)
     }
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-canvas p-4 text-ink">
-      <motion.form
-        onSubmit={submit}
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3, ease: 'easeOut' }}
-        className="w-full max-w-sm rounded-2xl border border-line bg-surface p-8 shadow-xl shadow-black/5"
-      >
-        <div className="mb-1 flex items-center gap-2.5">
-          <div className="flex h-7 w-7 items-center justify-center rounded-md bg-accent text-[13px] font-semibold text-accent-fg">
-            F
-          </div>
-          <span className="text-base font-semibold tracking-tight">Formatly</span>
-        </div>
-        <p className="mb-6 text-sm text-muted">
-          {mode === 'login'
-            ? 'Sign in to your documents and versions.'
-            : 'Create an account to save your work.'}
-        </p>
+    <div className="flex min-h-screen flex-col bg-canvas px-4 py-10">
+      <div className="mx-auto w-full max-w-sm">
+        <Link to="/" className="inline-flex rounded-md">
+          <Logo to={null} />
+        </Link>
 
-        {mode === 'signup' && (
-          <Field label="Name">
-            <input value={name} onChange={(e) => setName(e.target.value)} className={field} placeholder="Your name" />
-          </Field>
-        )}
-        <Field label="Email">
-          <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className={field} placeholder="you@example.com" />
-        </Field>
-        <Field label="Password">
-          <input type="password" required minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} className={field} placeholder="••••••••" />
-        </Field>
-
-        {error && (
-          <div className="mb-3 rounded-lg border border-danger/30 bg-danger/5 px-3 py-2 text-xs text-danger">
-            {error}
-          </div>
-        )}
-
-        <button type="submit" disabled={busy} className={`${btnPrimary} w-full py-2.5`}>
-          {busy ? 'Please wait…' : mode === 'login' ? 'Sign in' : 'Create account'}
-        </button>
-
-        <button
-          type="button"
-          onClick={() => { setMode(mode === 'login' ? 'signup' : 'login'); setError(null) }}
-          className="mt-4 w-full text-center text-xs text-muted transition-colors hover:text-ink"
+        <form
+          onSubmit={submit}
+          noValidate
+          className="mt-6 animate-fade-up rounded-xl border border-line bg-surface p-6 shadow-sm"
         >
-          {mode === 'login' ? "Don't have an account? Sign up" : 'Already have an account? Sign in'}
-        </button>
-      </motion.form>
-    </div>
-  )
-}
+          <h1 className="text-xl font-semibold tracking-tight text-ink">
+            {mode === 'login' ? 'Sign in' : 'Create your account'}
+          </h1>
+          <p className="mt-1 text-sm text-muted">
+            {mode === 'login'
+              ? 'Your documents and their version history are waiting.'
+              : 'Free while Formatly is in beta — no card needed.'}
+          </p>
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <label className="mb-3 block">
-      <span className="mb-1.5 block text-[11px] font-medium uppercase tracking-wide text-muted">{label}</span>
-      {children}
-    </label>
+          <div className="mt-5 space-y-4">
+            {mode === 'signup' && (
+              <Field label="Name" optional>
+                {(props) => (
+                  <Input
+                    {...props}
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    autoComplete="name"
+                    placeholder="Your name"
+                  />
+                )}
+              </Field>
+            )}
+
+            <Field label="Email" required error={emailError}>
+              {(props) => (
+                <Input
+                  {...props}
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  onBlur={() => setTouched(true)}
+                  autoComplete="email"
+                  placeholder="you@example.com"
+                />
+              )}
+            </Field>
+
+            <Field
+              label="Password"
+              required
+              error={passwordError}
+              hint={mode === 'signup' ? `At least ${MIN_PASSWORD} characters.` : undefined}
+            >
+              {(props) => (
+                <Input
+                  {...props}
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  onBlur={() => setTouched(true)}
+                  autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+                  placeholder="••••••••"
+                />
+              )}
+            </Field>
+          </div>
+
+          {error && (
+            <p role="alert" className="mt-4 flex items-start gap-2 rounded-md border border-danger/25 bg-danger-soft px-3 py-2 text-xs text-danger">
+              <WarningIcon className="mt-px h-4 w-4 shrink-0" />
+              {error}
+            </p>
+          )}
+
+          <Button type="submit" variant="primary" size="lg" fullWidth loading={busy} className="mt-5">
+            {mode === 'login' ? 'Sign in' : 'Create account'}
+          </Button>
+
+          <p className="mt-4 text-center text-sm text-muted">
+            {mode === 'login' ? 'No account yet?' : 'Already have an account?'}{' '}
+            <button
+              type="button"
+              onClick={() => {
+                setMode(mode === 'login' ? 'signup' : 'login')
+                setError(null)
+                setTouched(false)
+              }}
+              className="rounded-sm font-medium text-brand-ink hover:underline"
+            >
+              {mode === 'login' ? 'Create one' : 'Sign in'}
+            </button>
+          </p>
+        </form>
+
+        <p className="mt-4 text-center text-xs text-faint">
+          <Link to="/" className="rounded-sm hover:text-muted">← Back to the home page</Link>
+        </p>
+      </div>
+    </div>
   )
 }

@@ -1,24 +1,31 @@
-import { useEffect, useState, type FormEvent } from 'react'
-import { GlassCard } from '../components/GlassCard'
+import { useState, type FormEvent } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { authApi, getToken, type AuthUser } from '../lib/auth'
-import { btnPrimary, field as uiField } from '../lib/ui'
+import { Button, Card, CardHeader, Field, Input, useToast } from '../components/ui'
+import { SignOutIcon } from '../components/icons'
 
-/** Account settings: the things that belong to the person using this, not to
- *  the machine it runs on. Email is the account's identity, so it is shown but
- *  not editable. */
+const MIN_PASSWORD = 6
+
+/**
+ * Account settings: the things that belong to the person using this, not to
+ * the machine it runs on. Email is the account's identity, so it is shown but
+ * not editable.
+ */
 export function Settings() {
   const { user, refreshUser, logout } = useAuth()
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight text-ink">Settings</h1>
-        <p className="mt-2 text-base text-muted">Manage your account.</p>
+        <h1 className="text-2xl font-semibold tracking-tight text-ink">Settings</h1>
+        <p className="mt-1 text-sm text-muted">Manage your account.</p>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-        <ProfileCard user={user} onSaved={refreshUser} />
+      <div className="grid gap-4 lg:grid-cols-2">
+        {/* Keyed on the stored name: when the account changes underneath it,
+            the card remounts with the new value instead of syncing in an
+            effect. */}
+        <ProfileCard key={user?.name ?? ''} user={user} onSaved={refreshUser} />
         <PasswordCard />
         <SessionCard user={user} onSignOut={logout} />
       </div>
@@ -28,17 +35,10 @@ export function Settings() {
 
 /* ── profile ──────────────────────────────────────────────────────────────── */
 
-function ProfileCard({
-  user,
-  onSaved,
-}: {
-  user: AuthUser | null
-  onSaved: (u: AuthUser) => void
-}) {
+function ProfileCard({ user, onSaved }: { user: AuthUser | null; onSaved: (u: AuthUser) => void }) {
+  const toast = useToast()
   const [name, setName] = useState(user?.name || '')
-  const [state, setState] = useState<FormState>({ kind: 'idle' })
-
-  useEffect(() => setName(user?.name || ''), [user?.name])
+  const [busy, setBusy] = useState(false)
 
   const unchanged = name.trim() === (user?.name || '').trim()
 
@@ -46,227 +46,152 @@ function ProfileCard({
     e.preventDefault()
     const token = getToken()
     if (!token || !name.trim() || unchanged) return
-    setState({ kind: 'busy' })
+    setBusy(true)
     try {
       onSaved(await authApi.updateName(token, name.trim()))
-      setState({ kind: 'done', message: 'Name updated.' })
+      toast.success('Name updated')
     } catch (err) {
-      setState({ kind: 'error', message: message(err) })
+      toast.error('Could not update your name', message(err))
+    } finally {
+      setBusy(false)
     }
   }
 
   return (
-    <GlassCard>
-      <CardTitle>Profile</CardTitle>
-      <form onSubmit={save} className="mt-3 space-y-3">
+    <Card>
+      <CardHeader title="Profile" description="How you are named in the app." />
+      <form onSubmit={save} className="mt-4 space-y-4">
         <Field label="Display name">
-          <input
-            value={name}
-            onChange={(e) => {
-              setName(e.target.value)
-              setState({ kind: 'idle' })
-            }}
-            placeholder="Your name"
-            className={uiField}
-          />
+          {(props) => (
+            <Input
+              {...props}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Your name"
+              autoComplete="name"
+            />
+          )}
         </Field>
 
         <Field label="Email" hint="Your email identifies the account and cannot be changed here.">
-          <input value={user?.email || ''} readOnly disabled className={`${uiField} opacity-60`} />
+          {(props) => <Input {...props} value={user?.email || ''} readOnly disabled />}
         </Field>
 
-        <div className="flex items-center gap-3 pt-1">
-          <button
-            type="submit"
-            disabled={state.kind === 'busy' || !name.trim() || unchanged}
-            className={btnPrimary}
-          >
-            {state.kind === 'busy' ? 'Saving…' : 'Save changes'}
-          </button>
-          <Feedback state={state} />
-        </div>
+        <Button type="submit" variant="primary" loading={busy} disabled={!name.trim() || unchanged}>
+          Save changes
+        </Button>
       </form>
-    </GlassCard>
+    </Card>
   )
 }
 
 /* ── password ─────────────────────────────────────────────────────────────── */
 
-const MIN_PASSWORD = 6
-
 function PasswordCard() {
+  const toast = useToast()
   const [current, setCurrent] = useState('')
   const [next, setNext] = useState('')
   const [confirm, setConfirm] = useState('')
-  const [state, setState] = useState<FormState>({ kind: 'idle' })
+  const [busy, setBusy] = useState(false)
 
   // Checked here as well as on the server so the mistake is caught before a
   // round trip, not because the server's check is optional.
   const mismatch = confirm.length > 0 && next !== confirm
   const tooShort = next.length > 0 && next.length < MIN_PASSWORD
+  const sameAsCurrent = next.length > 0 && next === current
   const ready =
-    current.length > 0 && next.length >= MIN_PASSWORD && next === confirm && next !== current
+    current.length > 0 && next.length >= MIN_PASSWORD && next === confirm && !sameAsCurrent
 
   const submit = async (e: FormEvent) => {
     e.preventDefault()
     const token = getToken()
     if (!token || !ready) return
-    setState({ kind: 'busy' })
+    setBusy(true)
     try {
       await authApi.changePassword(token, current, next)
       setCurrent('')
       setNext('')
       setConfirm('')
-      setState({ kind: 'done', message: 'Password changed.' })
+      toast.success('Password changed', 'Use the new one next time you sign in.')
     } catch (err) {
-      setState({ kind: 'error', message: message(err) })
+      toast.error('Could not change your password', message(err))
+    } finally {
+      setBusy(false)
     }
   }
 
   return (
-    <GlassCard>
-      <CardTitle>Password</CardTitle>
-      <form onSubmit={submit} className="mt-3 space-y-3">
+    <Card>
+      <CardHeader title="Password" description="Change the password you sign in with." />
+      <form onSubmit={submit} className="mt-4 space-y-4">
         <Field label="Current password">
-          <input
-            type="password"
-            value={current}
-            onChange={(e) => {
-              setCurrent(e.target.value)
-              setState({ kind: 'idle' })
-            }}
-            autoComplete="current-password"
-            className={uiField}
-          />
+          {(props) => (
+            <Input {...props} type="password" value={current}
+                   onChange={(e) => setCurrent(e.target.value)} autoComplete="current-password" />
+          )}
         </Field>
 
-        <Field label="New password" hint={`At least ${MIN_PASSWORD} characters.`}>
-          <input
-            type="password"
-            value={next}
-            onChange={(e) => {
-              setNext(e.target.value)
-              setState({ kind: 'idle' })
-            }}
-            autoComplete="new-password"
-            className={uiField}
-          />
+        <Field
+          label="New password"
+          hint={`At least ${MIN_PASSWORD} characters.`}
+          error={
+            tooShort ? `Use at least ${MIN_PASSWORD} characters.`
+            : sameAsCurrent ? 'The new password must be different from the current one.'
+            : null
+          }
+        >
+          {(props) => (
+            <Input {...props} type="password" value={next}
+                   onChange={(e) => setNext(e.target.value)} autoComplete="new-password" />
+          )}
         </Field>
 
-        <Field label="Confirm new password">
-          <input
-            type="password"
-            value={confirm}
-            onChange={(e) => {
-              setConfirm(e.target.value)
-              setState({ kind: 'idle' })
-            }}
-            autoComplete="new-password"
-            className={uiField}
-          />
+        <Field
+          label="Confirm new password"
+          error={mismatch ? 'The two new passwords do not match.' : null}
+        >
+          {(props) => (
+            <Input {...props} type="password" value={confirm}
+                   onChange={(e) => setConfirm(e.target.value)} autoComplete="new-password" />
+          )}
         </Field>
 
-        {tooShort && <Hint tone="warn">Use at least {MIN_PASSWORD} characters.</Hint>}
-        {mismatch && <Hint tone="warn">The two new passwords do not match.</Hint>}
-        {next.length > 0 && next === current && (
-          <Hint tone="warn">The new password must differ from the current one.</Hint>
-        )}
-
-        <div className="flex items-center gap-3 pt-1">
-          <button type="submit" disabled={state.kind === 'busy' || !ready} className={btnPrimary}>
-            {state.kind === 'busy' ? 'Updating…' : 'Change password'}
-          </button>
-          <Feedback state={state} />
-        </div>
+        <Button type="submit" variant="primary" loading={busy} disabled={!ready}>
+          Change password
+        </Button>
       </form>
-    </GlassCard>
+    </Card>
   )
 }
 
 /* ── session ──────────────────────────────────────────────────────────────── */
 
-function SessionCard({
-  user,
-  onSignOut,
-}: {
-  user: AuthUser | null
-  onSignOut: () => void
-}) {
+function SessionCard({ user, onSignOut }: { user: AuthUser | null; onSignOut: () => void }) {
   return (
-    <GlassCard>
-      <CardTitle>Session</CardTitle>
-      <dl className="mt-3 space-y-2.5">
+    <Card>
+      <CardHeader title="Session" description="This browser, signed in as you." />
+      <dl className="mt-4 space-y-2">
+        <Row label="Signed in as" value={user?.email || '—'} />
         {user?.created_at && (
-          <div className="flex items-baseline justify-between gap-4">
-            <dt className="text-[11px] font-medium uppercase tracking-wide text-neutral-500">
-              Member since
-            </dt>
-            <dd className="text-xs text-ink">
-              {new Date(user.created_at).toLocaleDateString()}
-            </dd>
-          </div>
+          <Row label="Member since" value={new Date(user.created_at).toLocaleDateString()} />
         )}
       </dl>
-      <button
-        onClick={onSignOut}
-        className="mt-4 rounded-lg border border-line bg-surface px-3 py-1.5 text-xs font-medium text-ink transition-colors hover:bg-surface-2"
-      >
+      <Button variant="secondary" className="mt-4" onClick={onSignOut} leadingIcon={<SignOutIcon />}>
         Sign out
-      </button>
-    </GlassCard>
+      </Button>
+    </Card>
   )
 }
 
-/* ── shared bits ──────────────────────────────────────────────────────────── */
-
-type FormState =
-  | { kind: 'idle' }
-  | { kind: 'busy' }
-  | { kind: 'done'; message: string }
-  | { kind: 'error'; message: string }
+function Row({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-baseline justify-between gap-4">
+      <dt className="text-xs text-muted">{label}</dt>
+      <dd className="truncate text-sm text-ink">{value}</dd>
+    </div>
+  )
+}
 
 function message(err: unknown): string {
-  return err instanceof Error ? err.message : 'Something went wrong.'
-}
-
-function CardTitle({ children }: { children: React.ReactNode }) {
-  return <div className="text-base font-bold text-ink mb-1">{children}</div>
-}
-
-function Field({
-  label,
-  hint,
-  children,
-}: {
-  label: string
-  hint?: string
-  children: React.ReactNode
-}) {
-  return (
-    <label className="block">
-      <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-muted">
-        {label}
-      </span>
-      {children}
-      {hint && <span className="mt-1 block text-xs text-faint">{hint}</span>}
-    </label>
-  )
-}
-
-function Hint({ tone, children }: { tone: 'warn'; children: React.ReactNode }) {
-  return (
-    <p className={`text-[11px] ${tone === 'warn' ? 'text-amber-600' : 'text-muted'}`}>
-      {children}
-    </p>
-  )
-}
-
-function Feedback({ state }: { state: FormState }) {
-  if (state.kind === 'done') {
-    return <span className="text-[11px] text-emerald-600">{state.message}</span>
-  }
-  if (state.kind === 'error') {
-    return <span className="text-[11px] text-danger">{state.message}</span>
-  }
-  return null
+  return err instanceof Error ? err.message : 'Something went wrong. Please try again.'
 }
