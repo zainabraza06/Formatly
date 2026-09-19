@@ -4,7 +4,24 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Formatly — AI Document Generator</title>
+    <title>Formatly — AI documents, properly formatted</title>
+    <meta
+      name="description"
+      content="Generate a formatted document from your own material, or edit a Word document with plain-English AI instructions. Every change is shown, versioned and reversible."
+    />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#f9fafb" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0b0c0e" media="(prefers-color-scheme: dark)" />
+    <script>
+      // The theme is applied before the first paint. Waiting for React means a
+      // dark-mode reader gets a white flash on every load.
+      try {
+        var stored = localStorage.getItem('docpilot.theme')
+        if (stored === 'dark') document.documentElement.classList.add('dark')
+      } catch (e) {
+        /* private mode: the default light theme is fine */
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>
