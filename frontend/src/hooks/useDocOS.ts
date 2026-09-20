@@ -79,6 +79,10 @@ export function useDocOS() {
    *  offline: no socket — commands still run over REST, just without the
    *  step-by-step commentary. */
   const [connection, setConnection] = useState<'live' | 'connecting' | 'offline'>('offline')
+  /** A document is being fetched or imported. Without this the editor cannot
+   *  tell "nothing is open" from "what you asked for is on its way", and shows
+   *  the empty state either way — which reads as a link that did nothing. */
+  const [opening, setOpening] = useState(false)
 
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [activeId, setActiveId] = useState<string | null>(null)
@@ -439,15 +443,25 @@ export function useDocOS() {
 
   // ── public actions ─────────────────────────────────────────────────────────
   const importFile = useCallback(async (file: File) => {
+    setOpening(true)
     setStatus('running')
-    const res = await docosApi.importDocx(file)
-    bindDoc(res.document_id, res.graph, res.title)
-    return res
+    try {
+      const res = await docosApi.importDocx(file)
+      bindDoc(res.document_id, res.graph, res.title)
+      return res
+    } finally {
+      setOpening(false)
+    }
   }, [bindDoc])
 
   const loadDocument = useCallback(async (id: string) => {
-    const doc = await docosApi.getDocument(id)
-    bindDoc(id, doc.graph, doc.title)
+    setOpening(true)
+    try {
+      const doc = await docosApi.getDocument(id)
+      bindDoc(id, doc.graph, doc.title)
+    } finally {
+      setOpening(false)
+    }
   }, [bindDoc])
 
   const runCommand = useCallback((command: string, options?: { track?: boolean }) => {
@@ -525,7 +539,7 @@ export function useDocOS() {
   }, [review, compare])
 
   return {
-    docId, title, graph, status, connection,
+    docId, title, graph, status, connection, opening,
     selectedIds, activeId, focusId, removingIds, panel, versions, diff, review,
     importFile, loadDocument, runCommand, focusNode,
     undo, redo, rewind, restore, compare, clearDiff,

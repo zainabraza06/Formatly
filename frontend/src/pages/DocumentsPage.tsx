@@ -87,7 +87,9 @@ export function DocumentsPage() {
 
   const open = async (doc: DocumentItem) => {
     if (doc.source === 'upload') {
-      navigate(`/app/editor?doc=${encodeURIComponent(doc.id)}`)
+      // The title travels with the navigation: the editor can then say which
+      // document is opening while it fetches it.
+      navigate(`/app/editor?doc=${encodeURIComponent(doc.id)}`, { state: { title: doc.title } })
       return
     }
     // A generated paper becomes editable by importing its own export, so what

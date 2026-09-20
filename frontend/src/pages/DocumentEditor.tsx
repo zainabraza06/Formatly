@@ -1,14 +1,17 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useLocation, useSearchParams } from 'react-router-dom'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { cn } from '../lib/cn'
 import { diffMarks } from '../lib/diffMarks'
 import { useDocOS } from '../hooks/useDocOS'
 import { useRegisterCommands } from '../context/command-context'
 import { useReportError } from '../hooks/useReportError'
-import { Badge, Button, Dropdown, Tabs, Tooltip, useToast } from '../components/ui'
+import { explain } from '../lib/errors'
 import {
-  DownloadIcon, LayersIcon, MoreIcon, SparkIcon, UndoIcon, UploadIcon,
+  Badge, Button, ButtonLink, Dropdown, EmptyState, Spinner, Tabs, Tooltip, useToast,
+} from '../components/ui'
+import {
+  DownloadIcon, LayersIcon, MoreIcon, SparkIcon, UndoIcon, UploadIcon, WarningIcon,
 } from '../components/icons'
 import { AICommandBar } from '../components/docos/AICommandBar'
 import { ChangeReview } from '../components/docos/ChangeReview'
@@ -18,6 +21,7 @@ import { ExactView } from '../components/docos/ExactView'
 import { ExportDialog } from '../components/docos/ExportDialog'
 import { GraphCanvas } from '../components/docos/GraphCanvas'
 import { VersionTimeline } from '../components/docos/VersionTimeline'
+import { DocumentSkeleton } from '../components/docos/DocumentSkeleton'
 import { UploadDropzone } from '../components/documents/UploadDropzone'
 import { Page } from '../components/layout/Page'
 
@@ -45,6 +49,7 @@ export function DocumentEditor() {
   const report = useReportError()
   const reduced = useReducedMotion()
   const [searchParams] = useSearchParams()
+  const location = useLocation()
 
   const [view, setView] = useState<'edit' | 'exact'>('edit')
   const [panel, setPanel] = useState<Panel>('assistant')
@@ -58,17 +63,36 @@ export function DocumentEditor() {
 
   const mathsOn = renderMaths || Boolean(doc.graph?.root?.metadata?.render_maths)
   const running = doc.status === 'running'
-  const noDoc = !doc.docId
+
   const marks = useMemo(() => diffMarks(doc.diff?.diff), [doc.diff])
 
   // Open a document passed as ?doc=<id> — from the library, or after an import.
   const requestedId = searchParams.get('doc')
+  // The title the library already knew, so the wait can name what is opening
+  // rather than saying "a document".
+  const requestedTitle = (location.state as { title?: string } | null)?.title
+  // The failure is remembered against the document it belongs to, so asking
+  // for a different one is not met with the last one's error.
+  const [openFailure, setOpenFailure] = useState<{ id: string; detail: string } | null>(null)
+
   useEffect(() => {
-    if (requestedId && requestedId !== doc.docId) {
-      doc.loadDocument(requestedId).catch((e) => report(e, 'open that document'))
-    }
+    if (!requestedId || requestedId === doc.docId) return
+    doc.loadDocument(requestedId).catch((e) => {
+      // Named here as well as in the toast: a toast is gone in four seconds
+      // and the screen behind it still has to say what happened.
+      setOpenFailure({ id: requestedId, detail: explain(e, 'open that document').detail })
+      report(e, 'open that document')
+    })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [requestedId])
+
+  // Opening covers the whole gap between asking for a document and having it:
+  // the fetch itself, and the moment before the request has even started, when
+  // all we have is the id in the address. Without the second half the editor
+  // flashes its empty state on the way in.
+  const openError = openFailure?.id === requestedId ? openFailure.detail : null
+  const opening = !openError && (doc.opening || Boolean(requestedId && requestedId !== doc.docId))
+  const noDoc = !doc.docId && !opening
 
   const importFile = async (file: File) => {
     setImporting('Reading the document…')
@@ -103,7 +127,35 @@ export function DocumentEditor() {
   ], [noDoc, running, renderMaths, doc.undo, doc.redo])
 
   // ── the document, whichever way it is being shown ────────────────────────
-  const canvas = noDoc ? (
+  const canvas = opening ? (
+    <DocumentSkeleton title={requestedTitle || doc.title} />
+  ) : openError ? (
+    <div className="flex h-full items-center justify-center p-6">
+      <EmptyState
+        tone="error"
+        icon={<WarningIcon className="h-5 w-5" />}
+        title="That document could not be opened"
+        description={openError}
+        action={
+          <Button
+            variant="primary"
+            onClick={() => {
+              if (!requestedId) return
+              setOpenFailure(null)
+              doc.loadDocument(requestedId).catch((e) => {
+                setOpenFailure({ id: requestedId, detail: explain(e, 'open that document').detail })
+              })
+            }}
+          >
+            Try again
+          </Button>
+        }
+        secondaryAction={
+          <ButtonLink to="/app" variant="secondary">Back to documents</ButtonLink>
+        }
+      />
+    </div>
+  ) : noDoc ? (
     // One empty state, not two: the dropzone is the action, and saying "no
     // document open" above a box that says "drop a document here" was the same
     // sentence twice.
@@ -182,9 +234,16 @@ export function DocumentEditor() {
       {/* ── Document header: what this is, and what you can do to it ─────── */}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <div className="min-w-0 flex-1">
-          <h1 className="truncate text-xl text-ink">{doc.title || 'Editor'}</h1>
+          <h1 className="truncate text-xl text-ink">
+            {doc.title || requestedTitle || 'Editor'}
+          </h1>
           <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-muted">
-            {noDoc ? (
+            {opening ? (
+              <span className="flex items-center gap-1.5">
+                <Spinner size="sm" />
+                Opening…
+              </span>
+            ) : noDoc ? (
               <span>Open a Word document to edit it with AI</span>
             ) : (
               <>
@@ -200,6 +259,7 @@ export function DocumentEditor() {
             <Button
               variant="primary"
               size="md"
+              disabled={opening}
               leadingIcon={<DownloadIcon />}
               onClick={() => setExporting(true)}
             >
@@ -306,7 +366,7 @@ export function DocumentEditor() {
             mobilePanel !== 'document' && 'hidden lg:flex',
           )}
         >
-          {!noDoc && (
+          {(!noDoc || opening) && (
             <div className="flex h-10 shrink-0 items-center justify-between gap-2 border-b border-line px-2">
               {/* How the document is drawn belongs to the document, not to the
                   page header two rows above it. */}
