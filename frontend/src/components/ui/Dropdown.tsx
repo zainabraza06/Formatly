@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { cn } from '../../lib/cn'
 import { Button, type ButtonSize, type ButtonVariant } from './Button'
 
@@ -20,6 +21,12 @@ export interface MenuItem {
  * The trigger is described rather than passed in, so every menu in the product
  * is the same button with the same aria wiring — and the menu owns the ref it
  * needs both to measure and to restore focus.
+ *
+ * The menu itself is rendered into the body rather than beside its trigger.
+ * An absolutely positioned menu is clipped by any ancestor that hides its
+ * overflow, and the table the library is made of is exactly that: a rounded
+ * box with `overflow-hidden`, which sliced the last row's menu off ten pixels
+ * short. Position it against the viewport and nothing can crop it.
  */
 export function Dropdown({
   items,
@@ -45,7 +52,8 @@ export function Dropdown({
 }) {
   const [open, setOpen] = useState(false)
   const [active, setActive] = useState(0)
-  const [up, setUp] = useState(false)
+  /** Where the menu sits, in viewport coordinates, measured as it opens. */
+  const [at, setAt] = useState<{ top?: number; bottom?: number; left?: number; right?: number }>({})
   const triggerRef = useRef<HTMLButtonElement | null>(null)
   const menuRef = useRef<HTMLDivElement | null>(null)
   const enabled = items.filter((i) => !i.disabled)
@@ -64,7 +72,19 @@ export function Dropdown({
     }
     const rect = triggerRef.current?.getBoundingClientRect()
     if (rect) {
-      setUp(window.innerHeight - rect.bottom < Math.min(items.length * 36 + 16, 260))
+      const height = Math.min(items.length * 36 + 16, 280)
+      const opensUp = window.innerHeight - rect.bottom < height && rect.top > height
+      setAt({
+        ...(opensUp
+          ? { bottom: window.innerHeight - rect.top + 4 }
+          : { top: rect.bottom + 4 }),
+        // Aligned to the trigger's near edge, and pinned to the viewport
+        // rather than to a parent, so a menu at the right margin stays on
+        // screen instead of hanging off it.
+        ...(align === 'end'
+          ? { right: Math.max(8, window.innerWidth - rect.right) }
+          : { left: Math.max(8, rect.left) }),
+      })
     }
     setActive(0)
     setOpen(true)
@@ -76,8 +96,19 @@ export function Dropdown({
       const t = e.target as Node
       if (!menuRef.current?.contains(t) && !triggerRef.current?.contains(t)) setOpen(false)
     }
+    // A menu positioned against the viewport would drift away from its trigger
+    // as the page scrolls, so it closes instead — which is what every native
+    // menu does.
+    const onMove = () => setOpen(false)
+
     document.addEventListener('mousedown', onDown)
-    return () => document.removeEventListener('mousedown', onDown)
+    window.addEventListener('scroll', onMove, true)
+    window.addEventListener('resize', onMove)
+    return () => {
+      document.removeEventListener('mousedown', onDown)
+      window.removeEventListener('scroll', onMove, true)
+      window.removeEventListener('resize', onMove)
+    }
   }, [open])
 
   // The keys below are handled on the menu, so focus has to be there — a
@@ -112,9 +143,10 @@ export function Dropdown({
         <span className="min-w-0 flex-1 truncate text-left">{triggerLabel}</span>
       </Button>
 
-      {open && (
+      {open && createPortal(
         <div
           ref={attachMenu}
+          style={at}
           role="menu"
           aria-label={label}
           tabIndex={-1}
@@ -131,11 +163,7 @@ export function Dropdown({
               if (item) { close(); item.onSelect() }
             }
           }}
-          className={cn(
-            'absolute z-40 min-w-[11rem] animate-scale-in rounded-lg border border-line bg-surface p-1 shadow-lg outline-none',
-            align === 'end' ? 'right-0' : 'left-0',
-            up ? 'bottom-full mb-1' : 'top-full mt-1',
-          )}
+          className="fixed z-50 min-w-[11rem] max-w-[calc(100vw-1rem)] animate-scale-in rounded-lg border border-line bg-surface p-1 shadow-lg outline-none"
         >
           {items.map((item, i) => {
             const idx = enabled.indexOf(item)
@@ -167,7 +195,8 @@ export function Dropdown({
               </button>
             )
           })}
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   )
