@@ -29,7 +29,12 @@ DEFAULT_ORDER: list[str] = [MISTRAL]
 
 # ── Default models ────────────────────────────────────────────────────────────
 _DEFAULT_MODELS: dict[str, str] = {
-    MISTRAL: "mistral-large-latest",
+    # An open model, deliberately. Mistral meters the free tier per model, not
+    # per account: the premier ones (large, medium, small-latest, magistral)
+    # answer every request with 429 and x-ratelimit-limit-req-minute: 0, while
+    # open-mistral-nemo and the ministral models have a real allowance. A
+    # default nobody can call is a default that makes the app look broken.
+    MISTRAL: "open-mistral-nemo",
 }
 
 # What to ask when the model above will not answer — busy, or not included in
@@ -43,6 +48,8 @@ _LIGHT_MODELS: dict[str, tuple[str, ...]] = {
 
 # ── Cooldown durations (seconds) ─────────────────────────────────────────────
 _COOLDOWN_RATE_LIMIT = 60
+# A model this key cannot call is not going to become callable on its own.
+_COOLDOWN_MODEL      = 600
 _COOLDOWN_TIMEOUT    = 30
 _COOLDOWN_ERROR      = 10
 
@@ -109,6 +116,22 @@ class RateLimitExceeded(Exception):
         # What the server said to wait, when it says. Guessing is worse than
         # being told.
         self.retry_after = retry_after
+
+
+class ModelNotAvailable(Exception):
+    """This key may not call this model at all.
+
+    Distinct from a rate limit, which waiting clears, and from a bad key, which
+    fails everything. Mistral's free tier meters per model: a premier model
+    answers 429 with a ceiling of zero requests a minute, for ever, while an
+    open model on the same key answers normally. Retrying is pointless and the
+    fix is one line of configuration, so the message says which line.
+    """
+
+    def __init__(self, provider: str, detail: str):
+        super().__init__(f"{provider}: {detail}")
+        self.provider = provider
+        self.detail = detail
 
 
 class ProviderTimeout(Exception):
@@ -264,6 +287,19 @@ class ProviderRouter:
                 after = float(header) if header else None
             except ValueError:
                 after = None
+
+            # A ceiling of zero is not a rate limit; it is this model being
+            # unavailable to this key. Waiting a minute and asking again — which
+            # is what a rate limit deserves — never clears it, and the message
+            # sent the reader looking for a quota problem that was not there.
+            if resp.headers.get("x-ratelimit-limit-req-minute") == "0":
+                raise ModelNotAvailable(
+                    MISTRAL,
+                    f"{self._model(MISTRAL)} allows this key 0 requests/minute — "
+                    "it is a premier model and the key is on the free tier. "
+                    "Set MISTRAL_MODEL to an open model: open-mistral-nemo, "
+                    "ministral-8b-latest or ministral-3b-latest.",
+                )
             raise RateLimitExceeded(MISTRAL, after)
         resp.raise_for_status()
         return resp.json()["choices"][0]["message"]["content"]
@@ -391,6 +427,12 @@ class ProviderRouter:
 
             except GenerationCancelled:
                 raise    # the caller left; not a provider fault, so no cooldown
+
+            except ModelNotAvailable as exc:
+                # Cooled for long enough that the app stops asking, but not
+                # for ever: the operator may fix the model name and restart.
+                self._cool(provider, _COOLDOWN_MODEL)
+                errors[provider] = exc.detail
 
             except RateLimitExceeded:
                 self._cool(provider, _COOLDOWN_RATE_LIMIT)
