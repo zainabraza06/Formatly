@@ -47,9 +47,132 @@ export function AICommandBar({
     : null
 
   return (
-    <div className="flex h-full flex-col gap-3">
-      {/* ── The instruction ─────────────────────────────────────────────── */}
-      <div>
+    // A composer belongs at the bottom, with what it has done above it: the
+    // panel then fills from the bottom up as work happens, instead of leaving
+    // two thirds of itself empty under a form.
+    <div className="flex h-full min-h-0 flex-col">
+      {/* ── What it is doing, and what it has done ──────────────────────── */}
+      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pb-3">
+        {!running && !panel.task && !panel.error && !panel.reading ? (
+          <p className="text-xs leading-relaxed text-faint">
+            Tell the assistant what to change and it works through the document
+            step by step. Every instruction lands as a version you can keep or undo.
+          </p>
+        ) : (
+          <div className="rounded-lg border border-line bg-surface-2/60 p-3">
+            {panel.task && (
+              <p className="mb-2 truncate text-2xs text-faint">
+                Instruction: <span className="text-muted">{panel.task}</span>
+              </p>
+            )}
+
+            <div
+              data-testid="current-action"
+              aria-live="polite"
+              aria-atomic="true"
+              className="flex items-center gap-2 text-sm font-medium text-ink"
+            >
+              {running && <Spinner size="sm" />}
+              <AnimatePresence mode="wait" initial={false}>
+                <motion.span
+                  key={panel.currentAction}
+                  initial={reduced ? { opacity: 0 } : { opacity: 0, y: 4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.16 }}
+                >
+                  {panel.currentAction}
+                </motion.span>
+              </AnimatePresence>
+              {panel.progress?.total ? (
+                <span className="ml-auto text-2xs tabular-nums text-faint">
+                  {panel.progress.done}/{panel.progress.total}
+                </span>
+              ) : null}
+            </div>
+
+            {panel.summary && (
+              <p className="mt-1 text-xs leading-relaxed text-muted">{panel.summary}</p>
+            )}
+
+            {(running || pct !== null) && (
+              <Progress value={pct} label={panel.currentAction} className="mt-2.5" />
+            )}
+
+            {panel.reading && (
+              <p className="mt-2 flex items-center gap-1.5 text-2xs text-muted" aria-live="polite">
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-brand" aria-hidden />
+                {panel.reading.of
+                  ? `Reading the document — page ${panel.reading.page} of ${panel.reading.of}…`
+                  : 'Reading the document…'}
+              </p>
+            )}
+
+            {panel.provider && (
+              <p className="mt-2 text-2xs uppercase tracking-wide text-faint">
+                via {panel.provider}{panel.source ? ` · ${panel.source}` : ''}
+              </p>
+            )}
+
+            {panel.error && (
+              <p role="alert" className="mt-2 flex items-start gap-1.5 rounded-md border border-danger/25 bg-danger-soft px-2 py-1.5 text-xs text-danger">
+                <WarningIcon className="mt-px h-3.5 w-3.5 shrink-0" />
+                {panel.error}
+              </p>
+            )}
+          </div>
+        )}
+
+        {panel.upcoming.length > 0 && (
+          <Section title="Still to do">
+            {panel.upcoming.map((u, i) => (
+              <li key={i} className="text-muted">{u}</li>
+            ))}
+          </Section>
+        )}
+
+        {panel.history.length > 0 && (
+          <Section title="Earlier instructions">
+            {panel.history.map((h, i) => (
+              <li key={i} className="border-l border-line pl-2">
+                <span className="block text-ink">{h.prompt}</span>
+                <span className="block text-2xs text-faint">{h.outcome}</span>
+              </li>
+            ))}
+          </Section>
+        )}
+      </div>
+
+      {/* ── The composer, and the suggestions that fill it ──────────────── */}
+      <div className="shrink-0 space-y-2 border-t border-line pt-3">
+        <AnimatePresence initial={false}>
+          {!running && (
+            <motion.div
+              className="flex flex-wrap gap-1.5"
+              initial={reduced ? { opacity: 0 } : { opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={reduced ? { opacity: 0 } : { opacity: 0, height: 0 }}
+              transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+            >
+              {SUGGESTIONS.map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => !disabled && onRun(s)}
+                  disabled={disabled}
+                  className={cn(
+                    'rounded-full border border-line bg-surface px-2.5 py-1 text-2xs text-muted',
+                    'transition-colors duration-fast hover:border-line-strong hover:text-ink',
+                    'disabled:cursor-not-allowed disabled:opacity-50',
+                  )}
+                >
+                  {s}
+                </button>
+              ))}
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         <label htmlFor="ai-command" className="sr-only">
           Tell the assistant what to change
         </label>
@@ -76,7 +199,7 @@ export function AICommandBar({
               disabled={disabled}
               rows={2}
               placeholder={disabled ? 'Open a document first…' : 'Tell the assistant what to change…'}
-              className="min-h-[3.25rem] w-full flex-1 resize-none bg-transparent px-1.5 py-1.5 text-sm text-ink outline-none placeholder:text-faint"
+              className="min-h-[3rem] w-full flex-1 resize-none bg-transparent px-1.5 py-1.5 text-sm text-ink outline-none placeholder:text-faint"
             />
             <Button
               variant="primary"
@@ -90,126 +213,6 @@ export function AICommandBar({
             />
           </div>
         </div>
-      </div>
-
-      {/* ── Suggestions ─────────────────────────────────────────────────── */}
-      <AnimatePresence initial={false}>
-      {!running && (
-        <motion.div
-          className="flex flex-wrap gap-1.5"
-          initial={reduced ? { opacity: 0 } : { opacity: 0, height: 0 }}
-          animate={{ opacity: 1, height: 'auto' }}
-          exit={reduced ? { opacity: 0 } : { opacity: 0, height: 0 }}
-          transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-        >
-          {SUGGESTIONS.map((s) => (
-            <button
-              key={s}
-              type="button"
-              onClick={() => !disabled && onRun(s)}
-              disabled={disabled}
-              className={cn(
-                'rounded-full border border-line bg-surface px-2.5 py-1 text-2xs text-muted',
-                'transition-colors duration-fast hover:border-line-strong hover:text-ink',
-                'disabled:cursor-not-allowed disabled:opacity-50',
-              )}
-            >
-              {s}
-            </button>
-          ))}
-        </motion.div>
-      )}
-      </AnimatePresence>
-
-      {/* ── What it is doing ────────────────────────────────────────────── */}
-      {!running && !panel.task && !panel.error && !panel.reading ? (
-        <p className="rounded-lg border border-dashed border-line px-3 py-2.5 text-xs leading-relaxed text-faint">
-          Every instruction is shown step by step here, and lands as a version you can
-          keep or undo.
-        </p>
-      ) : (
-      <div className="rounded-lg border border-line bg-surface-2/60 p-3">
-        {panel.task && (
-          <p className="mb-2 truncate text-2xs text-faint">
-            Instruction: <span className="text-muted">{panel.task}</span>
-          </p>
-        )}
-
-        <div
-          data-testid="current-action"
-          aria-live="polite"
-          aria-atomic="true"
-          className="flex items-center gap-2 text-sm font-medium text-ink"
-        >
-          {running && <Spinner size="sm" />}
-          <AnimatePresence mode="wait" initial={false}>
-            <motion.span
-              key={panel.currentAction}
-              initial={reduced ? { opacity: 0 } : { opacity: 0, y: 4 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.16 }}
-            >
-              {panel.currentAction}
-            </motion.span>
-          </AnimatePresence>
-          {panel.progress?.total ? (
-            <span className="ml-auto text-2xs tabular-nums text-faint">
-              {panel.progress.done}/{panel.progress.total}
-            </span>
-          ) : null}
-        </div>
-
-        {panel.summary && <p className="mt-1 text-xs leading-relaxed text-muted">{panel.summary}</p>}
-
-        {(running || pct !== null) && (
-          <Progress value={pct} label={panel.currentAction} className="mt-2.5" />
-        )}
-
-        {panel.reading && (
-          <p className="mt-2 flex items-center gap-1.5 text-2xs text-muted" aria-live="polite">
-            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-brand" aria-hidden />
-            {panel.reading.of
-              ? `Reading the document — page ${panel.reading.page} of ${panel.reading.of}…`
-              : 'Reading the document…'}
-          </p>
-        )}
-
-        {panel.provider && (
-          <p className="mt-2 text-2xs uppercase tracking-wide text-faint">
-            via {panel.provider}{panel.source ? ` · ${panel.source}` : ''}
-          </p>
-        )}
-
-        {panel.error && (
-          <p role="alert" className="mt-2 flex items-start gap-1.5 rounded-md border border-danger/25 bg-danger-soft px-2 py-1.5 text-xs text-danger">
-            <WarningIcon className="mt-px h-3.5 w-3.5 shrink-0" />
-            {panel.error}
-          </p>
-        )}
-      </div>
-      )}
-
-      {/* ── Plan and history ────────────────────────────────────────────── */}
-      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto">
-        {panel.upcoming.length > 0 && (
-          <Section title="Still to do">
-            {panel.upcoming.map((u, i) => (
-              <li key={i} className="text-muted">{u}</li>
-            ))}
-          </Section>
-        )}
-
-        {panel.history.length > 0 && (
-          <Section title="Earlier instructions">
-            {panel.history.map((h, i) => (
-              <li key={i} className="border-l border-line pl-2">
-                <span className="block text-ink">{h.prompt}</span>
-                <span className="block text-2xs text-faint">{h.outcome}</span>
-              </li>
-            ))}
-          </Section>
-        )}
       </div>
     </div>
   )

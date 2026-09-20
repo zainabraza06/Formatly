@@ -1,7 +1,7 @@
-import { useState, type FormEvent } from 'react'
+import { useState, type FormEvent, type ReactNode } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { authApi, getToken, type AuthUser } from '../lib/auth'
-import { Button, Card, CardHeader, Field, Input, useToast } from '../components/ui'
+import { Button, Card, Field, Input, useToast } from '../components/ui'
 import { AppearGroup } from '../components/motion/Appear'
 import { useReportError } from '../hooks/useReportError'
 import { SignOutIcon } from '../components/icons'
@@ -17,13 +17,16 @@ export function Settings() {
   const { user, refreshUser, logout } = useAuth()
 
   return (
-    <div className="space-y-6">
+    // One column, with a measure. Settings in a two-column grid leaves the
+    // third card sitting alone beside a hole, and puts a form field 1200px
+    // from the label that names it.
+    <div className="mx-auto w-full max-w-2xl space-y-8">
       <div>
         <h1 className="text-2xl text-ink">Settings</h1>
         <p className="mt-1 text-sm text-muted">Manage your account.</p>
       </div>
 
-      <AppearGroup className="grid gap-4 lg:grid-cols-2" stagger={0.06}>
+      <AppearGroup className="space-y-8" stagger={0.06}>
         {/* Keyed on the stored name: when the account changes underneath it,
             the card remounts with the new value instead of syncing in an
             effect. */}
@@ -61,9 +64,8 @@ function ProfileCard({ user, onSaved }: { user: AuthUser | null; onSaved: (u: Au
   }
 
   return (
-    <Card>
-      <CardHeader title="Profile" description="How you are named in the app." />
-      <form onSubmit={save} className="mt-4 space-y-4">
+    <Section title="Profile" description="How you are named in the app.">
+      <form onSubmit={save} className="space-y-4">
         <Field label="Display name">
           {(props) => (
             <Input
@@ -80,11 +82,13 @@ function ProfileCard({ user, onSaved }: { user: AuthUser | null; onSaved: (u: Au
           {(props) => <Input {...props} value={user?.email || ''} readOnly disabled />}
         </Field>
 
-        <Button type="submit" variant="primary" loading={busy} disabled={!name.trim() || unchanged}>
-          Save changes
-        </Button>
+        <div className="flex justify-end border-t border-line pt-4">
+          <Button type="submit" variant="primary" loading={busy} disabled={!name.trim() || unchanged}>
+            Save changes
+          </Button>
+        </div>
       </form>
-    </Card>
+    </Section>
   )
 }
 
@@ -125,9 +129,8 @@ function PasswordCard() {
   }
 
   return (
-    <Card>
-      <CardHeader title="Password" description="Change the password you sign in with." />
-      <form onSubmit={submit} className="mt-4 space-y-4">
+    <Section title="Password" description="Change the password you sign in with.">
+      <form onSubmit={submit} className="space-y-4">
         <Field label="Current password">
           {(props) => (
             <Input {...props} type="password" value={current}
@@ -160,11 +163,13 @@ function PasswordCard() {
           )}
         </Field>
 
-        <Button type="submit" variant="primary" loading={busy} disabled={!ready}>
-          Change password
-        </Button>
+        <div className="flex justify-end border-t border-line pt-4">
+          <Button type="submit" variant="primary" loading={busy} disabled={!ready}>
+            Change password
+          </Button>
+        </div>
       </form>
-    </Card>
+    </Section>
   )
 }
 
@@ -172,25 +177,43 @@ function PasswordCard() {
 
 function SessionCard({ user, onSignOut }: { user: AuthUser | null; onSignOut: () => void }) {
   return (
-    <Card>
-      <CardHeader title="Session" description="This browser, signed in as you." />
-      <dl className="mt-4 space-y-2">
+    <Section title="Session" description="This browser, signed in as you.">
+      <dl className="divide-y divide-line">
         <Row label="Signed in as" value={user?.email || '—'} />
         {user?.created_at && (
           <Row label="Member since" value={new Date(user.created_at).toLocaleDateString()} />
         )}
       </dl>
-      <Button variant="secondary" className="mt-4" onClick={onSignOut} leadingIcon={<SignOutIcon />}>
-        Sign out
-      </Button>
-    </Card>
+      <div className="flex justify-end border-t border-line pt-4">
+        <Button variant="secondary" onClick={onSignOut} leadingIcon={<SignOutIcon />}>
+          Sign out
+        </Button>
+      </div>
+    </Section>
+  )
+}
+
+/**
+ * A settings section: its name and purpose above the panel it belongs to,
+ * rather than inside it. The heading then sits on the page's own left edge,
+ * which is what makes three sections read as one column.
+ */
+function Section({
+  title, description, children,
+}: { title: string; description: string; children: ReactNode }) {
+  return (
+    <section>
+      <h2 className="text-base font-medium text-ink">{title}</h2>
+      <p className="mt-1 text-sm text-muted">{description}</p>
+      <Card className="mt-4">{children}</Card>
+    </section>
   )
 }
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-baseline justify-between gap-4">
-      <dt className="text-xs text-muted">{label}</dt>
+    <div className="flex items-baseline justify-between gap-4 py-2 first:pt-0">
+      <dt className="text-sm text-muted">{label}</dt>
       <dd className="truncate text-sm text-ink">{value}</dd>
     </div>
   )

@@ -6,7 +6,7 @@ import { diffMarks } from '../lib/diffMarks'
 import { useDocOS } from '../hooks/useDocOS'
 import { useRegisterCommands } from '../context/command-context'
 import { useReportError } from '../hooks/useReportError'
-import { Button, Dropdown, Tabs, Tooltip, useToast } from '../components/ui'
+import { Badge, Button, Dropdown, Tabs, Tooltip, useToast } from '../components/ui'
 import {
   DownloadIcon, LayersIcon, MoreIcon, SparkIcon, UndoIcon, UploadIcon,
 } from '../components/icons'
@@ -106,7 +106,7 @@ export function DocumentEditor() {
     // One empty state, not two: the dropzone is the action, and saying "no
     // document open" above a box that says "drop a document here" was the same
     // sentence twice.
-    <div className="flex h-full items-center justify-center p-4">
+    <div className="flex h-full items-center justify-center p-6">
       <div className="w-full max-w-md text-center">
         <UploadDropzone onFile={importFile} busy={importing}>
           Open a Word document
@@ -177,13 +177,11 @@ export function DocumentEditor() {
   )
 
   return (
-    <div className="flex h-[calc(100vh-7.5rem)] min-h-[32rem] flex-col gap-3">
-      {/* ── Header ───────────────────────────────────────────────────────── */}
+    <div className="flex h-[calc(100vh-6.5rem)] min-h-[34rem] flex-col gap-3">
+      {/* ── Document header: what this is, and what you can do to it ─────── */}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <div className="min-w-0 flex-1">
-          <h1 className="truncate text-xl text-ink">
-            {doc.title || 'Editor'}
-          </h1>
+          <h1 className="truncate text-xl text-ink">{doc.title || 'Editor'}</h1>
           <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-muted">
             {noDoc ? (
               <span>Open a Word document to edit it with AI</span>
@@ -197,31 +195,19 @@ export function DocumentEditor() {
         </div>
 
         {!noDoc && (
-          <div className="flex shrink-0 flex-wrap items-center gap-2">
-            <Tabs
-              label="How to show the document"
-              size="sm"
-              value={view}
-              onChange={setView}
-              items={[
-                { id: 'edit', label: 'Edit' },
-                { id: 'exact', label: 'Exact' },
-              ]}
-            />
-
+          <div className="flex shrink-0 items-center gap-2">
             <Button
               variant="primary"
-              size="sm"
+              size="md"
               leadingIcon={<DownloadIcon />}
               onClick={() => setExporting(true)}
             >
               Export
             </Button>
 
-            {/* Everything that is not the main action, one level down. */}
             <Dropdown
               label="More document actions"
-              triggerSize="sm"
+              triggerSize="md"
               triggerIcon={<MoreIcon />}
               items={[
                 {
@@ -244,8 +230,8 @@ export function DocumentEditor() {
         )}
       </div>
 
-      {/* Hidden control the menu clicks — the dropzone lives in the empty
-          state, and this is the same picker for when a document is open. */}
+      {/* Hidden control the menu clicks — the dropzone is the way in when no
+          document is open, and this is the way in when one already is. */}
       <input
         id="editor-import"
         type="file"
@@ -261,31 +247,31 @@ export function DocumentEditor() {
 
       {/* ── What the assistant just did ──────────────────────────────────── */}
       <AnimatePresence>
-      {doc.review && (
-        <motion.div
-          key="review"
-          initial={reduced ? { opacity: 0 } : { opacity: 0, y: -8, scale: 0.99 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          exit={reduced ? { opacity: 0 } : { opacity: 0, y: -8 }}
-          transition={{ type: 'spring', stiffness: 420, damping: 34, mass: 0.7 }}
-        >
-        <ChangeReview
-          review={doc.review}
-          busy={running}
-          onKeep={doc.acceptChanges}
-          onUndo={() => {
-            doc.rejectChanges()
-            toast.info('Change undone', 'The document is back as it was.')
-          }}
-          onShowChanges={() => {
-            doc.showChanges()
-            setPanel('history')
-            setMobilePanel('history')
-            setPanelOpen(true)
-          }}
-        />
-        </motion.div>
-      )}
+        {doc.review && (
+          <motion.div
+            key="review"
+            initial={reduced ? { opacity: 0 } : { opacity: 0, y: -8, scale: 0.99 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={reduced ? { opacity: 0 } : { opacity: 0, y: -8 }}
+            transition={{ type: 'spring', stiffness: 420, damping: 34, mass: 0.7 }}
+          >
+            <ChangeReview
+              review={doc.review}
+              busy={running}
+              onKeep={doc.acceptChanges}
+              onUndo={() => {
+                doc.rejectChanges()
+                toast.info('Change undone', 'The document is back as it was.')
+              }}
+              onShowChanges={() => {
+                doc.showChanges()
+                setPanel('history')
+                setMobilePanel('history')
+                setPanelOpen(true)
+              }}
+            />
+          </motion.div>
+        )}
       </AnimatePresence>
 
       {/* ── Small screens: one thing at a time ───────────────────────────── */}
@@ -299,50 +285,80 @@ export function DocumentEditor() {
           }}
           items={[
             { id: 'document', label: 'Document' },
-            ...PANELS.map((p) => ({ id: p.id, label: p.label })),
+            ...PANELS.map((pnl) => ({ id: pnl.id, label: pnl.label })),
           ]}
           className="w-full overflow-x-auto"
         />
       </div>
 
-      {/* ── Body ─────────────────────────────────────────────────────────── */}
+      {/* ── The workspace: one frame, two columns inside it ──────────────── */}
       <div
         className={cn(
-          'grid min-h-0 flex-1 gap-3',
-          panelOpen ? 'lg:grid-cols-[minmax(0,1fr)_360px]' : 'lg:grid-cols-[minmax(0,1fr)_auto]',
+          'grid min-h-0 flex-1 overflow-hidden rounded-lg border border-line bg-surface',
+          panelOpen ? 'lg:grid-cols-[minmax(0,1fr)_23rem]' : 'lg:grid-cols-1',
         )}
       >
-        {/* Focusable because it scrolls: a region a mouse can scroll and a
-            keyboard cannot is a part of the document somebody cannot reach. */}
-        <div
-          tabIndex={noDoc ? undefined : 0}
-          role={noDoc ? undefined : 'region'}
-          aria-label={noDoc ? undefined : `${doc.title || 'Document'} — page view`}
+        {/* The document, with its own toolbar above it */}
+        <section
           className={cn(
-            'doc-desk min-h-0 overflow-auto rounded-lg border border-line',
-            noDoc ? 'p-0' : 'p-3 sm:p-6',
-            mobilePanel !== 'document' && 'hidden lg:block',
+            'flex min-h-0 flex-col',
+            mobilePanel !== 'document' && 'hidden lg:flex',
           )}
         >
-          {canvas}
-        </div>
+          {!noDoc && (
+            <div className="flex h-10 shrink-0 items-center justify-between gap-2 border-b border-line px-2">
+              {/* How the document is drawn belongs to the document, not to the
+                  page header two rows above it. */}
+              <Tabs
+                label="How to show the document"
+                size="sm"
+                value={view}
+                onChange={setView}
+                items={[
+                  { id: 'edit', label: 'Edit' },
+                  { id: 'exact', label: 'Exact' },
+                ]}
+              />
 
-        {/* Side panel: a column on a large screen, the selected tab below it. */}
+              <div className="flex items-center gap-1">
+                {mathsOn && <Badge tone="brand">maths drawn</Badge>}
+                {!panelOpen && (
+                  <Tooltip content="Show the assistant" side="left">
+                    <Button
+                      variant="ghost" size="sm" iconOnly
+                      aria-label="Show the side panel"
+                      onClick={() => setPanelOpen(true)}
+                      leadingIcon={<SparkIcon />}
+                    />
+                  </Tooltip>
+                )}
+              </div>
+            </div>
+          )}
+
+          <div
+            tabIndex={noDoc ? undefined : 0}
+            role={noDoc ? undefined : 'region'}
+            aria-label={noDoc ? undefined : `${doc.title || 'Document'} — page view`}
+            className={cn(
+              'min-h-0 flex-1 overflow-auto',
+              noDoc ? 'bg-surface' : 'doc-desk p-4 sm:p-6',
+            )}
+          >
+            {canvas}
+          </div>
+        </section>
+
+        {/* The assistant, sharing the frame rather than floating beside it */}
         <aside
           className={cn(
-            'min-h-0 flex-col rounded-lg border border-line bg-surface p-3',
+            'min-h-0 flex-col border-line lg:border-l',
             mobilePanel === 'document' ? 'hidden lg:flex' : 'flex',
             !panelOpen && 'lg:hidden',
           )}
         >
-          <div className="mb-3 hidden items-center justify-between gap-2 lg:flex">
-            <Tabs
-              label="Side panel"
-              size="sm"
-              value={panel}
-              onChange={setPanel}
-              items={PANELS}
-            />
+          <div className="hidden h-10 shrink-0 items-center justify-between gap-2 border-b border-line px-2 lg:flex">
+            <Tabs label="Side panel" size="sm" value={panel} onChange={setPanel} items={PANELS} />
             <Tooltip content="Hide the panel" side="left">
               <Button
                 variant="ghost" size="sm" iconOnly
@@ -353,21 +369,8 @@ export function DocumentEditor() {
             </Tooltip>
           </div>
 
-          <div className="min-h-0 flex-1 overflow-y-auto">{sidePanel}</div>
+          <div className="min-h-0 flex-1 overflow-hidden p-3">{sidePanel}</div>
         </aside>
-
-        {!panelOpen && (
-          <div className="hidden lg:flex lg:items-start">
-            <Tooltip content="Show the assistant" side="left">
-              <Button
-                variant="secondary" size="sm" iconOnly
-                aria-label="Show the side panel"
-                onClick={() => setPanelOpen(true)}
-                leadingIcon={<SparkIcon />}
-              />
-            </Tooltip>
-          </div>
-        )}
       </div>
 
       {doc.docId && (

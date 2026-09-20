@@ -18,7 +18,7 @@ import {
   Button, Card, Field, Input, Select, Textarea, Tabs, useToast,
 } from '../components/ui'
 import {
-  ChevronLeftIcon, ChevronRightIcon, ComposeIcon, DownloadIcon, EditorIcon, SparkIcon,
+  ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, ComposeIcon, DownloadIcon, EditorIcon, SparkIcon,
 } from '../components/icons'
 import { ExactPreview } from '../components/paper/ExactPreview'
 import { GenerationStatus } from '../components/paper/GenerationStatus'
@@ -289,7 +289,7 @@ export function ComposePaper() {
   // ── render ────────────────────────────────────────────────────────────────
 
   return (
-    <div className="space-y-6">
+    <div className="mx-auto w-full max-w-3xl space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl text-ink">Generate a document</h1>
@@ -314,7 +314,7 @@ export function ComposePaper() {
 
       {/* ── 1. Material ──────────────────────────────────────────────────── */}
       {step === 0 && (
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="space-y-4">
           <Card className="space-y-4">
             <Field
               label="Your material"
@@ -322,7 +322,7 @@ export function ComposePaper() {
               error={showMaterialError && !form.rawText.trim()
                 ? 'Add something to work from — a brief, notes, data, or just a sentence saying what you need.'
                 : null}
-              hint="Everything goes here: what you want written, plus any notes, data, transcripts or code it should draw on. Numbers become tables and charts automatically."
+              hint="Everything goes here: what you want written, plus any notes, data or transcripts it should draw on. Numbers become tables and charts."
             >
               {(props) => (
                 <Textarea
@@ -330,55 +330,20 @@ export function ComposePaper() {
                   id="compose-material"
                   value={form.rawText}
                   onChange={(e) => { set('rawText', e.target.value); setShowMaterialError(false) }}
-                  rows={16}
+                  rows={12}
                   placeholder={`Say what you need, then paste everything it should be based on. For example:
 
 Write a report on our Q3 customer churn for the leadership team.
 
-Survey: 412 cancelling customers. Price 63%, missing features 21%, support 11%, other 5%.
-Churn by month: July 4.2%, August 5.1%, September 6.8%.
-Interview: "The renewal price jumped 40% with no warning."`}
+Survey: 412 cancelling customers. Price 63%, missing features 21%, support 11%.
+Churn by month: July 4.2%, August 5.1%, September 6.8%.`}
                 />
               )}
             </Field>
 
-            <div>
-              <div className="mb-1.5 flex items-center justify-between gap-3">
-                <span className="text-sm font-medium text-ink">Extra instructions</span>
-                <RefineButton
-                  disabled={!form.instructions.trim()}
-                  active={refining}
-                  onClick={() => setRefining((r) => !r)}
-                />
-              </div>
-              <Textarea
-                value={form.instructions}
-                onChange={(e) => set('instructions', e.target.value)}
-                rows={3}
-                aria-label="Extra instructions"
-                placeholder={`e.g. Bold the important keywords and technical terms.
-Keep it under 4 pages.
-Write in the first person plural.`}
-              />
-              <p className="mt-1.5 text-xs text-faint">
-                Followed as written, and they override the defaults. One per line is fine.
-              </p>
-
-              {refining && form.instructions.trim() && (
-                <InstructionRefiner
-                  instructions={form.instructions}
-                  rawText={form.rawText}
-                  docKind={form.docKind}
-                  style={form.style}
-                  onAccept={(improved) => { set('instructions', improved); setRefining(false) }}
-                  onClose={() => setRefining(false)}
-                />
-              )}
-            </div>
-          </Card>
-
-          <div className="space-y-4">
-            <Card className="space-y-4">
+            {/* The two settings that change what gets written sit with the
+                material they apply to, not in a column of their own. */}
+            <div className="grid gap-4 border-t border-line pt-4 sm:grid-cols-2">
               <Field label="Document kind">
                 {(props) => (
                   <>
@@ -405,37 +370,87 @@ Write in the first person plural.`}
                 )}
               </Field>
 
-              <div>
-                <p className="mb-1.5 text-sm font-medium text-ink">Depth</p>
-                <Tabs
-                  label="How much to write per section"
-                  value={form.depth}
-                  onChange={(id) => set('depth', id)}
-                  items={DEPTH_OPTIONS.map((d) => ({ id: d.id, label: d.label }))}
-                  className="w-full"
-                />
-                <p className="mt-1.5 text-xs text-faint">
-                  {DEPTH_OPTIONS.find((d) => d.id === form.depth)?.hint}
-                </p>
-              </div>
-            </Card>
-
-            <div className="flex justify-end">
-              <Button variant="primary" onClick={() => go(1)} trailingIcon={<ChevronRightIcon />}>
-                Continue
-              </Button>
+              <Field
+                label="Depth"
+                hint={DEPTH_OPTIONS.find((d) => d.id === form.depth)?.hint}
+              >
+                {() => (
+                  <Tabs
+                    label="How much to write per section"
+                    value={form.depth}
+                    onChange={(id) => set('depth', id)}
+                    items={DEPTH_OPTIONS.map((d) => ({ id: d.id, label: d.label }))}
+                    className="flex w-full [&>button]:flex-1"
+                  />
+                )}
+              </Field>
             </div>
-          </div>
+          </Card>
+
+          {/* Extra instructions are an addition, not a second half of the
+              form: closed until wanted. */}
+          <Card padded={false}>
+            <details className="group" open={Boolean(form.instructions)}>
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-medium text-ink sm:px-5">
+                <span className="flex items-center gap-2">
+                  Extra instructions
+                  <span className="text-xs font-normal text-faint">
+                    {form.instructions.trim() ? 'added' : 'optional'}
+                  </span>
+                </span>
+                <ChevronDownIcon className="h-4 w-4 shrink-0 text-faint transition-transform duration-fast group-open:rotate-180" />
+              </summary>
+
+              <div className="space-y-2 border-t border-line px-4 py-4 sm:px-5">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-xs text-muted">
+                    Followed as written, and they override the defaults.
+                  </p>
+                  <RefineButton
+                    disabled={!form.instructions.trim()}
+                    active={refining}
+                    onClick={() => setRefining((r) => !r)}
+                  />
+                </div>
+                <Textarea
+                  value={form.instructions}
+                  onChange={(e) => set('instructions', e.target.value)}
+                  rows={3}
+                  aria-label="Extra instructions"
+                  placeholder={`e.g. Bold the important keywords.
+Keep it under 4 pages.
+Write in the first person plural.`}
+                />
+
+                {refining && form.instructions.trim() && (
+                  <InstructionRefiner
+                    instructions={form.instructions}
+                    rawText={form.rawText}
+                    docKind={form.docKind}
+                    style={form.style}
+                    onAccept={(improved) => { set('instructions', improved); setRefining(false) }}
+                    onClose={() => setRefining(false)}
+                  />
+                )}
+              </div>
+            </details>
+          </Card>
+
+          <StepActions
+            onNext={() => go(1)}
+            nextLabel="Continue"
+            hint={`${words(form.rawText)} words of material`}
+          />
         </div>
       )}
 
       {/* ── 2. Structure ─────────────────────────────────────────────────── */}
       {step === 1 && (
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="space-y-4">
           <Card className="space-y-4">
             <div>
-              <h2 className="text-base font-semibold text-ink">Sections</h2>
-              <p className="mt-0.5 text-sm text-muted">
+              <h2 className="text-base font-medium text-ink">Sections</h2>
+              <p className="mt-1 text-sm text-muted">
                 Decide the structure now, and the writer follows it exactly.
               </p>
             </div>
@@ -446,20 +461,27 @@ Write in the first person plural.`}
             />
           </Card>
 
-          <div className="space-y-4">
-            <Card className="space-y-4">
-              <Field label="Style" hint={`Rendered as ${styleName}.`}>
+          <Card className="space-y-4">
+            <div>
+              <h2 className="text-base font-medium text-ink">Style and title</h2>
+              <p className="mt-1 text-sm text-muted">
+                How it is set, and whose name is on it.
+              </p>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="Style" className="sm:col-span-2">
                 {(props) => (
                   <Select {...props} value={form.style} onChange={(e) => set('style', e.target.value)}>
                     <optgroup label="Built-in">
-                      {styles.filter((s) => s.builtin === 'true').map((s) => (
-                        <option key={s.id} value={s.id}>{s.name} ({s.columns} col)</option>
+                      {styles.filter((st) => st.builtin === 'true').map((st) => (
+                        <option key={st.id} value={st.id}>{st.name} ({st.columns} col)</option>
                       ))}
                     </optgroup>
-                    {styles.some((s) => s.builtin === 'false') && (
+                    {styles.some((st) => st.builtin === 'false') && (
                       <optgroup label="My styles">
-                        {styles.filter((s) => s.builtin === 'false').map((s) => (
-                          <option key={s.id} value={s.id}>{s.name}</option>
+                        {styles.filter((st) => st.builtin === 'false').map((st) => (
+                          <option key={st.id} value={st.id}>{st.name}</option>
                         ))}
                       </optgroup>
                     )}
@@ -467,7 +489,7 @@ Write in the first person plural.`}
                 )}
               </Field>
 
-              <Field label="Title" optional hint="Leave blank to let the AI title it.">
+              <Field label="Title" optional hint="Leave blank to let the AI title it." className="sm:col-span-2">
                 {(props) => (
                   <Input
                     {...props}
@@ -478,37 +500,35 @@ Write in the first person plural.`}
                 )}
               </Field>
 
-              <div className="grid grid-cols-2 gap-3">
-                <Field label="Author" optional>
-                  {(props) => (
-                    <Input {...props} value={form.authorName}
-                           onChange={(e) => set('authorName', e.target.value)} placeholder="Your name" />
-                  )}
-                </Field>
-                <Field label="Affiliation" optional>
-                  {(props) => (
-                    <Input {...props} value={form.authorAffil}
-                           onChange={(e) => set('authorAffil', e.target.value)} placeholder="Organisation" />
-                  )}
-                </Field>
-              </div>
-            </Card>
-
-            <div className="flex justify-between gap-2">
-              <Button variant="ghost" onClick={() => go(0)} leadingIcon={<ChevronLeftIcon />}>
-                Back
-              </Button>
-              <Button variant="primary" onClick={() => go(2)} trailingIcon={<ChevronRightIcon />}>
-                Continue
-              </Button>
+              <Field label="Author" optional>
+                {(props) => (
+                  <Input {...props} value={form.authorName}
+                         onChange={(e) => set('authorName', e.target.value)} placeholder="Your name" />
+                )}
+              </Field>
+              <Field label="Affiliation" optional>
+                {(props) => (
+                  <Input {...props} value={form.authorAffil}
+                         onChange={(e) => set('authorAffil', e.target.value)} placeholder="Organisation" />
+                )}
+              </Field>
             </div>
-          </div>
+          </Card>
+
+          <StepActions
+            onBack={() => go(0)}
+            onNext={() => go(2)}
+            nextLabel="Continue"
+            hint={form.outline.length
+              ? `${form.outline.length} sections · ${styleName}`
+              : `Structure planned by the AI · ${styleName}`}
+          />
         </div>
       )}
 
       {/* ── 3. Generate ──────────────────────────────────────────────────── */}
       {step === 2 && (
-        <div className="mx-auto w-full max-w-2xl space-y-4">
+        <div className="space-y-4">
           <Card className="space-y-4">
             <div>
               <h2 className="text-base font-semibold text-ink">Ready to write</h2>
@@ -531,11 +551,6 @@ Write in the first person plural.`}
               ) : <></>}
             </AppearGroup>
 
-            {!running && (
-              <Button variant="primary" size="lg" fullWidth onClick={generate} leadingIcon={<SparkIcon />}>
-                {spec ? 'Write it again' : 'Write the document'}
-              </Button>
-            )}
           </Card>
 
           <GenerationStatus
@@ -545,17 +560,21 @@ Write in the first person plural.`}
             onStop={stop}
           />
 
-          {!running && !error && (
-            <div className="flex justify-start">
-              <Button variant="ghost" onClick={() => go(1)} leadingIcon={<ChevronLeftIcon />}>Back</Button>
-            </div>
+          {!running && (
+            <StepActions
+              onBack={() => go(1)}
+              onNext={generate}
+              nextLabel={spec ? 'Write it again' : 'Write the document'}
+              nextIcon={<SparkIcon />}
+              hint="This usually takes under a minute."
+            />
           )}
         </div>
       )}
 
       {/* ── 4. Review ────────────────────────────────────────────────────── */}
       {step === 3 && spec && (
-        <Appear className="space-y-4">
+        <Appear className="space-y-4 xl:-mx-[8rem] 2xl:-mx-[14rem]">
           <Card className="flex flex-wrap items-center justify-between gap-3">
             <div className="min-w-0">
               <h2 className="truncate text-base font-semibold text-ink">
@@ -677,4 +696,41 @@ function loadDraft(): DraftForm {
   } catch {
     return EMPTY_FORM
   }
+}
+
+/**
+ * The bar that closes every step.
+ *
+ * One place for Back and Continue, the same place on every step, aligned with
+ * the column above it — rather than a button floating in whatever space a
+ * two-column grid happened to leave over.
+ */
+function StepActions({
+  onBack, onNext, nextLabel, nextIcon, hint,
+}: {
+  onBack?: () => void
+  onNext: () => void
+  nextLabel: string
+  nextIcon?: React.ReactNode
+  hint?: string
+}) {
+  return (
+    <div className="flex items-center gap-3 border-t border-line pt-4">
+      {onBack && (
+        <Button variant="ghost" onClick={onBack} leadingIcon={<ChevronLeftIcon />}>
+          Back
+        </Button>
+      )}
+      {hint && <p className="hidden text-xs text-faint sm:block">{hint}</p>}
+      <Button
+        variant="primary"
+        onClick={onNext}
+        className="ml-auto"
+        leadingIcon={nextIcon}
+        trailingIcon={nextIcon ? undefined : <ChevronRightIcon />}
+      >
+        {nextLabel}
+      </Button>
+    </div>
+  )
 }
