@@ -27,6 +27,7 @@ import { OutlineEditor } from '../components/paper/OutlineEditor'
 import { SectionReview } from '../components/paper/SectionReview'
 import { Stepper, type Step } from '../components/paper/Stepper'
 import { Appear, AppearGroup } from '../components/motion/Appear'
+import { Page, PageHeader } from '../components/layout/Page'
 
 // A model left to itself writes concisely, so depth has to be asked for.
 const DEPTH_OPTIONS: { id: Depth; label: string; hint: string }[] = [
@@ -289,16 +290,16 @@ export function ComposePaper() {
   // ── render ────────────────────────────────────────────────────────────────
 
   return (
-    <div className="mx-auto w-full max-w-3xl space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-2xl text-ink">Generate a document</h1>
-          <p className="mt-1 text-sm text-muted">{STEPS[step].hint}</p>
-        </div>
-        {spec && (
+    // Narrow while it is a form, wide once it is a document beside a list of
+    // its sections: the measure follows what is on the screen.
+    <Page width={step === 3 && spec ? 'wide' : 'narrow'} className="!space-y-6">
+      <PageHeader
+        title="Generate a document"
+        description={STEPS[step].hint}
+        actions={spec ? (
           <Button variant="ghost" size="sm" onClick={startOver}>Start a new one</Button>
-        )}
-      </div>
+        ) : undefined}
+      />
 
       <Stepper steps={STEPS} current={step} furthest={furthest} onGo={go} />
 
@@ -574,7 +575,7 @@ Write in the first person plural.`}
 
       {/* ── 4. Review ────────────────────────────────────────────────────── */}
       {step === 3 && spec && (
-        <Appear className="space-y-4 xl:-mx-[8rem] 2xl:-mx-[14rem]">
+        <Appear className="space-y-4">
           <Card className="flex flex-wrap items-center justify-between gap-3">
             <div className="min-w-0">
               <h2 className="truncate text-base font-semibold text-ink">
@@ -663,7 +664,7 @@ Write in the first person plural.`}
           </p>
         </Card>
       )}
-    </div>
+    </Page>
   )
 }
 

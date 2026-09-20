@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext'
 import { authApi, getToken, type AuthUser } from '../lib/auth'
 import { Button, Card, Field, Input, useToast } from '../components/ui'
 import { AppearGroup } from '../components/motion/Appear'
+import { Page, PageHeader } from '../components/layout/Page'
 import { useReportError } from '../hooks/useReportError'
 import { SignOutIcon } from '../components/icons'
 
@@ -20,11 +21,8 @@ export function Settings() {
     // One column, with a measure. Settings in a two-column grid leaves the
     // third card sitting alone beside a hole, and puts a form field 1200px
     // from the label that names it.
-    <div className="mx-auto w-full max-w-2xl space-y-8">
-      <div>
-        <h1 className="text-2xl text-ink">Settings</h1>
-        <p className="mt-1 text-sm text-muted">Manage your account.</p>
-      </div>
+    <Page width="narrow">
+      <PageHeader title="Settings" description="Manage your account." />
 
       <AppearGroup className="space-y-8" stagger={0.06}>
         {/* Keyed on the stored name: when the account changes underneath it,
@@ -34,7 +32,7 @@ export function Settings() {
         <PasswordCard />
         <SessionCard user={user} onSignOut={logout} />
       </AppearGroup>
-    </div>
+    </Page>
   )
 }
 

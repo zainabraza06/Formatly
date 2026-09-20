@@ -14,6 +14,7 @@ import {
 import {
   ComposeIcon, DocumentsIcon, LayersIcon, MoreIcon, PlusIcon, SearchIcon, TrashIcon, UploadIcon,
 } from '../components/icons'
+import { Page, PageHeader } from '../components/layout/Page'
 import { DocumentCard, DocumentCardSkeleton } from '../components/documents/DocumentCard'
 import { DocumentTable, DocumentTableSkeleton } from '../components/documents/DocumentTable'
 import { UploadDropzone } from '../components/documents/UploadDropzone'
@@ -236,8 +237,8 @@ export function DocumentsPage() {
   const nothingMatches = !loading && items.length > 0 && visible.length === 0
 
   return (
-    <div
-      className="relative space-y-4"
+    <Page
+      className="relative"
       onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
       onDragLeave={(e) => { if (e.currentTarget === e.target) setDragging(false) }}
       onDrop={(e) => {
@@ -255,47 +256,47 @@ export function DocumentsPage() {
         </div>
       )}
       {/* ── Header: one primary action ─────────────────────────────────── */}
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-2xl text-ink">Documents</h1>
-          <p className="mt-1 text-sm text-muted">
-            {loading
-              ? 'Everything you have generated or uploaded, in one place.'
-              : visible.length === items.length
-                ? `${items.length} ${items.length === 1 ? 'document' : 'documents'}`
-                : `${visible.length} of ${items.length} documents`}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <ButtonLink to="/app/compose" variant="primary" leadingIcon={<PlusIcon />}>
-            New document
-          </ButtonLink>
+      <PageHeader
+        title="Documents"
+        description={
+          loading
+            ? 'Everything you have generated or uploaded, in one place.'
+            : visible.length === items.length
+              ? `${items.length} ${items.length === 1 ? 'document' : 'documents'}`
+              : `${visible.length} of ${items.length} documents`
+        }
+        actions={
+          <>
+            <ButtonLink to="/app/compose" variant="primary" leadingIcon={<PlusIcon />}>
+              New document
+            </ButtonLink>
 
-          <Dropdown
-            label="More library actions"
-            triggerIcon={<MoreIcon />}
-            items={[
-              {
-                id: 'upload',
-                label: 'Upload a Word document',
-                icon: <UploadIcon />,
-                onSelect: () => document.getElementById('library-upload')?.click(),
-              },
-              {
-                id: 'clear',
-                label: 'Delete all uploads…',
-                icon: <TrashIcon />,
-                destructive: true,
-                disabled: counts.upload === 0,
-                onSelect: () => setConfirmClear(true),
-              },
-            ]}
-          />
-        </div>
-      </div>
+            <Dropdown
+              label="More library actions"
+              triggerIcon={<MoreIcon />}
+              items={[
+                {
+                  id: 'upload',
+                  label: 'Upload a Word document',
+                  icon: <UploadIcon />,
+                  onSelect: () => document.getElementById('library-upload')?.click(),
+                },
+                {
+                  id: 'clear',
+                  label: 'Delete all uploads…',
+                  icon: <TrashIcon />,
+                  destructive: true,
+                  disabled: counts.upload === 0,
+                  onSelect: () => setConfirmClear(true),
+                },
+              ]}
+            />
+          </>
+        }
+      />
 
-      {/* The menu's picker. The dropzone below is the usual way in; this is
-          for anyone who went looking in a menu instead. */}
+      {/* The menu's picker. The dropzone is the usual way in; this is for
+          anyone who went looking in a menu instead. */}
       <input
         id="library-upload"
         type="file"
@@ -495,7 +496,7 @@ export function DocumentsPage() {
         }
         confirmLabel="Delete all uploads"
       />
-    </div>
+    </Page>
   )
 }
 

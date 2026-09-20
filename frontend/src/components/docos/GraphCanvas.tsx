@@ -351,7 +351,7 @@ export function GraphCanvas({
       {/* Pager controls, stuck to the bottom of the scrolling canvas: they
           used to sit below a full-height page, which put them off screen
           exactly when a document had more than one page. */}
-      <div className="sticky bottom-0 z-10 -mx-6 -mb-6 mt-4 flex items-center justify-center gap-3 border-t border-line/60 bg-surface-3/80 px-6 py-2 backdrop-blur">
+      <div className="sticky bottom-0 z-10 mt-4 flex items-center justify-center gap-3 rounded-full border border-line bg-surface/90 px-3 py-1.5 shadow-sm backdrop-blur">
         <button
           onClick={() => setPage((p) => Math.max(0, p - 1))}
           disabled={page === 0}

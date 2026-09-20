@@ -242,7 +242,10 @@ export function AppShell({
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
-            className="mx-auto w-full max-w-content px-4 py-6 sm:px-6 lg:px-8"
+            // Margins per the grid: 16px on a phone, 32px from 1024px up.
+            // The width belongs to the Page inside it, which knows whether the
+            // screen is one you scan or one you read.
+            className="flex min-h-full flex-col px-4 py-6 lg:px-8"
           >
             <Outlet />
           </motion.div>

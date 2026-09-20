@@ -19,6 +19,7 @@ import { ExportDialog } from '../components/docos/ExportDialog'
 import { GraphCanvas } from '../components/docos/GraphCanvas'
 import { VersionTimeline } from '../components/docos/VersionTimeline'
 import { UploadDropzone } from '../components/documents/UploadDropzone'
+import { Page } from '../components/layout/Page'
 
 type Panel = 'assistant' | 'structure' | 'history'
 
@@ -177,7 +178,7 @@ export function DocumentEditor() {
   )
 
   return (
-    <div className="flex h-[calc(100vh-6.5rem)] min-h-[34rem] flex-col gap-3">
+    <Page fill className="h-[calc(100vh-7rem)] min-h-[34rem] !gap-3">
       {/* ── Document header: what this is, and what you can do to it ─────── */}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <div className="min-w-0 flex-1">
@@ -382,6 +383,6 @@ export function DocumentEditor() {
           maths={mathsOn}
         />
       )}
-    </div>
+    </Page>
   )
 }
