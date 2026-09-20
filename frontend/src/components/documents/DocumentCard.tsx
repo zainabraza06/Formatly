@@ -1,3 +1,4 @@
+import { motion, useReducedMotion } from 'framer-motion'
 import { cn } from '../../lib/cn'
 import { Badge, Dropdown, Spinner, type MenuItem } from '../ui'
 import {
@@ -12,6 +13,7 @@ import { formatDate, type DocumentItem } from '../../lib/documents'
  */
 export function DocumentCard({
   doc,
+  index = 0,
   busy,
   onOpen,
   onExport,
@@ -19,6 +21,8 @@ export function DocumentCard({
   onDelete,
 }: {
   doc: DocumentItem
+  /** Its place in the grid, so the cards land in order. */
+  index?: number
   /** What this card is currently doing, shown in place of its metadata. */
   busy?: string | null
   onOpen: () => void
@@ -27,6 +31,7 @@ export function DocumentCard({
   onDelete?: () => void
 }) {
   const generated = doc.source === 'generated'
+  const reduced = useReducedMotion()
 
   const menu: MenuItem[] = [
     {
@@ -46,7 +51,14 @@ export function DocumentCard({
   ]
 
   return (
-    <div
+    <motion.div
+      initial={reduced ? { opacity: 0 } : { opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{
+        duration: 0.3,
+        delay: Math.min(index * 0.04, 0.28),
+        ease: [0.16, 1, 0.3, 1],
+      }}
       className={cn(
         'group relative flex flex-col rounded-lg border border-line bg-surface p-4 shadow-xs',
         'transition-[border-color,box-shadow] duration-fast ease-out',
@@ -119,7 +131,7 @@ export function DocumentCard({
           />
         </div>
       </div>
-    </div>
+    </motion.div>
   )
 }
 

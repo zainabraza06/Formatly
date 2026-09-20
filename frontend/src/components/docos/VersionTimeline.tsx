@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { cn } from '../../lib/cn'
 import { Badge, Button, EmptyState } from '../ui'
 import { ClockIcon, CloseIcon, UndoIcon } from '../icons'
@@ -30,6 +31,7 @@ export function VersionTimeline({
   versions, diff, disabled, onUndo, onRedo, onRewind, onRestore, onCompare, onCloseDiff,
 }: Props) {
   const [picked, setPicked] = useState<number[]>([])
+  const reduced = useReducedMotion()
 
   const togglePick = (seq: number) => {
     setPicked((p) => (p.includes(seq) ? p.filter((x) => x !== seq) : [...p, seq].slice(-2)))
@@ -79,8 +81,18 @@ export function VersionTimeline({
       <ol className="relative min-h-0 flex-1 space-y-0.5 overflow-y-auto pr-1">
         <span className="absolute bottom-2 left-[7px] top-2 w-px bg-line" aria-hidden />
 
-        {[...versions].reverse().map((v) => (
-          <li key={v.id} className="relative flex items-start gap-2 pl-5">
+        {[...versions].reverse().map((v, index) => (
+          <motion.li
+            key={v.id}
+            initial={reduced ? { opacity: 0 } : { opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{
+              duration: 0.26,
+              delay: Math.min(index * 0.03, 0.2),
+              ease: [0.16, 1, 0.3, 1],
+            }}
+            className="relative flex items-start gap-2 pl-5"
+          >
             <span
               className={cn(
                 'absolute left-0 top-2.5 h-3.5 w-3.5 rounded-full border-2 bg-surface',
@@ -116,11 +128,26 @@ export function VersionTimeline({
                 <MiniButton label="Restore" title={`Restore version ${v.seq}`} disabled={disabled} onClick={() => onRestore(v.seq)} />
               </div>
             )}
-          </li>
+          </motion.li>
         ))}
       </ol>
 
-      {diff && <DiffPanel a={diff.a} b={diff.b} diff={diff.diff} onClose={onCloseDiff} />}
+      {/* The comparison slides up from the bottom of the panel, where it
+          belongs to the timeline above it. */}
+      <AnimatePresence>
+        {diff && (
+          <motion.div
+            key={`${diff.a}-${diff.b}`}
+            initial={reduced ? { opacity: 0 } : { opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={reduced ? { opacity: 0 } : { opacity: 0, y: 12 }}
+            transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
+            className="flex min-h-0 flex-col"
+          >
+            <DiffPanel a={diff.a} b={diff.b} diff={diff.diff} onClose={onCloseDiff} />
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }

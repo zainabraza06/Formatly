@@ -437,10 +437,11 @@ export function DocumentsPage() {
             />
           ) : (
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-              {visible.map((doc) => (
+              {visible.map((doc, index) => (
                 <DocumentCard
                   key={`${doc.source}:${doc.id}`}
                   doc={doc}
+                  index={index}
                   busy={busyId?.id === doc.id ? busyId.what : null}
                   onOpen={() => open(doc)}
                   onExport={(format) => exportDoc(doc, format)}

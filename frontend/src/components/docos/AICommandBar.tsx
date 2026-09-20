@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { cn } from '../../lib/cn'
 import { Button, Progress, Spinner } from '../ui'
 import { SparkIcon, WarningIcon } from '../icons'
@@ -32,6 +33,7 @@ export function AICommandBar({
 }) {
   const [input, setInput] = useState('')
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  const reduced = useReducedMotion()
 
   const submit = () => {
     const command = input.trim()
@@ -91,8 +93,15 @@ export function AICommandBar({
       </div>
 
       {/* ── Suggestions ─────────────────────────────────────────────────── */}
+      <AnimatePresence initial={false}>
       {!running && (
-        <div className="flex flex-wrap gap-1.5">
+        <motion.div
+          className="flex flex-wrap gap-1.5"
+          initial={reduced ? { opacity: 0 } : { opacity: 0, height: 0 }}
+          animate={{ opacity: 1, height: 'auto' }}
+          exit={reduced ? { opacity: 0 } : { opacity: 0, height: 0 }}
+          transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+        >
           {SUGGESTIONS.map((s) => (
             <button
               key={s}
@@ -108,8 +117,9 @@ export function AICommandBar({
               {s}
             </button>
           ))}
-        </div>
+        </motion.div>
       )}
+      </AnimatePresence>
 
       {/* ── What it is doing ────────────────────────────────────────────── */}
       {!running && !panel.task && !panel.error && !panel.reading ? (
@@ -132,7 +142,17 @@ export function AICommandBar({
           className="flex items-center gap-2 text-sm font-medium text-ink"
         >
           {running && <Spinner size="sm" />}
-          {panel.currentAction}
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.span
+              key={panel.currentAction}
+              initial={reduced ? { opacity: 0 } : { opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.16 }}
+            >
+              {panel.currentAction}
+            </motion.span>
+          </AnimatePresence>
           {panel.progress?.total ? (
             <span className="ml-auto text-2xs tabular-nums text-faint">
               {panel.progress.done}/{panel.progress.total}

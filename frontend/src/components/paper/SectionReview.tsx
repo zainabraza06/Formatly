@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { cn } from '../../lib/cn'
 import { Button, Input, Spinner } from '../ui'
 import { SparkIcon } from '../icons'
@@ -28,6 +29,7 @@ export function SectionReview({
 }) {
   const [openFor, setOpenFor] = useState<string | null>(null)
   const [note, setNote] = useState('')
+  const reduced = useReducedMotion()
 
   if (!sections.length) {
     return (
@@ -40,12 +42,22 @@ export function SectionReview({
 
   return (
     <ul className="divide-y divide-line overflow-hidden rounded-lg border border-line bg-surface">
-      {sections.map((section) => {
+      {sections.map((section, index) => {
         const busy = busyHeading === section.heading
         const open = openFor === section.heading
 
         return (
-          <li key={`${section.start}-${section.heading}`} className={cn('px-3 py-2.5', busy && 'bg-brand-soft/40')}>
+          <motion.li
+            key={`${section.start}-${section.heading}`}
+            initial={reduced ? { opacity: 0 } : { opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{
+              duration: 0.28,
+              delay: Math.min(index * 0.04, 0.24),
+              ease: [0.16, 1, 0.3, 1],
+            }}
+            className={cn('px-3 py-2.5 transition-colors', busy && 'bg-brand-soft/40')}
+          >
             <div className="flex items-center gap-3">
               <div className="min-w-0 flex-1">
                 {onJumpTo ? (
@@ -83,8 +95,15 @@ export function SectionReview({
               )}
             </div>
 
+            <AnimatePresence initial={false}>
             {open && !busy && (
-              <div className="mt-2 flex flex-col gap-2 rounded-md border border-line bg-surface-2/60 p-2 sm:flex-row">
+              <motion.div
+                initial={reduced ? { opacity: 0 } : { opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={reduced ? { opacity: 0 } : { opacity: 0, height: 0 }}
+                transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+                className="mt-2 flex flex-col gap-2 overflow-hidden rounded-md border border-line bg-surface-2/60 p-2 sm:flex-row"
+              >
                 <Input
                   autoFocus
                   value={note}
@@ -112,9 +131,10 @@ export function SectionReview({
                     Cancel
                   </Button>
                 </div>
-              </div>
+              </motion.div>
             )}
-          </li>
+            </AnimatePresence>
+          </motion.li>
         )
       })}
     </ul>

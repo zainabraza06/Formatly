@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { authApi, getToken, type AuthUser } from '../lib/auth'
 import { Button, Card, CardHeader, Field, Input, useToast } from '../components/ui'
+import { AppearGroup } from '../components/motion/Appear'
 import { useReportError } from '../hooks/useReportError'
 import { SignOutIcon } from '../components/icons'
 
@@ -22,14 +23,14 @@ export function Settings() {
         <p className="mt-1 text-sm text-muted">Manage your account.</p>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <AppearGroup className="grid gap-4 lg:grid-cols-2" stagger={0.06}>
         {/* Keyed on the stored name: when the account changes underneath it,
             the card remounts with the new value instead of syncing in an
             effect. */}
         <ProfileCard key={user?.name ?? ''} user={user} onSaved={refreshUser} />
         <PasswordCard />
         <SessionCard user={user} onSignOut={logout} />
-      </div>
+      </AppearGroup>
     </div>
   )
 }

@@ -1,3 +1,4 @@
+import { motion, useReducedMotion } from 'framer-motion'
 import { cn } from '../../lib/cn'
 import { CheckIcon } from '../icons'
 
@@ -27,6 +28,8 @@ export function Stepper({
   onGo: (index: number) => void
   className?: string
 }) {
+  const reduced = useReducedMotion()
+
   return (
     <nav aria-label="Progress" className={className}>
       <ol className="flex flex-wrap items-center gap-x-1 gap-y-2">
@@ -49,26 +52,36 @@ export function Stepper({
                   !reachable && 'cursor-not-allowed text-faint',
                 )}
               >
-                <span
+                <motion.span
                   className={cn(
                     'flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-2xs font-semibold',
                     done && 'border-brand bg-brand text-brand-fg',
                     active && 'border-brand bg-brand-soft text-brand-ink',
                     !done && !active && 'border-line text-faint',
                   )}
+                  // A step that has just been completed is worth a beat: it is
+                  // the only feedback that pressing Continue did anything.
+                  animate={reduced ? {} : { scale: done ? [1, 1.15, 1] : 1 }}
+                  transition={{ duration: 0.32, ease: [0.16, 1, 0.3, 1] }}
                   aria-hidden
                 >
                   {done ? <CheckIcon className="h-3.5 w-3.5" /> : i + 1}
-                </span>
+                </motion.span>
                 <span className="hidden sm:inline">{step.label}</span>
                 <span className="sr-only sm:hidden">{step.label}</span>
               </button>
 
               {i < steps.length - 1 && (
-                <span
-                  aria-hidden
-                  className={cn('mx-1 h-px w-4 sm:w-8', done ? 'bg-brand' : 'bg-line')}
-                />
+                // The connector fills towards the step it leads to, so the
+                // flow reads as progress rather than as four separate lights.
+                <span aria-hidden className="relative mx-1 h-px w-4 overflow-hidden bg-line sm:w-8">
+                  <motion.span
+                    className="absolute inset-y-0 left-0 bg-brand"
+                    initial={false}
+                    animate={{ width: done ? '100%' : '0%' }}
+                    transition={{ duration: reduced ? 0 : 0.4, ease: [0.16, 1, 0.3, 1] }}
+                  />
+                </span>
               )}
             </li>
           )

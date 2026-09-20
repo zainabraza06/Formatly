@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { cn } from '../lib/cn'
 import { diffMarks } from '../lib/diffMarks'
 import { useDocOS } from '../hooks/useDocOS'
@@ -41,6 +42,7 @@ export function DocumentEditor() {
   const doc = useDocOS()
   const toast = useToast()
   const report = useReportError()
+  const reduced = useReducedMotion()
   const [searchParams] = useSearchParams()
 
   const [view, setView] = useState<'edit' | 'exact'>('edit')
@@ -130,8 +132,18 @@ export function DocumentEditor() {
     />
   )
 
+  // The panel's three faces are one surface changing, not three surfaces
+  // taking turns: the tab indicator slides, so the content should not blink.
   const sidePanel = (
-    <div className="flex h-full min-h-0 flex-col gap-3">
+    <AnimatePresence mode="wait" initial={false}>
+      <motion.div
+        key={panel}
+        initial={reduced ? { opacity: 0 } : { opacity: 0, y: 6 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+        className="flex h-full min-h-0 flex-col gap-3"
+      >
       {panel === 'assistant' && (
         <AICommandBar
           panel={doc.panel}
@@ -160,7 +172,8 @@ export function DocumentEditor() {
           onCloseDiff={doc.clearDiff}
         />
       )}
-    </div>
+      </motion.div>
+    </AnimatePresence>
   )
 
   return (
@@ -247,7 +260,15 @@ export function DocumentEditor() {
       />
 
       {/* ── What the assistant just did ──────────────────────────────────── */}
+      <AnimatePresence>
       {doc.review && (
+        <motion.div
+          key="review"
+          initial={reduced ? { opacity: 0 } : { opacity: 0, y: -8, scale: 0.99 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={reduced ? { opacity: 0 } : { opacity: 0, y: -8 }}
+          transition={{ type: 'spring', stiffness: 420, damping: 34, mass: 0.7 }}
+        >
         <ChangeReview
           review={doc.review}
           busy={running}
@@ -263,7 +284,9 @@ export function DocumentEditor() {
             setPanelOpen(true)
           }}
         />
+        </motion.div>
       )}
+      </AnimatePresence>
 
       {/* ── Small screens: one thing at a time ───────────────────────────── */}
       <div className="lg:hidden">

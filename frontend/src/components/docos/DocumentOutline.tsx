@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import { motion, useReducedMotion } from 'framer-motion'
 import { cn } from '../../lib/cn'
 import { flatten } from '../../lib/graphUtils'
 import type { DocumentGraph, GraphNode } from '../../types/docos'
@@ -29,6 +30,8 @@ export function DocumentOutline({
   focusId?: string | null
   onFocus: (id: string) => void
 }) {
+  const reduced = useReducedMotion()
+
   const { entries, counts } = useMemo(() => {
     const nodes = flatten(graph)
     const out: Entry[] = []
@@ -74,8 +77,17 @@ export function DocumentOutline({
       ) : (
         <nav aria-label="Document outline" className="min-h-0 flex-1 overflow-y-auto">
           <ul className="space-y-0.5">
-            {entries.map((entry) => (
-              <li key={entry.id}>
+            {entries.map((entry, index) => (
+              <motion.li
+                key={entry.id}
+                initial={reduced ? { opacity: 0 } : { opacity: 0, x: -6 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{
+                  duration: 0.24,
+                  delay: Math.min(index * 0.025, 0.2),
+                  ease: [0.16, 1, 0.3, 1],
+                }}
+              >
                 <button
                   type="button"
                   onClick={() => onFocus(entry.id)}
@@ -90,7 +102,7 @@ export function DocumentOutline({
                 >
                   {entry.label}
                 </button>
-              </li>
+              </motion.li>
             ))}
           </ul>
         </nav>

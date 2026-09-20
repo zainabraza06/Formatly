@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { cn } from '../lib/cn'
 import { docosApi } from '../lib/docosApi'
 import {
@@ -25,6 +26,7 @@ import { InstructionRefiner, RefineButton } from '../components/paper/Instructio
 import { OutlineEditor } from '../components/paper/OutlineEditor'
 import { SectionReview } from '../components/paper/SectionReview'
 import { Stepper, type Step } from '../components/paper/Stepper'
+import { Appear, AppearGroup } from '../components/motion/Appear'
 
 // A model left to itself writes concisely, so depth has to be asked for.
 const DEPTH_OPTIONS: { id: Depth; label: string; hint: string }[] = [
@@ -85,7 +87,11 @@ export function ComposePaper() {
   const toast = useToast()
   const report = useReportError()
 
+  const reduced = useReducedMotion()
   const [step, setStep] = useState(0)
+  // Which way the last move went, so a step arrives from the side it came
+  // from: forward slides in from the right, Back from the left.
+  const [direction, setDirection] = useState(1)
   const [furthest, setFurthest] = useState(0)
   const [form, setForm] = useState<DraftForm>(() => loadDraft())
   const [styles, setStyles] = useState<StyleSummary[]>(BUILTIN_STYLES)
@@ -147,6 +153,7 @@ export function ComposePaper() {
       document.getElementById('compose-material')?.focus()
       return
     }
+    setDirection(next >= step ? 1 : -1)
     setStep(next)
     setFurthest((f) => Math.max(f, next))
   }
@@ -294,6 +301,16 @@ export function ComposePaper() {
       </div>
 
       <Stepper steps={STEPS} current={step} furthest={furthest} onGo={go} />
+
+      <AnimatePresence mode="wait" custom={direction} initial={false}>
+        <motion.div
+          key={step}
+          custom={direction}
+          initial={reduced ? { opacity: 0 } : { opacity: 0, x: direction * 24 }}
+          animate={{ opacity: 1, x: 0 }}
+          exit={reduced ? { opacity: 0 } : { opacity: 0, x: direction * -24 }}
+          transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+        >
 
       {/* ── 1. Material ──────────────────────────────────────────────────── */}
       {step === 0 && (
@@ -500,7 +517,7 @@ Write in the first person plural.`}
               </p>
             </div>
 
-            <dl className="divide-y divide-line rounded-md border border-line">
+            <AppearGroup className="divide-y divide-line rounded-md border border-line" stagger={0.04}>
               <Summary label="Material" value={`${words(form.rawText)} words of material`} onEdit={() => go(0)} />
               <Summary
                 label="Structure"
@@ -509,10 +526,10 @@ Write in the first person plural.`}
               />
               <Summary label="Style" value={styleName} onEdit={() => go(1)} />
               <Summary label="Kind & depth" value={`${form.docKind || 'document'} · ${form.depth}`} onEdit={() => go(0)} />
-              {form.instructions.trim() && (
+              {form.instructions.trim() ? (
                 <Summary label="Instructions" value={form.instructions.trim()} onEdit={() => go(0)} />
-              )}
-            </dl>
+              ) : <></>}
+            </AppearGroup>
 
             {!running && (
               <Button variant="primary" size="lg" fullWidth onClick={generate} leadingIcon={<SparkIcon />}>
@@ -538,7 +555,7 @@ Write in the first person plural.`}
 
       {/* ── 4. Review ────────────────────────────────────────────────────── */}
       {step === 3 && spec && (
-        <div className="space-y-4">
+        <Appear className="space-y-4">
           <Card className="flex flex-wrap items-center justify-between gap-3">
             <div className="min-w-0">
               <h2 className="truncate text-base font-semibold text-ink">
@@ -608,8 +625,11 @@ Write in the first person plural.`}
               />
             </div>
           </div>
-        </div>
+        </Appear>
       )}
+
+        </motion.div>
+      </AnimatePresence>
 
       {/* The review step with nothing to review: only reachable by jumping
           back to it after starting over. */}
