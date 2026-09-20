@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
-import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { motion } from 'framer-motion'
 import { cn } from '../lib/cn'
 import { trapTab } from '../lib/focus'
 import { useAuth } from '../context/AuthContext'
@@ -44,6 +45,7 @@ export function AppShell({
   const { user, logout } = useAuth()
   const commands = useCommands()
   const navigate = useNavigate()
+  const location = useLocation()
   const drawerRef = useRef<HTMLDivElement>(null)
   const openerRef = useRef<HTMLButtonElement>(null)
 
@@ -233,9 +235,17 @@ export function AppShell({
         </header>
 
         <main id="main" className="flex-1 overflow-y-auto overflow-x-hidden">
-          <div className="mx-auto w-full max-w-content px-4 py-6 sm:px-6 lg:px-8">
+          {/* Screens arrive rather than appear. Keyed on the path, so moving
+              between them is a movement and not a repaint. */}
+          <motion.div
+            key={location.pathname}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+            className="mx-auto w-full max-w-content px-4 py-6 sm:px-6 lg:px-8"
+          >
             <Outlet />
-          </div>
+          </motion.div>
         </main>
       </div>
     </div>
@@ -254,19 +264,30 @@ function SidebarNav({ collapsed, onNavigate }: { collapsed: boolean; onNavigate:
           title={collapsed ? label : undefined}
           className={({ isActive }) =>
             cn(
-              'flex h-row items-center gap-2.5 rounded-md px-2.5 text-sm transition-colors duration-fast',
+              'relative flex h-row items-center gap-2.5 rounded-md px-2.5 text-sm transition-colors duration-fast',
               collapsed && 'justify-center px-0',
               // The selected row is a surface change, not a block of colour:
               // one item in a list of four should not be the loudest thing on
               // the screen.
-              isActive
-                ? 'bg-surface-2 font-medium text-ink'
-                : 'text-muted hover:bg-surface-2/60 hover:text-ink',
+              isActive ? 'font-medium text-ink' : 'text-muted hover:bg-surface-2/60 hover:text-ink',
             )
           }
         >
-          <Icon className="h-4 w-4 shrink-0" />
-          {!collapsed && label}
+          {({ isActive }) => (
+            <>
+              {isActive && (
+                <motion.span
+                  layoutId="nav-indicator"
+                  className="absolute inset-0 rounded-md bg-surface-2"
+                  transition={{ type: 'spring', stiffness: 480, damping: 40, mass: 0.6 }}
+                />
+              )}
+              <span className="relative flex items-center gap-2.5">
+                <Icon className="h-4 w-4 shrink-0" />
+                {!collapsed && label}
+              </span>
+            </>
+          )}
         </NavLink>
       ))}
     </nav>

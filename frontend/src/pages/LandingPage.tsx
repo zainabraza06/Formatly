@@ -1,10 +1,12 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
+import { motion, useReducedMotion } from 'framer-motion'
 import { cn } from '../lib/cn'
 import { applyTheme, getInitialTheme } from '../lib/theme'
 import { Badge, Button, ButtonLink } from '../components/ui'
 import { Logo } from '../components/Logo'
 import { ProductMock } from '../components/landing/ProductMock'
+import { Reveal, RevealGroup } from '../components/motion/Reveal'
 import {
   CheckIcon, ChevronDownIcon, ComposeIcon, DocumentsIcon, DownloadIcon, EditorIcon,
   LayersIcon, MoonIcon, SparkIcon, SunIcon,
@@ -139,6 +141,7 @@ const FAQS = [
  * rather than a stock illustration.
  */
 export function LandingPage() {
+  const reduced = useReducedMotion()
   const [theme, setTheme] = useState<'light' | 'dark'>(() => getInitialTheme())
 
   useEffect(() => {
@@ -197,45 +200,65 @@ export function LandingPage() {
           <div className="hero-wash pointer-events-none absolute inset-x-0 top-0 h-[42rem]" aria-hidden />
           <div className="hero-grid pointer-events-none absolute inset-x-0 top-0 h-[42rem]" aria-hidden />
 
-          <div className="relative mx-auto max-w-6xl px-4 pb-20 pt-16 sm:px-6 sm:pt-24">
+          <motion.div
+            className="relative mx-auto max-w-6xl px-4 pb-20 pt-16 sm:px-6 sm:pt-24"
+            initial="hidden"
+            animate="shown"
+            variants={{ shown: { transition: { staggerChildren: 0.08, delayChildren: 0.05 } } }}
+          >
             <div className="mx-auto max-w-3xl text-center">
-              <Badge tone="brand" icon={<SparkIcon className="h-3.5 w-3.5" />}>
-                AI that formats, not just writes
-              </Badge>
+              <motion.div variants={rise(reduced)}>
+                <Badge tone="brand" icon={<SparkIcon className="h-3.5 w-3.5" />}>
+                  AI that formats, not just writes
+                </Badge>
+              </motion.div>
 
-              <h1 className="mt-6 text-5xl text-ink sm:text-6xl">
+              <motion.h1 variants={rise(reduced)} className="mt-6 text-5xl text-ink sm:text-6xl">
                 Documents that come out{' '}
                 <span className="bg-gradient-to-br from-brand to-info bg-clip-text text-transparent">
                   properly formatted
                 </span>
-              </h1>
+              </motion.h1>
 
-              <p className="mx-auto mt-6 max-w-xl text-lg leading-relaxed text-muted">
+              <motion.p
+                variants={rise(reduced)}
+                className="mx-auto mt-6 max-w-xl text-lg leading-relaxed text-muted"
+              >
                 Write a paper from your own material, or bring a Word document and tell it
                 what to fix in plain English. Every change is shown, versioned, and
                 reversible.
-              </p>
+              </motion.p>
 
-              <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+              <motion.div
+                variants={rise(reduced)}
+                className="mt-8 flex flex-wrap items-center justify-center gap-3"
+              >
                 <ButtonLink to="/app/compose" variant="primary" size="lg">
                   Write a document
                 </ButtonLink>
                 <ButtonLink to="/app" variant="secondary" size="lg" leadingIcon={<EditorIcon />}>
                   Edit one I have
                 </ButtonLink>
-              </div>
+              </motion.div>
 
-              <p className="mt-4 text-xs text-faint">Free while in beta · no card, no credits</p>
+              <motion.p variants={rise(reduced)} className="mt-4 text-xs text-faint">
+                Free while in beta · no card, no credits
+              </motion.p>
             </div>
 
-            {/* The product, at the size you can actually read it. */}
-            <div className="relative mx-auto mt-16 max-w-5xl">
+            {/* The product, at the size you can actually read it — and running. */}
+            <motion.div
+              className="relative mx-auto mt-16 max-w-5xl"
+              initial={{ opacity: 0, y: reduced ? 0 : 28, scale: reduced ? 1 : 0.985 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              transition={{ duration: 0.7, delay: 0.25, ease: [0.16, 1, 0.3, 1] }}
+            >
               <ProductMock className="hero-frame !border-0" />
-            </div>
+            </motion.div>
 
             {/* What it knows how to produce — capabilities, not customer logos
                 we do not have. */}
-            <div className="mt-14 flex flex-wrap items-center justify-center gap-x-6 gap-y-3">
+            <Reveal delay={0.1} className="mt-14 flex flex-wrap items-center justify-center gap-x-6 gap-y-3">
               <span className="text-2xs font-medium uppercase tracking-wide text-faint">
                 Formats it writes
               </span>
@@ -243,14 +266,14 @@ export function LandingPage() {
                 .map((label) => (
                   <span key={label} className="text-sm text-muted">{label}</span>
                 ))}
-            </div>
-          </div>
+            </Reveal>
+          </motion.div>
         </section>
 
         {/* ── How it works ───────────────────────────────────────────────── */}
         <Section id="how" title="Three steps, start to finish"
                  lede="No template to pick, no settings to learn first.">
-          <ol className="grid gap-4 md:grid-cols-3">
+          <RevealGroup className="grid gap-4 md:grid-cols-3" stagger={0.08}>
             {STEPS.map((step, i) => (
               <li key={step.title} className="rounded-lg border border-line bg-surface p-6">
                 <div className="flex items-center gap-2.5">
@@ -265,13 +288,13 @@ export function LandingPage() {
                 <p className="mt-2 text-sm leading-relaxed text-muted">{step.body}</p>
               </li>
             ))}
-          </ol>
+          </RevealGroup>
         </Section>
 
         {/* ── Features ───────────────────────────────────────────────────── */}
         <Section id="features" tinted title="What it actually does"
                  lede="The parts that matter when a document has to be handed in, not just drafted.">
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <RevealGroup className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3" stagger={0.05}>
             {FEATURES.map((f) => (
               <div
                 key={f.title}
@@ -287,13 +310,13 @@ export function LandingPage() {
                 <p className="mt-2 text-sm leading-relaxed text-muted">{f.body}</p>
               </div>
             ))}
-          </div>
+          </RevealGroup>
         </Section>
 
         {/* ── Pricing ────────────────────────────────────────────────────── */}
         <Section id="pricing" title="Pricing"
                  lede="Formatly is in beta and everything in it is free. The paid tiers below are what is planned, not what is charged — there is no billing to sign up to yet.">
-          <div className="grid gap-4 lg:grid-cols-3">
+          <RevealGroup className="grid gap-4 lg:grid-cols-3" stagger={0.07}>
             {PLANS.map((plan) => (
               <div
                 key={plan.name}
@@ -343,12 +366,12 @@ export function LandingPage() {
                 </ButtonLink>
               </div>
             ))}
-          </div>
+          </RevealGroup>
         </Section>
 
         {/* ── FAQ ────────────────────────────────────────────────────────── */}
         <Section id="faq" tinted title="Questions" lede="The ones worth answering before you sign up.">
-          <div className="mx-auto max-w-2xl divide-y divide-line overflow-hidden rounded-lg border border-line bg-surface">
+          <Reveal className="mx-auto max-w-2xl divide-y divide-line overflow-hidden rounded-lg border border-line bg-surface">
             {FAQS.map((item) => (
               <details key={item.q} className="group">
                 <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-5 py-4 text-base font-medium text-ink transition-colors duration-fast hover:bg-surface-2">
@@ -358,12 +381,12 @@ export function LandingPage() {
                 <p className="px-5 pb-5 text-sm leading-relaxed text-muted">{item.a}</p>
               </details>
             ))}
-          </div>
+          </Reveal>
         </Section>
 
         {/* ── Closing CTA ────────────────────────────────────────────────── */}
         <section className="mx-auto max-w-6xl px-4 pb-24 pt-16 sm:px-6 sm:pt-24">
-          <div className="relative overflow-hidden rounded-xl bg-accent px-6 py-16 text-center">
+          <Reveal className="relative overflow-hidden rounded-xl bg-accent px-6 py-16 text-center">
             <div
               className="pointer-events-none absolute inset-0 opacity-90"
               style={{
@@ -386,7 +409,7 @@ export function LandingPage() {
                 Write a document
               </ButtonLink>
             </div>
-          </div>
+          </Reveal>
         </section>
       </main>
 
@@ -421,12 +444,20 @@ function Section({
       )}
     >
       <div className="mx-auto max-w-6xl px-4 sm:px-6">
-        <div className="mx-auto mb-10 max-w-2xl text-center sm:mb-12">
+        <Reveal className="mx-auto mb-10 max-w-2xl text-center sm:mb-12">
           <h2 className="text-2xl text-ink sm:text-3xl">{title}</h2>
           <p className="mt-3 text-md leading-relaxed text-muted">{lede}</p>
-        </div>
+        </Reveal>
         {children}
       </div>
     </section>
   )
+}
+
+/** The hero's entrance: up and in, or just in when movement is unwelcome. */
+function rise(reduced: boolean | null) {
+  return {
+    hidden: { opacity: 0, y: reduced ? 0 : 14 },
+    shown: { opacity: 1, y: 0, transition: { duration: 0.55, ease: [0.16, 1, 0.3, 1] as const } },
+  }
 }

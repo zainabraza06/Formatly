@@ -1,3 +1,4 @@
+import { motion, useReducedMotion } from 'framer-motion'
 import { cn } from '../../lib/cn'
 import { formatDate, SORT_LABELS, type DocumentItem, type SortKey } from '../../lib/documents'
 import { Dropdown, Spinner, type MenuItem } from '../ui'
@@ -34,6 +35,8 @@ export function DocumentTable({
   onDuplicate: (doc: DocumentItem) => void
   onDelete: (doc: DocumentItem) => void
 }) {
+  const reduced = useReducedMotion()
+
   return (
     <div className="overflow-hidden rounded-lg border border-line bg-surface">
       <table className="w-full border-collapse text-left">
@@ -65,7 +68,7 @@ export function DocumentTable({
         </thead>
 
         <tbody>
-          {documents.map((doc) => {
+          {documents.map((doc, index) => {
             const busy = busyId?.id === doc.id ? busyId.what : null
             const generated = doc.source === 'generated'
 
@@ -91,8 +94,17 @@ export function DocumentTable({
             ]
 
             return (
-              <tr
+              <motion.tr
                 key={`${doc.source}:${doc.id}`}
+                initial={reduced ? { opacity: 0 } : { opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                // Capped: the twentieth row should not wait a second and a half
+                // to exist.
+                transition={{
+                  duration: 0.3,
+                  delay: Math.min(index * 0.035, 0.28),
+                  ease: [0.16, 1, 0.3, 1],
+                }}
                 className={cn(
                   'group border-b border-line last:border-b-0 transition-colors duration-fast',
                   busy ? 'bg-surface-2/60' : 'hover:bg-surface-2/50',
@@ -153,7 +165,7 @@ export function DocumentTable({
                     disabled={Boolean(busy)}
                   />
                 </td>
-              </tr>
+              </motion.tr>
             )
           })}
         </tbody>

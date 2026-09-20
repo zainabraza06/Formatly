@@ -1,4 +1,5 @@
-import { useRef, type ReactNode } from 'react'
+import { useId, useRef, type ReactNode } from 'react'
+import { motion } from 'framer-motion'
 import { cn } from '../../lib/cn'
 
 export interface TabItem<T extends string> {
@@ -30,6 +31,9 @@ export function Tabs<T extends string>({
   className?: string
 }) {
   const refs = useRef<Record<string, HTMLButtonElement | null>>({})
+  // Each tablist needs its own id, or two of them on one screen would animate
+  // their indicators into each other.
+  const group = useId()
 
   const move = (dir: 1 | -1 | 'first' | 'last') => {
     const i = items.findIndex((t) => t.id === value)
@@ -69,20 +73,29 @@ export function Tabs<T extends string>({
             tabIndex={selected ? 0 : -1}
             onClick={() => onChange(tab.id)}
             className={cn(
-              'inline-flex items-center gap-1.5 rounded-sm font-medium transition-colors duration-fast ease-out',
+              'relative inline-flex items-center gap-1.5 rounded-sm font-medium transition-colors duration-fast ease-out',
               size === 'sm' ? 'h-7 px-2 text-xs' : 'h-8 px-3 text-sm',
-              selected
-                ? 'bg-surface text-ink shadow-xs'
-                : 'text-muted hover:text-ink',
+              selected ? 'text-ink' : 'text-muted hover:text-ink',
             )}
           >
-            {tab.icon}
-            {tab.label}
-            {tab.count !== undefined && (
-              <span className={cn('text-2xs tabular-nums', selected ? 'text-muted' : 'text-faint')}>
-                {tab.count}
-              </span>
+            {/* The white pill slides from the old tab to the new one instead of
+                blinking out of one and into the other. */}
+            {selected && (
+              <motion.span
+                layoutId={`tab-indicator-${group}`}
+                className="absolute inset-0 rounded-sm bg-surface shadow-xs"
+                transition={{ type: 'spring', stiffness: 520, damping: 42, mass: 0.6 }}
+              />
             )}
+            <span className="relative flex items-center gap-1.5">
+              {tab.icon}
+              {tab.label}
+              {tab.count !== undefined && (
+                <span className={cn('text-2xs tabular-nums', selected ? 'text-muted' : 'text-faint')}>
+                  {tab.count}
+                </span>
+              )}
+            </span>
           </button>
         )
       })}
