@@ -11,7 +11,7 @@ import {
   Badge, Button, ButtonLink, Dropdown, EmptyState, Spinner, Tabs, Tooltip, useToast,
 } from '../components/ui'
 import {
-  DownloadIcon, LayersIcon, MoreIcon, SparkIcon, UndoIcon, UploadIcon, WarningIcon,
+  CheckIcon, DownloadIcon, LayersIcon, MoreIcon, SparkIcon, UndoIcon, UploadIcon, WarningIcon,
 } from '../components/icons'
 import { AICommandBar } from '../components/docos/AICommandBar'
 import { ChangeReview } from '../components/docos/ChangeReview'
@@ -26,6 +26,18 @@ import { UploadDropzone } from '../components/documents/UploadDropzone'
 import { Page } from '../components/layout/Page'
 
 type Panel = 'assistant' | 'structure' | 'history'
+
+const ZOOM_KEY = 'formatly.editor.zoom'
+
+const ZOOM_STEPS: (number | 'fit-width' | 'fit-page')[] = [
+  'fit-page', 'fit-width', 0.5, 0.75, 1, 1.25, 1.5,
+]
+
+function zoomLabel(zoom: number | 'fit-width' | 'fit-page'): string {
+  if (zoom === 'fit-page') return 'Fit page'
+  if (zoom === 'fit-width') return 'Fit width'
+  return `${Math.round(zoom * 100)}%`
+}
 
 const PANELS: { id: Panel; label: string }[] = [
   { id: 'assistant', label: 'Assistant' },
@@ -60,6 +72,20 @@ export function DocumentEditor() {
   // Off by default: an imported document should look like itself. A paper that
   // types its maths as LaTeX shows the characters it typed, until asked.
   const [renderMaths, setRenderMaths] = useState(false)
+  // How large to draw the page. Fitting the whole page is the default because
+  // the first question anyone asks of a document is what the page looks like;
+  // fitting only the width answers a different one.
+  const [zoom, setZoom] = useState<number | 'fit-width' | 'fit-page'>(() => {
+    const saved = localStorage.getItem(ZOOM_KEY)
+    if (saved === 'fit-width' || saved === 'fit-page') return saved
+    const n = Number(saved)
+    return Number.isFinite(n) && n > 0 ? n : 'fit-page'
+  })
+
+  const setZoomTo = (next: number | 'fit-width' | 'fit-page') => {
+    setZoom(next)
+    try { localStorage.setItem(ZOOM_KEY, String(next)) } catch { /* private mode */ }
+  }
 
   const mathsOn = renderMaths || Boolean(doc.graph?.root?.metadata?.render_maths)
   const running = doc.status === 'running'
@@ -182,6 +208,7 @@ export function DocumentEditor() {
       marks={marks}
       focusId={doc.focusId}
       renderMaths={mathsOn}
+      zoom={zoom}
     />
   )
 
@@ -383,6 +410,22 @@ export function DocumentEditor() {
 
               <div className="flex items-center gap-1">
                 {mathsOn && <Badge tone="brand">maths drawn</Badge>}
+
+                {view === 'edit' && (
+                  <Dropdown
+                    label="Zoom"
+                    align="end"
+                    triggerVariant="ghost"
+                    triggerSize="sm"
+                    triggerLabel={zoomLabel(zoom)}
+                    items={ZOOM_STEPS.map((step) => ({
+                      id: String(step),
+                      label: zoomLabel(step),
+                      icon: step === zoom ? <CheckIcon /> : <span className="h-4 w-4" />,
+                      onSelect: () => setZoomTo(step),
+                    }))}
+                  />
+                )}
                 {!panelOpen && (
                   <Tooltip content="Show the assistant" side="left">
                     <Button
@@ -398,6 +441,7 @@ export function DocumentEditor() {
           )}
 
           <div
+            data-canvas-viewport
             tabIndex={noDoc ? undefined : 0}
             role={noDoc ? undefined : 'region'}
             aria-label={noDoc ? undefined : `${doc.title || 'Document'} — page view`}

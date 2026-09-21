@@ -18,11 +18,24 @@ interface Props {
   focusId?: string | null
   /** Draw LaTeX typed into the text as mathematics, because the reader asked. */
   renderMaths?: boolean
+  /** How large to draw the page: a multiplier, or a rule to work one out.
+   *  `fit-width` fills the column, `fit-page` puts a whole page on screen. */
+  zoom?: number | 'fit-width' | 'fit-page'
 }
 
 // Fallback only: when a document carries no real page-break markers (e.g. it was
 // never rendered/saved by Word), chunk by node count so we still show pages.
 const FALLBACK_PER_PAGE = 40
+
+// The pager sits over the bottom of the canvas; a page fitted to the full
+// height would hide behind it.
+const PAGER_ROOM = 64
+
+/** Nothing smaller than a quarter or larger than twice: past either, a page
+ *  stops being a page and becomes a texture or a wall. */
+function clamp(scale: number): number {
+  return Math.max(0.25, Math.min(2, scale))
+}
 
 // CSS defines an inch as exactly 96px, so the page's real text box is known from
 // the geometry alone. Reading it off the rendered sheet instead was wrong twice
@@ -97,6 +110,7 @@ function paginate(nodes: GraphNode[], exactCount?: number): GraphNode[][] {
 
 export function GraphCanvas({
   graph, selectedIds, activeId, removingIds, marks, focusId, renderMaths,
+  zoom = 'fit-page',
 }: Props) {
   const nodes = flatten(graph)
   const geo = pageGeometry(graph)
@@ -165,15 +179,42 @@ export function GraphCanvas({
   useLayoutEffect(() => {
     const frame = frameRef.current
     if (!frame) return
+
+    // The height to fit into is the scrolling viewport's, not the frame's —
+    // the frame is as tall as the page it holds, so measuring it would always
+    // answer "it fits".
+    const viewport = frame.closest('[data-canvas-viewport]') as HTMLElement | null
+
     const fit = () => {
       const available = frame.clientWidth
-      if (available > 0) setScale(Math.min(1, available / (geo.width_in * PX_PER_INCH)))
+      if (available <= 0) return
+
+      const pageWidth = geo.width_in * PX_PER_INCH
+      const pageHeight = geo.height_in * PX_PER_INCH
+      const toWidth = available / pageWidth
+
+      if (typeof zoom === 'number') {
+        setScale(clamp(zoom))
+        return
+      }
+      if (zoom === 'fit-width') {
+        setScale(clamp(toWidth))
+        return
+      }
+
+      // Fit the page: the shorter of the two fits, less the room the page
+      // controls occupy at the bottom, so the sheet is not tucked under them.
+      const room = (viewport?.clientHeight ?? 0) - PAGER_ROOM
+      const toHeight = room > 0 ? room / pageHeight : toWidth
+      setScale(clamp(Math.min(toWidth, toHeight)))
     }
+
     fit()
     const observer = new ResizeObserver(fit)
     observer.observe(frame)
+    if (viewport) observer.observe(viewport)
     return () => observer.disconnect()
-  }, [geo.width_in])
+  }, [geo.width_in, geo.height_in, zoom])
 
   useLayoutEffect(() => {
     const proof = proofRef.current

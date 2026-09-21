@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { cn } from '../../lib/cn'
-import { Badge, Button, EmptyState } from '../ui'
+import { Badge, Button, EmptyState, Spinner } from '../ui'
 import { ClockIcon, CloseIcon, UndoIcon } from '../icons'
 import type {
   DiffChange,
@@ -10,6 +10,10 @@ import type {
   GraphDiff,
   VersionInfo,
 } from '../../types/docos'
+
+/** Long enough to register as "it is doing the thing", short enough not to
+ *  feel like a delay that was added on purpose. */
+const MIN_VISIBLE_MS = 500
 
 interface Props {
   versions: VersionInfo[]
@@ -32,6 +36,29 @@ export function VersionTimeline({
 }: Props) {
   const [picked, setPicked] = useState<number[]>([])
   const reduced = useReducedMotion()
+  // What was asked for, so the control that was pressed can say it is working.
+  const [asked, setAsked] = useState<{ kind: string; seq?: number } | null>(null)
+  // Held for a moment even after the engine has finished. Restoring a version
+  // locally takes about eighty milliseconds, and an indicator shown for eighty
+  // milliseconds is one nobody sees: the button flickers and the reader is left
+  // wondering whether their click registered at all.
+  const [holding, setHolding] = useState(false)
+  const holdTimer = useRef<number | null>(null)
+
+  useEffect(() => () => {
+    if (holdTimer.current) window.clearTimeout(holdTimer.current)
+  }, [])
+
+  /** Say what is being done, do it, and keep saying it long enough to read. */
+  const start = (what: { kind: string; seq?: number }, run: () => void) => {
+    setAsked(what)
+    setHolding(true)
+    if (holdTimer.current) window.clearTimeout(holdTimer.current)
+    holdTimer.current = window.setTimeout(() => setHolding(false), MIN_VISIBLE_MS)
+    run()
+  }
+
+  const pending = asked && (disabled || holding) ? asked : null
 
   const togglePick = (seq: number) => {
     setPicked((p) => (p.includes(seq) ? p.filter((x) => x !== seq) : [...p, seq].slice(-2)))
@@ -49,14 +76,28 @@ export function VersionTimeline({
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-3">
+    <div
+      className="flex h-full min-h-0 flex-col gap-3"
+      // What the panel believes it is doing, so a test can read it without
+      // matching prose.
+      data-pending={pending?.kind ?? 'none'}
+    >
       <div className="flex items-center justify-between gap-2">
         <div className="flex gap-1.5">
-          <Button variant="secondary" size="sm" disabled={disabled} onClick={onUndo} leadingIcon={<UndoIcon />}>
-            Undo
+          <Button
+            variant="secondary" size="sm" disabled={disabled}
+            onClick={() => start({ kind: 'undo' }, onUndo)}
+            loading={pending?.kind === 'undo'}
+            leadingIcon={pending?.kind === 'undo' ? undefined : <UndoIcon />}
+          >
+            {pending?.kind === 'undo' ? 'Undoing…' : 'Undo'}
           </Button>
-          <Button variant="secondary" size="sm" disabled={disabled} onClick={onRedo}>
-            Redo
+          <Button
+            variant="secondary" size="sm" disabled={disabled}
+            onClick={() => start({ kind: 'redo' }, onRedo)}
+            loading={pending?.kind === 'redo'}
+          >
+            {pending?.kind === 'redo' ? 'Redoing…' : 'Redo'}
           </Button>
         </div>
 
@@ -65,14 +106,32 @@ export function VersionTimeline({
             variant="primary"
             size="sm"
             disabled={disabled}
-            onClick={() => onCompare(Math.min(...picked), Math.max(...picked))}
+            loading={pending?.kind === 'compare'}
+            onClick={() => start(
+              { kind: 'compare' },
+              () => onCompare(Math.min(...picked), Math.max(...picked)),
+            )}
           >
             Compare v{Math.min(...picked)} → v{Math.max(...picked)}
           </Button>
         )}
       </div>
 
-      {picked.length === 1 && (
+      {pending && (pending.kind === 'rewind' || pending.kind === 'restore') && (
+        <p className="flex items-center gap-1.5 rounded-md border border-line bg-surface-2/60 px-2 py-1.5 text-2xs text-muted" role="status">
+          <Spinner size="sm" />
+          {pending.kind === 'rewind' ? 'Rewinding to' : 'Restoring'} v{pending.seq}…
+        </p>
+      )}
+
+      {pending?.kind === 'compare' && (
+        <p className="flex items-center gap-1.5 rounded-md border border-line bg-surface-2/60 px-2 py-1.5 text-2xs text-muted" role="status">
+          <Spinner size="sm" />
+          Comparing…
+        </p>
+      )}
+
+      {!pending && picked.length === 1 && (
         <p className="text-2xs text-faint">
           Pick a second version to compare it with v{picked[0]}.
         </p>
@@ -91,7 +150,10 @@ export function VersionTimeline({
               delay: Math.min(index * 0.03, 0.2),
               ease: [0.16, 1, 0.3, 1],
             }}
-            className="relative flex items-start gap-2 pl-5"
+            className={cn(
+              'relative flex items-start gap-2 rounded-md pl-5 transition-colors',
+              pending?.seq === v.seq && 'bg-brand-soft/60',
+            )}
           >
             <span
               className={cn(
@@ -124,8 +186,20 @@ export function VersionTimeline({
 
             {!v.is_current && (
               <div className="flex shrink-0 flex-col gap-0.5">
-                <MiniButton label="Rewind" title={`Rewind to version ${v.seq}`} disabled={disabled} onClick={() => onRewind(v.seq)} />
-                <MiniButton label="Restore" title={`Restore version ${v.seq}`} disabled={disabled} onClick={() => onRestore(v.seq)} />
+                <MiniButton
+                  label={pending?.kind === 'rewind' && pending.seq === v.seq ? 'Rewinding…' : 'Rewind'}
+                  title={`Rewind to version ${v.seq}`}
+                  disabled={disabled}
+                  busy={pending?.kind === 'rewind' && pending.seq === v.seq}
+                  onClick={() => start({ kind: 'rewind', seq: v.seq }, () => onRewind(v.seq))}
+                />
+                <MiniButton
+                  label={pending?.kind === 'restore' && pending.seq === v.seq ? 'Restoring…' : 'Restore'}
+                  title={`Restore version ${v.seq}`}
+                  disabled={disabled}
+                  busy={pending?.kind === 'restore' && pending.seq === v.seq}
+                  onClick={() => start({ kind: 'restore', seq: v.seq }, () => onRestore(v.seq))}
+                />
               </div>
             )}
           </motion.li>
@@ -258,16 +332,32 @@ function EntryLabel({ tone, kind, type }: { tone: string; kind: string; type: st
 }
 
 function MiniButton({
-  label, title, onClick, disabled,
-}: { label: string; title: string; onClick: () => void; disabled: boolean }) {
+  label, title, onClick, disabled, busy,
+}: {
+  label: string
+  title: string
+  onClick: () => void
+  disabled: boolean
+  busy?: boolean
+}) {
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={disabled}
       title={title}
-      className="rounded-sm border border-line bg-surface px-1.5 py-0.5 text-2xs text-muted transition-colors duration-fast hover:border-line-strong hover:text-ink disabled:cursor-not-allowed disabled:opacity-50"
+      aria-busy={busy || undefined}
+      className={cn(
+        'flex items-center gap-1 rounded-sm border px-1.5 py-0.5 text-2xs transition-colors duration-fast',
+        'disabled:cursor-not-allowed',
+        busy
+          // The one that was pressed stays legible while the rest fade: which
+          // button you clicked is the thing you want confirmed.
+          ? 'border-brand/40 bg-brand-soft text-brand-ink opacity-100'
+          : 'border-line bg-surface text-muted hover:border-line-strong hover:text-ink disabled:opacity-50',
+      )}
     >
+      {busy && <Spinner size="sm" />}
       {label}
     </button>
   )
